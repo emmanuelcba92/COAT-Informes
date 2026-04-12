@@ -51,63 +51,50 @@ const ProfilePage = () => {
         
         let profileData = docSnap.exists() ? docSnap.data() : null;
 
-        // CHECK FOR LEGACY DATA even if official doc exists
-        // This ensures admin updates to legacy slugs are pulled into the official UID
-        if (email) {
+        // Fallback 1: Manual Slug (Slug logic)
+        if (!profileData && email) {
           const legacyId = email.replace(/[@.]/g, '_');
           const legacyRef = doc(db, 'users', legacyId);
           const legacySnap = await getDoc(legacyRef);
-          
           if (legacySnap.exists()) {
-            const legacyData = legacySnap.data();
-            console.log("Found legacy/admin data for", email, "- Merging...");
-            
-            // Standardize legacy data
-            const standardizedLegacy = {
-              nombre: legacyData.nombre || legacyData.n || '',
-              especialidad: legacyData.especialidad || legacyData.esp || '',
-              mp: legacyData.mp || legacyData.m || '',
-              me: legacyData.me || '',
-              headerGeneral: legacyData.headerGeneral || Array(8).fill(''),
-              headerFibro: legacyData.headerFibro || Array(8).fill(''),
-              signatureBase64: legacyData.signatureBase64 || null,
-              role: legacyData.role || 'médico'
-            };
+            profileData = legacySnap.data();
+          }
+        }
 
-            // Merge: Prefer standard data but fill gaps with legacy if official is empty
-            if (!profileData) {
-              profileData = standardizedLegacy;
-            } else {
-              // Merge existing official data with legacy as fallback
-              profileData = {
-                ...standardizedLegacy, 
-                ...profileData,      
-                // Force overwrite identity fields if they are missing in official
-                nombre: profileData.nombre || standardizedLegacy.nombre,
-                especialidad: profileData.especialidad || standardizedLegacy.especialidad,
-                mp: profileData.mp || standardizedLegacy.mp,
-                me: profileData.me || standardizedLegacy.me,
-                // Ensure email is always the official one
-                email: email
-              };
-            }
-            
-            // Save the merged version back to the official UID location automatically
-            await setDoc(docRef, profileData, { merge: true });
+        // Fallback 2: Query by email field ('e' or 'email')
+        if (!profileData && email) {
+          const usersRef = collection(db, 'users');
+          // Try both field names used in different import versions
+          const q1 = query(usersRef, where('e', '==', email), limit(1));
+          const q2 = query(usersRef, where('email', '==', email), limit(1));
+          
+          const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+          const foundDoc = s1.docs[0] || s2.docs[0];
+          
+          if (foundDoc) {
+            profileData = foundDoc.data();
+            console.log("Found profile via email query");
           }
         }
 
         if (profileData) {
-          setProfile({
-            ...profileData,
-            nombre: profileData.nombre || '',
-            especialidad: profileData.especialidad || '',
-            mp: profileData.mp || '',
+          // Standardize
+          const cleanProfile = {
+            nombre: profileData.nombre || profileData.n || '',
+            especialidad: profileData.especialidad || profileData.esp || '',
+            mp: profileData.mp || profileData.m || '',
             me: profileData.me || '',
             headerGeneral: profileData.headerGeneral || Array(8).fill(''),
             headerFibro: profileData.headerFibro || Array(8).fill(''),
             signatureBase64: profileData.signatureBase64 || null,
-          });
+            email: email,
+            role: profileData.role || 'médico'
+          };
+          
+          setProfile(cleanProfile);
+          
+          // MIGRATION: Auto-save to official UID if it's currently stored elsewhere
+          await setDoc(docRef, cleanProfile, { merge: true });
         }
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -116,7 +103,7 @@ const ProfilePage = () => {
       }
     };
     fetchProfile();
-  }, [auth.currentUser]); // Re-run when user logs in/out
+  }, [auth.currentUser]);
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {

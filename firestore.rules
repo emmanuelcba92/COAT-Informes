@@ -8,7 +8,8 @@ service cloud.firestore {
       return request.auth != null && (
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'administrador') ||
-        request.auth.token.email.lower() == 'egomez@coat.com.ar'
+        request.auth.token.email.lower() == 'egomez@coat.com.ar' ||
+        request.auth.token.email.lower() == 'aparedes@coat.com.ar'
       );
     }
 
