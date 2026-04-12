@@ -246,7 +246,7 @@ const AdminPage = () => {
 
         for (const item of data) {
           const userData = {
-            nombre: item.Nombre || item.nombre || (item.Usuario || 'Profesional'),
+            nombre: item.Profesional || item.Nombre || item.nombre || (item.Usuario || 'Profesional'),
             mp: item.MP || item.mp || '-',
             me: item.ME || item.me || '-',
             especialidad: item.Especialidad || item.especialidad || 'Médico Otorrinolaringólogo',
