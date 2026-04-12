@@ -281,11 +281,12 @@ const ProfilePage = () => {
             <h3 className="font-bold text-orange-500 flex items-center gap-2 mb-6">
               <Upload size={18} /> Firma Digital
             </h3>
-            <div className="w-full aspect-[4/3] bg-[var(--bg-secondary)] rounded-2xl border-2 border-dashed border-main flex items-center justify-center p-6 relative group overflow-hidden transition-all hover:border-blue-500/50">
+            {/* Signature box: Forced white background for a "paper" feel, regardless of theme */}
+            <div className="w-full aspect-[4/3] bg-white rounded-2xl border-2 border-dashed border-blue-100 flex items-center justify-center p-6 relative group overflow-hidden transition-all shadow-inner">
               {profile.signatureBase64 ? (
-                <img src={profile.signatureBase64} alt="Firma" className="max-h-full w-auto object-contain dark:invert transition-transform group-hover:scale-110" />
+                <img src={profile.signatureBase64} alt="Firma" className="max-h-full w-auto object-contain transition-transform group-hover:scale-110" />
               ) : (
-                <div className="text-center space-y-2 opacity-50">
+                <div className="text-center space-y-2 text-slate-300">
                   <Upload size={32} className="mx-auto" />
                   <p className="text-[10px] font-bold">Subir Firma PNG</p>
                 </div>
@@ -330,7 +331,7 @@ const ProfilePage = () => {
               animate={{ scale: 1, opacity: 1 }} 
               exit={{ scale: 0.9, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-[3rem] overflow-hidden flex flex-col h-[90vh] shadow-2xl relative"
+              className="bg-[var(--bg-card)] w-full max-w-5xl rounded-[3rem] overflow-hidden flex flex-col h-[90vh] shadow-2xl relative border border-main"
             >
               <div className="p-8 border-b border-main flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
@@ -339,42 +340,42 @@ const ProfilePage = () => {
                   </div>
                   <div>
                     <h3 className="font-black text-xl text-[var(--text-main)] transition-colors">Simulación de Reporte A4</h3>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest transition-colors">Visualización de encabezado y firma</p>
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-sub)] opacity-50">Vista Previa de Impresión</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <button 
                     onClick={() => setIsPreviewOpen(false)}
-                    className="px-6 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
+                    className="px-6 py-2 rounded-xl bg-[var(--bg-secondary)] hover:bg-[var(--hover-main)] font-bold text-xs transition-colors border border-main text-[var(--text-main)]"
                   >
                     Cerrar
-                  </button>
-                  <button onClick={() => setIsPreviewOpen(false)} className="p-3 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all text-[var(--text-main)]">
-                    <CloseIcon size={24} />
                   </button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950 p-12 flex justify-center">
-                <div className="bg-white text-slate-900 w-[210mm] min-h-[297mm] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.3)] p-[15mm] flex flex-col relative animate-fade-in">
+              <div className="flex-1 overflow-auto bg-slate-200 p-12 flex justify-center">
+                <div className="bg-white text-slate-900 w-[210mm] min-h-[297mm] shadow-2xl p-[15mm] flex flex-col relative">
+                  {/* Paper simulation content */}
                   <div className="text-center space-y-1 mb-12 border-b-2 border-slate-100 pb-8">
                     {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
-                      <div key={i} className={`min-h-[1.5rem] ${i === 0 ? 'text-2xl font-black mb-3' : 'text-sm font-serif'}`}>{line}</div>
+                      <div key={i} className={`min-h-[1.5rem] ${i === 0 ? 'text-2xl font-black mb-3 text-slate-900' : 'text-sm font-serif text-slate-700'}`}>{line}</div>
                     ))}
                   </div>
-                  <div className="flex-1 px-8 opacity-20 flex flex-col gap-6 mt-12">
-                    <div className="h-8 bg-slate-200 rounded w-48" />
+                  {/* Dummy report content */}
+                  <div className="flex-1 px-8 opacity-10 flex flex-col gap-6 mt-12 pointer-events-none">
+                    <div className="h-8 bg-slate-900 rounded w-48" />
                     <div className="space-y-4">
-                      <div className="h-4 bg-slate-100 rounded w-full" />
-                      <div className="h-4 bg-slate-100 rounded w-[98%]" />
-                      <div className="h-4 bg-slate-100 rounded w-[95%]" />
+                      <div className="h-4 bg-slate-900 rounded w-full" />
+                      <div className="h-4 bg-slate-900 rounded w-[98%]" />
+                      <div className="h-4 bg-slate-900 rounded w-96" />
                     </div>
                   </div>
-                  <div className="mt-auto self-end flex flex-col items-center min-w-[300px] border-t-2 border-slate-100 pt-8 text-center italic">
-                    {profile.signatureBase64 && <img src={profile.signatureBase64} alt="Firma" className="max-h-24 w-auto mb-2" />}
-                    <p className="font-black uppercase text-sm">{profile.nombre}</p>
-                    <p className="text-xs">{profile.especialidad}</p>
-                    <p className="text-[10px] mt-1">MP: {profile.mp} | ME: {profile.me}</p>
+                  {/* Professional signature on paper */}
+                  <div className="mt-auto self-end flex flex-col items-center min-w-[300px] border-t-2 border-slate-100 pt-8 text-center">
+                    {profile.signatureBase64 && <img src={profile.signatureBase64} alt="Firma" className="max-h-24 w-auto mb-2 mix-blend-multiply" />}
+                    <p className="font-black uppercase text-sm text-slate-900">{profile.nombre}</p>
+                    <p className="text-xs text-slate-700">{profile.especialidad}</p>
+                    <p className="text-[10px] mt-1 text-slate-500">MP: {profile.mp} | ME: {profile.me}</p>
                   </div>
                 </div>
               </div>
@@ -395,7 +396,7 @@ const ProfilePage = () => {
               animate={{ y: 0, opacity: 1 }} 
               exit={{ y: 20, opacity: 0 }}
               onClick={(e) => e.stopPropagation()}
-              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-white/10 relative"
+              className="bg-[var(--bg-card)] w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-main relative"
             >
               <div className="flex items-center justify-between mb-8">
                 <h3 className="text-xl font-black text-[var(--text-main)] transition-colors">Actualizar Contraseña</h3>
