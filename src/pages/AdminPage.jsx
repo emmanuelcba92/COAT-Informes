@@ -644,8 +644,12 @@ const AdminPage = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredUsers.map(user => (
-                <div key={user.id} className="card p-6 group hover:border-blue-500/50 transition-all">
+              {filteredUsers.map((user, idx) => (
+                <div 
+                  key={user.id} 
+                  className="card p-6 group hover:border-blue-500/50 transition-all animate-fade-in"
+                  style={{ animationDelay: `${idx * 0.05}s` }}
+                >
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center font-bold text-xl">
@@ -680,9 +684,9 @@ const AdminPage = () => {
                       <Mail size={16} />
                       <span className="truncate">{user.u || user.e || 'Sin email'}</span>
                     </div>
-                    <div className="flex items-center gap-3 text-sm text-gray-500">
-                      <Briefcase size={16} />
-                      <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                    <div className="flex items-center gap-3 text-sm text-[var(--text-sub)]">
+                      <Briefcase size={16} className="text-blue-500" />
+                      <span className="bg-blue-600/10 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
                         {user.especialidad || user.esp || 'Sin especialidad'}
                       </span>
                     </div>
