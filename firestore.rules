@@ -5,34 +5,38 @@ service cloud.firestore {
     
     // Función para verificar si es administrador
     function isAdmin() {
-      return request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrador';
+      return request.auth != null && (
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'administrador') ||
+        request.auth.token.email.lower() == 'egomez@coat.com.ar'
+      );
     }
 
-    // Colección de Usuarios
+    // Usuarios
     match /users/{userId} {
-      // Cualquier usuario logueado puede leer datos de usuarios
       allow read: if request.auth != null;
-      
-      // Permitir actualización:
-      // 1. Si es admin, puede todo.
-      // 2. Si es el usuario dueño, puede todo EXCEPTO cambiar su rol.
+      allow create: if request.auth != null && isAdmin();
       allow update: if request.auth != null && (
         isAdmin() || 
-        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+        (request.auth.uid == userId && (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role'])))
       );
-      
-      // Solo admins pueden crear o eliminar usuarios
-      allow create, delete: if isAdmin();
+      allow delete: if request.auth != null && isAdmin();
     }
 
-    // Colección de Prácticas
+    // Historial de Informes
+    match /reports_history/{reportId} {
+      allow read: if request.auth != null && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if request.auth != null && (isAdmin() || resource.data.userId == request.auth.uid);
+    }
+
+    // Prácticas
     match /practices/{practiceId} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
 
-    // Ajustes Globales (Webhook, Email Admin, Token)
+    // Configuración
     match /config/{configId} {
       allow read: if request.auth != null;
       allow write: if isAdmin();

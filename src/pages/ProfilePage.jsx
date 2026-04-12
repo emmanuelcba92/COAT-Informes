@@ -39,14 +39,68 @@ const ProfilePage = () => {
     const fetchProfile = async () => {
       if (!auth.currentUser) return;
       try {
-        const docRef = doc(db, 'users', auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const uid = auth.currentUser.uid;
+        const email = auth.currentUser.email || '';
+        const docRef = doc(db, 'users', uid);
+        let docSnap = await getDoc(docRef);
+        
+        let profileData = docSnap.exists() ? docSnap.data() : null;
+
+        // CHECK FOR LEGACY DATA even if official doc exists
+        // This ensures admin updates to legacy slugs are pulled into the official UID
+        if (email) {
+          const legacyId = email.replace(/[@.]/g, '_');
+          const legacyRef = doc(db, 'users', legacyId);
+          const legacySnap = await getDoc(legacyRef);
+          
+          if (legacySnap.exists()) {
+            const legacyData = legacySnap.data();
+            console.log("Found legacy/admin data for", email, "- Merging...");
+            
+            // Standardize legacy data
+            const standardizedLegacy = {
+              nombre: legacyData.nombre || legacyData.n || '',
+              especialidad: legacyData.especialidad || legacyData.esp || '',
+              mp: legacyData.mp || legacyData.m || '',
+              me: legacyData.me || '',
+              headerGeneral: legacyData.headerGeneral || Array(8).fill(''),
+              headerFibro: legacyData.headerFibro || Array(8).fill(''),
+              signatureBase64: legacyData.signatureBase64 || null,
+              role: legacyData.role || 'médico'
+            };
+
+            // Merge: Prefer standard data but fill gaps with legacy if official is empty
+            if (!profileData) {
+              profileData = standardizedLegacy;
+            } else {
+              // Only overwrite if official data is missing or if legacy looks "newer/fuller"
+              // For simplicity, we merge fields that are empty in official
+              profileData = {
+                ...standardizedLegacy, // Start with legacy (newest admin updates)
+                ...profileData,      // Overwrite with existing official
+                // Force overwrite identity fields if they are missing in official
+                nombre: profileData.nombre || standardizedLegacy.nombre,
+                especialidad: profileData.especialidad || standardizedLegacy.especialidad,
+                mp: profileData.mp || standardizedLegacy.mp,
+                me: profileData.me || standardizedLegacy.me,
+              };
+            }
+            
+            // Save the merged version to the official location
+            await setDoc(docRef, profileData, { merge: true });
+          }
+        }
+
+        if (profileData) {
           setProfile({
-            ...data,
-            headerGeneral: data.headerGeneral || Array(8).fill(''),
-            headerFibro: data.headerFibro || Array(8).fill(''),
+            ...profileData,
+            nombre: profileData.nombre || '',
+            especialidad: profileData.especialidad || '',
+            mp: profileData.mp || '',
+            me: profileData.me || '',
+            headerGeneral: profileData.headerGeneral || Array(8).fill(''),
+            headerFibro: profileData.headerFibro || Array(8).fill(''),
+            signatureBase64: profileData.signatureBase64 || null,
           });
         }
       } catch (err) {
@@ -88,11 +142,24 @@ const ProfilePage = () => {
     setIsSaving(true);
     try {
       const userRef = doc(db, 'users', auth.currentUser.uid);
-      await setDoc(userRef, profile, { merge: true });
+      const cleanProfile = {
+        ...profile,
+        email: auth.currentUser.email,
+        nombre: profile.nombre || 'Médico',
+        updatedAt: new Date().toISOString()
+      };
+      // Ensure we don't save legacy single-letter fields if they somehow got in
+      delete cleanProfile.n;
+      delete cleanProfile.e;
+      delete cleanProfile.u;
+      delete cleanProfile.esp;
+      delete cleanProfile.m;
+
+      await setDoc(userRef, cleanProfile, { merge: true });
       alert('Perfil guardado con éxito');
     } catch (err) {
       console.error("Error saving profile:", err);
-      alert('Error al guardar perfil');
+      alert('Error al guardar perfil: ' + err.message);
     } finally {
       setIsSaving(false);
     }

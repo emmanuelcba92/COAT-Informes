@@ -74,6 +74,8 @@ const AdminPage = () => {
   const [isManageProfessionalModalOpen, setIsManageProfessionalModalOpen] = useState(false);
   const [targetProf, setTargetProf] = useState(null);
   const [isProfSaving, setIsProfSaving] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewType, setPreviewType] = useState('general'); // 'general' or 'fibro'
   
   // State for Managing Professional MODELS (Personal Practices)
   const [isModelsModalOpen, setIsModelsModalOpen] = useState(false);
@@ -98,7 +100,17 @@ const AdminPage = () => {
     const qUsers = query(collection(db, 'users'), orderBy('u', 'asc'));
     const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(list);
+      
+      // Deduplicate by email/user to avoid double entries during migration
+      const uniqueUsers = {};
+      list.forEach(u => {
+        const key = (u.e || u.u || u.id).toLowerCase();
+        // If we have doc with UID (id same as no special chars basically or 28 chars), prefer it
+        if (!uniqueUsers[key] || u.id.length === 28) {
+          uniqueUsers[key] = u;
+        }
+      });
+      setUsers(Object.values(uniqueUsers));
     });
 
     // Sync Settings
@@ -122,7 +134,85 @@ const AdminPage = () => {
     { id: 'users', label: 'Gestión de Usuarios', icon: <Users size={20} /> },
     { id: 'practices', label: 'Gestión de Prácticas', icon: <Stethoscope size={20} /> },
     { id: 'settings', label: 'Configuración de Sistema', icon: <ShieldCheck size={20} /> },
+    { id: 'maintenance', label: 'Mantenimiento', icon: <Settings2 size={20} /> },
   ];
+
+  // Helper to get standardized user data
+  const getStandardUser = (u) => {
+    return {
+      nombre: u.nombre || u.n || 'Sin nombre',
+      email: (u.email || u.e || u.u || '').toLowerCase(),
+      especialidad: u.especialidad || u.esp || 'Médico Otorrinolaringólogo',
+      mp: u.mp || u.m || '-',
+      me: u.me || '-',
+      id: u.id,
+      role: u.role || 'médico',
+      isOfficial: u.id.length === 28
+    };
+  };
+
+  const handleMigrateIds = async () => {
+    if (!window.confirm('¿Deseas migrar los perfiles antiguos a IDs oficiales de Firebase? Esto unirá duplicados y arreglará perfiles en blanco.')) return;
+    setLoading(true);
+    try {
+      let migrated = 0;
+      const slugs = users.filter(u => (u.id.includes('@') || u.id.includes('_')) && u.id.length !== 28);
+      
+      for (const u of slugs) {
+        const std = getStandardUser(u);
+        const email = std.email;
+        if (email) {
+          const officialUser = users.find(x => x.id.length === 28 && getStandardUser(x).email === email);
+          
+          if (officialUser) {
+            console.log(`Migrating ${u.id} to ${officialUser.id}`);
+            // Merge data (prefer official one but keep headers from slug if official is empty)
+            const merged = {
+              ...u,
+              ...officialUser,
+              headerGeneral: (officialUser.headerGeneral?.some(l => l) ? officialUser.headerGeneral : u.headerGeneral) || Array(8).fill(''),
+              headerFibro: (officialUser.headerFibro?.some(l => l) ? officialUser.headerFibro : u.headerFibro) || Array(8).fill(''),
+              signatureBase64: officialUser.signatureBase64 || u.signatureBase64,
+              email: email, // Standardize email field
+              nombre: officialUser.nombre || u.nombre || u.n || 'Médico',
+              id: officialUser.id // Ensure we use UID
+            };
+            await setDoc(doc(db, 'users', officialUser.id), merged, { merge: true });
+            await deleteDoc(doc(db, 'users', u.id));
+            migrated++;
+          }
+        }
+      }
+      alert(`Mantenimiento completado. Se migraron ${migrated} registros.`);
+    } catch (err) {
+      alert('Error en mantenimiento: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleWipeAllExceptAdmin = async () => {
+    const adminEmailToKeep = 'egomez@coat.com.ar';
+    if (!window.confirm(`¡ADVERTENCIA CRÍTICA!\n\nEsta acción eliminará TODOS los perfiles profesionales registrados en la base de datos excepto los vinculados al correo (${adminEmailToKeep}).\n\n¿Estás absolutamente seguro de continuar?`)) return;
+    
+    setLoading(true);
+    try {
+      let deleted = 0;
+      // We use the full 'users' list from state to ensure we catch everything including items filtered from view
+      for (const u of users) {
+        const std = getStandardUser(u);
+        if (std.email !== adminEmailToKeep) {
+          await deleteDoc(doc(db, 'users', u.id));
+          deleted++;
+        }
+      }
+      alert(`Limpieza completada. Se eliminaron ${deleted} perfiles. El sistema ahora está limpio.`);
+    } catch (err) {
+      alert('Error en limpieza: ' + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Logic for Users
   const handleDeleteUser = async (id) => {
@@ -369,10 +459,27 @@ const AdminPage = () => {
     if (!targetProf) return;
     setIsProfSaving(true);
     try {
-      await setDoc(doc(db, 'users', targetProf.id), targetProf, { merge: true });
+      // Standardize data before save
+      const cleanData = {
+        ...targetProf,
+        nombre: targetProf.nombre || targetProf.n || 'Médico',
+        email: (targetProf.email || targetProf.e || targetProf.u || '').toLowerCase(),
+        especialidad: targetProf.especialidad || targetProf.esp || 'Médico Otorrinolaringólogo',
+        mp: targetProf.mp || targetProf.m || '-',
+        m: targetProf.mp || targetProf.m || '-', // keep m for legacy but prefer mp
+      };
+      
+      // Remove legacy fields if they exist to keep the doc clean
+      delete cleanData.esp;
+      delete cleanData.n;
+      delete cleanData.e;
+      delete cleanData.u;
+
+      await setDoc(doc(db, 'users', targetProf.id), cleanData, { merge: true });
       alert('Perfil del profesional actualizado correctamente');
       setIsManageProfessionalModalOpen(false);
     } catch (err) {
+      console.error("Save error:", err);
       alert('Error al guardar: ' + err.message);
     } finally {
       setIsProfSaving(false);
@@ -446,15 +553,29 @@ const AdminPage = () => {
     setTargetProf({ ...targetProf, [key]: newHeader });
   };
 
-  const filteredUsers = users.filter(u => 
-    (u.u || '').toLowerCase().includes(userSearch.toLowerCase()) || 
-    (u.e || '').toLowerCase().includes(userSearch.toLowerCase()) ||
-    (u.nombre || '').toLowerCase().includes(userSearch.toLowerCase())
-  );
+  const filteredUsers = users
+    .map(u => ({ ...u, _std: getStandardUser(u) }))
+    .filter(u => {
+      // Search logic
+      const search = userSearch.toLowerCase();
+      const matchesSearch = 
+        u._std.nombre.toLowerCase().includes(search) || 
+        u._std.email.toLowerCase().includes(search) ||
+        u.id.toLowerCase().includes(search);
+
+      if (!matchesSearch) return false;
+
+      // Deduplication logic: Hide legacy slug if an official UID version exists
+      if (!u._std.isOfficial && u._std.email) {
+        const hasOfficial = users.some(x => x.id.length === 28 && x.id !== u.id && (x.email || x.e || x.u || '').toLowerCase() === u._std.email);
+        if (hasOfficial) return false;
+      }
+      return true;
+    });
 
   const filteredPractices = practices.filter(p => 
     (p.n || '').toLowerCase().includes(practiceSearch.toLowerCase()) || 
-    (p.c || '').toLowerCase().includes(practiceSearch.toLowerCase())
+(p.c || '').toLowerCase().includes(practiceSearch.toLowerCase())
   );
 
   return (
@@ -467,12 +588,16 @@ const AdminPage = () => {
       </div>
 
       {/* Admin Tabs */}
-      <div className="flex gap-2 p-1 bg-[var(--bg-page)] rounded-2xl w-fit border border-main">
+      <div className="flex flex-wrap gap-2 animate-slide-up" style={{ animationDelay: '0.1s' }}>
         {tabs.map(tab => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-6 py-2.5 rounded-xl font-semibold transition-all ${activeTab === tab.id ? 'bg-[var(--bg-card)] shadow-sm text-blue-600 border border-main' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}`}
+            className={`flex items-center gap-2 px-6 py-3 rounded-2xl font-bold transition-all ${
+              activeTab === tab.id 
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
+                : 'bg-[var(--bg-card)] text-[var(--text-sub)] hover:bg-[var(--hover-main)] border border-[var(--border-main)]'
+            }`}
           >
             {tab.icon}
             {tab.label}
@@ -480,29 +605,23 @@ const AdminPage = () => {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 gap-6">
+      {/* Main Content Sections */}
+      <div className="animate-slide-up" style={{ animationDelay: '0.2s' }}>
         {activeTab === 'users' && (
-          <div className="card animate-fade-in">
-            <div className="p-6 border-b border-main flex items-center justify-between">
-              <div className="relative w-72">
-                <Search size={18} className="absolute left-3 top-2.5 text-gray-400" />
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-[var(--border-main)] animate-fade-in">
+              <div className="relative w-full md:w-96">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
                 <input 
-                  type="text" 
-                  placeholder="Buscar usuarios..." 
-                  className="input-field pl-10 h-10" 
+                  type="text"
+                  placeholder="Buscar profesional por nombre o email..."
                   value={userSearch}
-                  onChange={e => setUserSearch(e.target.value)}
+                  onChange={(e) => setUserSearch(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-[var(--bg-secondary)] rounded-2xl border border-[var(--border-main)] focus:ring-2 focus:ring-blue-500/50 text-[var(--text-main)] outline-none"
                 />
               </div>
-              <div className="flex gap-3">
-                <button 
-                  onClick={() => setIsBulkModalOpen(true)}
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl font-bold text-sm hover:bg-blue-100 transition-colors"
-                >
-                  <ClipboardList size={18} />
-                  <span>Pegar de Excel</span>
-                </button>
-                <div className="group relative">
+              <div className="flex flex-wrap gap-2 w-full md:w-auto">
+                <div className="relative group">
                   <label className="flex items-center gap-2 px-4 py-2 bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-900/30 text-green-600 dark:text-green-400 rounded-xl font-bold text-sm cursor-pointer hover:bg-green-100 transition-colors">
                     <FileUp size={18} />
                     <span>Importar Excel</span>
@@ -523,64 +642,107 @@ const AdminPage = () => {
                 </button>
               </div>
             </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {filteredUsers.map(user => (
+                <div key={user.id} className="card p-6 group hover:border-blue-500/50 transition-all">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="flex items-center gap-4">
+                      <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-2xl flex items-center justify-center font-bold text-xl">
+                        {user._std.nombre.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h4 className="font-bold text-lg leading-tight truncate">{user._std.nombre}</h4>
+                        <p className="text-sm text-gray-400 font-medium truncate">{user._std.email || 'Sin email'}</p>
+                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{user._std.isOfficial ? 'ID Cuenta' : 'ID Provisorio'}</p>
+                      </div>
+                    </div>
+                    <div className="flex gap-1">
+                      <button 
+                        onClick={() => handleManageUser(user)}
+                        className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
+                        title="Gestionar Perfil"
+                      >
+                        <UserCog size={18} />
+                      </button>
+                      <button 
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
+                        title="Eliminar Perfil"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3 text-sm text-gray-500">
+                      <Mail size={16} />
+                      <span className="truncate">{user.u || user.e || 'Sin email'}</span>
+                    </div>
+                    <div className="flex items-center gap-3 text-sm text-gray-500">
+                      <Briefcase size={16} />
+                      <span className="bg-blue-50 dark:bg-blue-900/20 text-blue-600 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                        {user.especialidad || user.esp || 'Sin especialidad'}
+                      </span>
+                    </div>
+                    {(user.mp || user.me) && (
+                      <div className="flex items-center gap-3 text-[11px] text-gray-400 font-medium">
+                        <FileText size={16} />
+                        {user.mp && <span>MP: {user.mp}</span>}
+                        {user.me && <span>ME: {user.me}</span>}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'maintenance' && (
+          <div className="card p-8 animate-fade-in space-y-6">
+            <div className="flex items-center gap-3 border-b border-main pb-4">
+              <Settings2 className="text-blue-500" size={32} />
+              <div>
+                <h3 className="text-xl font-bold">Mantenimiento de Base de Datos</h3>
+                <p className="text-gray-500 text-sm">Herramientas para corregir errores de migración y duplicados</p>
+              </div>
+            </div>
             
-            <div className="overflow-x-auto">
-              <table className="w-full text-left">
-                <thead className="bg-[var(--bg-secondary)] text-gray-500 text-[10px] uppercase font-bold tracking-widest border-b border-main">
-                  <tr>
-                    <th className="px-6 py-4">Usuario</th>
-                    <th className="px-6 py-4">Especialidad</th>
-                    <th className="px-6 py-4">Matrícula</th>
-                    <th className="px-6 py-4 text-center">Acciones</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y border-main">
-                  {filteredUsers.map((row) => (
-                    <tr key={row.id} className="hover:bg-gray-50/50 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center font-bold text-xs uppercase">
-                            {(row.u || 'U').charAt(0)}
-                          </div>
-                          <div>
-                            <p className="font-bold text-sm">{(row.u || '').split('@')[0]}</p>
-                            <p className="text-[10px] opacity-40 font-mono italic">Acceso COAT habilitado</p>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm font-medium">{row.especialidad}</td>
-                      <td className="px-6 py-4 text-sm font-mono">{row.m}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex justify-center gap-2">
-                          <button className="p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors" title="Restablecer Clave">
-                            <Key size={16} />
-                          </button>
-                          <button 
-                            className="p-2 text-gray-400 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-lg transition-colors"
-                            onClick={() => handleManageUser(row)}
-                            title="Gestionar Perfil Avanzado"
-                          >
-                            <UserCog size={16} />
-                          </button>
-                          <button 
-                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/10 rounded-lg transition-colors"
-                            onClick={() => handleManageModels(row)}
-                            title="Modelos de Informe"
-                          >
-                            <FileText size={16} />
-                          </button>
-                          <button 
-                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 rounded-lg transition-colors"
-                            onClick={() => handleDeleteUser(row.id)}
-                          >
-                            <Trash2 size={16} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl border border-blue-100 dark:border-blue-900/30 space-y-4">
+                <h4 className="font-bold flex items-center gap-2">
+                  <ShieldCheck size={20} /> Migrar IDs de Correo a UID
+                </h4>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Detecta perfiles que usan el email como identificador (slugs antiguos) y los mueve al ID oficial de Firebase. 
+                  Esto soluciona el error de "Perfil en Blanco" para los profesionales.
+                </p>
+                <button 
+                  onClick={handleMigrateIds}
+                  className="w-full py-3 bg-blue-600 text-white font-bold rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
+                >
+                  Ejecutar Migración de IDs
+                </button>
+              </div>
+
+              <div className="p-6 bg-red-50 dark:bg-red-900/10 rounded-3xl border border-red-100 dark:border-red-900/30 space-y-4">
+                <h4 className="font-bold flex items-center gap-2 text-red-600 dark:text-red-400">
+                  <Trash2 size={20} /> Limpieza Total de Usuarios
+                </h4>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Elimina TODOS los perfiles de la base de datos de una sola vez, manteniendo únicamente la cuenta de administrador (egomez).
+                  Útil para reiniciar el sistema si se borraron cuentas de acceso manualmente.
+                </p>
+                <button 
+                  onClick={handleWipeAllExceptAdmin}
+                  className="w-full py-3 bg-red-600 text-white font-bold rounded-xl hover:bg-red-700 transition-all shadow-lg shadow-red-500/20"
+                >
+                  Nivelar Base de Datos (Borrar Todo)
+                </button>
+              </div>
+
             </div>
           </div>
         )}
@@ -1070,11 +1232,18 @@ const AdminPage = () => {
                   </div>
 
                     <div className="space-y-8">
-                      {/* Membrete General */}
                       <div className="space-y-4">
-                        <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
-                          <div className="w-3 h-3 rounded-full bg-blue-500" /> Membrete General (8 líneas)
-                        </h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
+                            <div className="w-3 h-3 rounded-full bg-blue-500" /> Membrete General (8 líneas)
+                          </h4>
+                          <button 
+                            onClick={() => { setPreviewType('general'); setIsPreviewOpen(true); }}
+                            className="text-[10px] font-bold text-blue-500 hover:underline"
+                          >
+                            VISTA PREVIA
+                          </button>
+                        </div>
                         <div className="space-y-1.5">
                           {(targetProf.headerGeneral || Array(8).fill('')).map((line, idx) => (
                             <input 
@@ -1091,9 +1260,17 @@ const AdminPage = () => {
 
                       {/* Membrete Fibro */}
                       <div className="space-y-4">
-                        <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
-                          <div className="w-3 h-3 rounded-full bg-purple-500" /> Membrete Fibroscopia
-                        </h4>
+                        <div className="flex items-center justify-between">
+                          <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
+                            <div className="w-3 h-3 rounded-full bg-purple-500" /> Membrete Fibroscopia
+                          </h4>
+                          <button 
+                            onClick={() => { setPreviewType('fibro'); setIsPreviewOpen(true); }}
+                            className="text-[10px] font-bold text-purple-500 hover:underline"
+                          >
+                            VISTA PREVIA
+                          </button>
+                        </div>
                         <div className="space-y-1.5">
                           {(targetProf.headerFibro || Array(8).fill('')).map((line, idx) => (
                             <input 
@@ -1268,7 +1445,77 @@ const AdminPage = () => {
               </motion.div>
             </div>
           )}
-        </AnimatePresence>
+      </AnimatePresence>
+
+      {/* MODAL DE VISTA PREVIA ADMINISTRATIVA */}
+      <AnimatePresence>
+        {isPreviewOpen && targetProf && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[90vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col border border-white/20 text-slate-900 dark:text-slate-100"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900 flex-shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${previewType === 'general' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Vista Previa Profesionales</h3>
+                    <p className="text-[10px] opacity-50 uppercase tracking-widest font-bold">Simulación A4 • Profesional: {targetProf.nombre}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto p-8 bg-slate-100 dark:bg-slate-950 flex justify-center">
+                <div className="bg-white text-slate-800 w-[210mm] min-h-[297mm] shadow-xl p-[20mm] flex flex-col font-serif relative">
+                  <div className="text-center space-y-0.5 mb-16 border-b-2 border-slate-100 pb-8">
+                    {(previewType === 'general' ? targetProf.headerGeneral : targetProf.headerFibro).map((line, i) => (
+                      <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-2xl font-bold uppercase mb-2' : 'text-sm'}`}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex-1 opacity-10">
+                    <h2 className="text-xl font-bold uppercase mb-8 border-b border-slate-200 inline-block">Ejemplo de Informe</h2>
+                    <div className="space-y-4">
+                      <div className="h-4 bg-slate-500 rounded w-full" />
+                      <div className="h-4 bg-slate-500 rounded w-[95%]" />
+                      <div className="h-4 bg-slate-500 rounded w-[90%]" />
+                    </div>
+                  </div>
+
+                  <div className="mt-24 self-end text-center flex flex-col items-center min-w-[200px]">
+                    {targetProf.signatureBase64 ? (
+                      <img src={targetProf.signatureBase64} alt="Firma" className="max-h-24 w-auto mb-2 object-contain mix-blend-multiply" />
+                    ) : (
+                      <div className="h-24" />
+                    )}
+                    <div className="border-t border-slate-400 pt-2 w-full">
+                      <p className="font-bold uppercase text-sm">{targetProf.nombre}</p>
+                      <p className="text-[11px] leading-tight">{targetProf.especialidad}</p>
+                      <p className="text-[10px] mt-1">MP {targetProf.mp} | ME {targetProf.me}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 flex justify-center text-[11px] font-medium text-gray-500 italic">
+                * Simulación de diseño para {previewType === 'general' ? 'Informes Generales' : 'Fibroscopias'}.
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

@@ -15,7 +15,9 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, collection, getDocs } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, addDoc, query, where, orderBy, limit as firestoreLimit } from 'firebase/firestore';
+import { History, Search as SearchIcon, X as CloseIcon, ChevronDown } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const ReportsPage = () => {
   const [reportData, setReportData] = useState({
@@ -36,25 +38,95 @@ const ReportsPage = () => {
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '' });
   const [professional, setProfessional] = useState(null);
   const [dbPractices, setDbPractices] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historySearch, setHistorySearch] = useState('');
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  const saveToHistory = async () => {
+    if (!auth.currentUser || !reportData.patient) return;
+    try {
+      await addDoc(collection(db, 'reports_history'), {
+        userId: auth.currentUser.uid,
+        profName: professional?.nombre || '',
+        patient: reportData.patient.toUpperCase(),
+        socialWork: reportData.socialWork.toUpperCase(),
+        date: reportData.date,
+        practice: selectedPractice,
+        content: content.substring(0, 500), // Only first 500 chars to save space
+        createdAt: new Date().toISOString()
+      });
+      fetchHistory(); // Refresh
+    } catch (err) {
+      console.error("Error saving history:", err);
+    }
+  };
+
+  const fetchHistory = async () => {
+    if (!auth.currentUser) return;
+    setIsLoadingHistory(true);
+    try {
+      const q = query(
+        collection(db, 'reports_history'), 
+        where('userId', '==', auth.currentUser.uid),
+        orderBy('createdAt', 'desc'),
+        firestoreLimit(50)
+      );
+      const snap = await getDocs(q);
+      setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    } catch (err) {
+      console.error("Error fetching history:", err);
+    } finally {
+      setIsLoadingHistory(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isHistoryOpen) fetchHistory();
+  }, [isHistoryOpen]);
 
   React.useEffect(() => {
     const fetchData = async () => {
       if (!auth.currentUser) return;
       try {
-        // Fetch Professional
-        const docRef = doc(db, 'users', auth.currentUser.uid);
-        const docSnap = await getDoc(docRef);
+        const uid = auth.currentUser.uid;
+        const email = auth.currentUser.email || '';
+        
+        // 1. Fetch Professional (with adoption check)
+        const docRef = doc(db, 'users', uid);
+        let docSnap = await getDoc(docRef);
+        let profData = null;
+
         if (docSnap.exists()) {
-          setProfessional(docSnap.data());
+          profData = docSnap.data();
+        } else if (email) {
+          const legacyId = email.replace(/[@.]/g, '_');
+          const legacyRef = doc(db, 'users', legacyId);
+          const legacySnap = await getDoc(legacyRef);
+          if (legacySnap.exists()) {
+            profData = legacySnap.data();
+          }
         }
 
-        // Fetch Practices from Firestore
+        if (profData) {
+          // Standardize for use in component
+          setProfessional({
+            ...profData,
+            nombre: profData.nombre || profData.n || 'Médico',
+            especialidad: profData.especialidad || profData.esp || '',
+            mp: profData.mp || profData.m || '',
+            headerGeneral: profData.headerGeneral || Array(8).fill(''),
+            headerFibro: profData.headerFibro || Array(8).fill(''),
+          });
+        }
+
+        // 2. Fetch Practices from Firestore
         const practicesRef = collection(db, 'practices');
         const practicesSnap = await getDocs(practicesRef);
         const list = practicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setDbPractices(list);
 
-        // Fetch System Config
+        // 3. Fetch System Config
         const configRef = doc(db, 'config', 'settings');
         const configSnap = await getDoc(configRef);
         if (configSnap.exists()) {
@@ -215,8 +287,10 @@ const ReportsPage = () => {
     if (shouldPrint === 'print') {
       const pdfUrl = doc.output('bloburl');
       window.open(pdfUrl, '_blank');
+      saveToHistory();
     } else if (shouldPrint === 'save') {
       doc.save(`Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`);
+      saveToHistory();
     } else if (shouldPrint === 'instance') {
       return doc;
     }
@@ -276,6 +350,7 @@ const ReportsPage = () => {
           fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
         })
       });
+      saveToHistory();
       alert('¡Informe enviado con éxito!');
     } catch (err) {
       console.error(err);
@@ -285,8 +360,26 @@ const ReportsPage = () => {
     }
   };
 
+  const filteredHistory = history.filter(h => 
+    (h.patient || '').toLowerCase().includes(historySearch.toLowerCase()) ||
+    (h.practice || '').toLowerCase().includes(historySearch.toLowerCase())
+  );
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
+      <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-main">
+        <div>
+          <h1 className="text-xl font-bold">Generador de Informes</h1>
+          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
+        </div>
+        <button 
+          onClick={() => setIsHistoryOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded-xl transition-all font-bold text-sm"
+        >
+          <History size={18} />
+          <span>Ver Historial</span>
+        </button>
+      </div>
       <section className="card p-8 space-y-8 shadow-xl">
         <div className="flex items-center justify-between border-b border-main pb-4">
           <div className="flex items-center gap-3">
@@ -480,6 +573,96 @@ const ReportsPage = () => {
           </button>
         </div>
       </section>
+
+      {/* HISTORIAL SLIDE-OVER */}
+      <AnimatePresence>
+        {isHistoryOpen && (
+          <>
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsHistoryOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]"
+            />
+            <motion.div 
+              initial={{ x: '100%' }}
+              animate={{ x: 0 }}
+              exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white dark:bg-slate-950 z-[101] shadow-2xl flex flex-col"
+            >
+              <div className="p-6 border-b border-main flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
+                    <History size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Historial Reciente</h3>
+                    <p className="text-[10px] text-gray-400 font-bold uppercase">Últimos 50 informes generados</p>
+                  </div>
+                </div>
+                <button onClick={() => setIsHistoryOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full">
+                  <CloseIcon size={24} />
+                </button>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-main">
+                <div className="relative">
+                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input 
+                    type="text"
+                    placeholder="Buscar por paciente o práctica..."
+                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 rounded-xl border border-main text-sm focus:ring-2 focus:ring-blue-500/50"
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-auto p-4 space-y-3">
+                {isLoadingHistory ? (
+                  <div className="flex justify-center p-20 opacity-30 animate-pulse">Cargando historial...</div>
+                ) : filteredHistory.length === 0 ? (
+                  <div className="text-center p-20 opacity-30">No se encontraron informes.</div>
+                ) : (
+                  filteredHistory.map(item => (
+                    <div key={item.id} className="p-4 bg-[var(--bg-secondary)] border border-main rounded-2xl group hover:border-blue-500/50 transition-all cursor-pointer"
+                         onClick={() => {
+                           setReportData({
+                             ...reportData,
+                             patient: item.patient,
+                             socialWork: item.socialWork,
+                             date: item.date,
+                           });
+                           handlePracticeChange(item.practice);
+                           //setContent(item.content); // We can't set full content as we only saved prefix, but we set the metadata
+                           setIsHistoryOpen(false);
+                         }}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-2 py-0.5 rounded-full">
+                          {new Date(item.date).toLocaleDateString('es-AR')}
+                        </span>
+                        <span className="text-[10px] text-gray-400 font-mono">{item.id.substring(0,6)}</span>
+                      </div>
+                      <h4 className="font-bold text-sm uppercase group-hover:text-blue-600 transition-colors">{item.patient}</h4>
+                      <p className="text-xs text-gray-500 line-clamp-1">{item.practice}</p>
+                      <p className="text-[10px] text-gray-400 mt-2 font-medium italic">OS: {item.socialWork}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+              
+              <div className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-main">
+                <p className="text-[10px] text-center text-gray-400 leading-relaxed">
+                  El historial solo almacena metadatos básicos y los primeros 500 caracteres del informe para optimizar espacio.
+                </p>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
