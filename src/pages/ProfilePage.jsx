@@ -12,12 +12,17 @@ import {
   ChevronRight,
   Menu,
   Briefcase,
-  Key
+  Key,
+  Eye,
+  X as CloseIcon,
+  Lock,
+  ShieldCheck,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
-import { Eye, X as CloseIcon, Lock, ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
@@ -171,23 +176,19 @@ const ProfilePage = () => {
       const reader = new FileReader();
       reader.readAsDataURL(file);
       reader.onload = () => resolve(reader.result);
-      reader.onerror = (error) => reject(error);
+      reader.onerror = error => reject(error);
     });
   };
 
   const handleSignatureUpload = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      if (file.size > 500000) { 
-        alert("La imagen es muy pesada. Use una de menos de 500KB.");
-        return;
-      }
-      try {
-        const base64 = await fileToBase64(file);
-        setProfile({ ...profile, signatureBase64: base64 });
-      } catch (err) {
-        console.error("Error converting file:", err);
-      }
+    if (!file) return;
+    try {
+      const base64 = await fileToBase64(file);
+      setProfile({ ...profile, signatureBase64: base64 });
+    } catch (err) {
+      console.error(err);
+      alert('Error cargando la firma');
     }
   };
 
@@ -195,221 +196,209 @@ const ProfilePage = () => {
     if (!auth.currentUser) return;
     setIsSaving(true);
     try {
-      const userRef = doc(db, 'users', auth.currentUser.uid);
-      const cleanProfile = {
-        ...profile,
+      const uid = auth.currentUser.uid;
+      await setDoc(doc(db, 'users', uid), { 
+        ...profile, 
         email: auth.currentUser.email,
-        nombre: profile.nombre || 'Médico',
         updatedAt: new Date().toISOString()
-      };
-      // Ensure we don't save legacy single-letter fields if they somehow got in
-      delete cleanProfile.n;
-      delete cleanProfile.e;
-      delete cleanProfile.u;
-      delete cleanProfile.esp;
-      delete cleanProfile.m;
-
-      await setDoc(userRef, cleanProfile, { merge: true });
-      alert('Perfil guardado con éxito');
+      }, { merge: true });
+      alert('Perfil guardado correctamente');
     } catch (err) {
-      console.error("Error saving profile:", err);
-      alert('Error al guardar perfil: ' + err.message);
+      console.error(err);
+      alert('Error guardando perfil');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handlePasswordReset = async () => {
-    if (!auth.currentUser?.email) return;
-    if (window.confirm(`Se enviará un correo para restablecer tu contraseña a: ${auth.currentUser.email}. ¿Continuar?`)) {
-      try {
-        await sendPasswordResetEmail(auth, auth.currentUser.email);
-        alert("¡Correo enviado! Revisa tu bandeja de entrada o spam.");
-      } catch (err) {
-        alert("Error al enviar correo: " + err.message);
-      }
-    }
-  };
-
   const updateHeader = (type, index, value) => {
-    const newHeader = [...(type === 'general' ? profile.headerGeneral : profile.headerFibro)];
+    const key = type === 'general' ? 'headerGeneral' : 'headerFibro';
+    const newHeader = [...profile[key]];
     newHeader[index] = value;
-    setProfile({...profile, [type === 'general' ? 'headerGeneral' : 'headerFibro']: newHeader});
+    setProfile({ ...profile, [key]: newHeader });
   };
 
-  if (isLoading) return <div className="p-20 text-center opacity-50">Cargando perfil...</div>;
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   return (
-    <div className="max-w-4xl mx-auto space-y-8 pb-20">
-      <div className="flex items-center justify-between">
+    <div className="max-w-6xl mx-auto space-y-8 animate-fade-in p-2 pb-20">
+      <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-2 border-b border-main">
         <div>
-          <h1 className="text-3xl font-bold font-outfit">Mi Perfil</h1>
-          <p className="text-gray-500 dark:text-gray-400">Administre su información profesional y configuración de membretes</p>
+          <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Mi Perfil</h1>
+          <p className="text-gray-500 font-medium">Administre su información profesional y configuración de membretes</p>
         </div>
         <button 
           onClick={handleSave}
-          className="btn-primary flex items-center gap-2"
           disabled={isSaving}
+          className="btn-primary flex items-center gap-2 px-8 py-3 h-fit whitespace-nowrap"
         >
-          <Save size={18} />
+          {isSaving ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Save size={20} />}
           {isSaving ? 'Guardando...' : 'Guardar Cambios'}
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-        {/* Left Column: Personal Data */}
-        <div className="md:col-span-2 space-y-6">
-          <section className="card p-6 space-y-4">
-            <h3 className="flex items-center gap-2 text-lg font-semibold border-b border-main pb-2 mb-4">
-              <UserIcon size={20} className="text-blue-500" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* COLUMNA IZQUIERDA - DATOS Y MEMBRETES */}
+        <div className="lg:col-span-2 space-y-8">
+          <section className="card p-8 bg-gradient-to-br from-white to-blue-50/30 dark:from-slate-900 dark:to-blue-900/5">
+            <h3 className="flex items-center gap-3 text-xl font-bold mb-6 text-blue-600">
+              <UserIcon size={24} className="bg-blue-100 dark:bg-blue-900/40 p-1 rounded-lg" />
               Datos del Profesional
             </h3>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase opacity-60">Nombre Completo</label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">Nombre Completo</label>
                 <input 
-                  type="text" 
+                  type="text"
                   value={profile.nombre}
-                  onChange={e => setProfile({...profile, nombre: e.target.value})}
-                  className="input-field" 
+                  onChange={(e) => setProfile({ ...profile, nombre: e.target.value })}
+                  placeholder="Ej: DR. JUAN PEREZ"
+                  className="input-field"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase opacity-60">Especialidad</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">Especialidad</label>
                 <input 
-                  type="text" 
+                  type="text"
                   value={profile.especialidad}
-                  onChange={e => setProfile({...profile, especialidad: e.target.value})}
-                  className="input-field" 
+                  onChange={(e) => setProfile({ ...profile, especialidad: e.target.value })}
+                  placeholder="Ej: OTORRINOLARINGOLOGÍA"
+                  className="input-field"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase opacity-60">Matrícula Provincial (MP)</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">Matrícula Provincial (MP)</label>
                 <input 
-                  type="text" 
+                  type="text"
                   value={profile.mp}
-                  onChange={e => setProfile({...profile, mp: e.target.value})}
-                  className="input-field" 
+                  onChange={(e) => setProfile({ ...profile, mp: e.target.value })}
+                  className="input-field"
                 />
               </div>
-              <div className="space-y-1">
-                <label className="text-xs font-bold uppercase opacity-60">Matrícula Especialidad (ME)</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold uppercase tracking-wider text-gray-400 pl-1">Matrícula Especialidad (ME)</label>
                 <input 
-                  type="text" 
+                  type="text"
                   value={profile.me}
-                  onChange={e => setProfile({...profile, me: e.target.value})}
-                  className="input-field" 
+                  onChange={(e) => setProfile({ ...profile, me: e.target.value })}
+                  className="input-field"
                 />
               </div>
             </div>
           </section>
 
-          <section className="card p-6">
-            <h3 className="flex items-center gap-2 text-lg font-semibold border-b border-main pb-2 mb-4">
-              <FileCheck size={20} className="text-green-500" />
-              Configuración de Membretes (8 líneas c/u)
-            </h3>
-            
-            <div className="space-y-6">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
-                    <div className="w-2 h-2 rounded-full bg-blue-500" />
-                    Membrete General (8 líneas)
-                  </h4>
-                  <button 
-                    onClick={() => { setPreviewType('general'); setIsPreviewOpen(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 dark:border-blue-900/30"
-                  >
-                    <Eye size={14} /> VISTA PREVIA
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {profile.headerGeneral.map((line, idx) => (
-                    <input 
-                      key={`gen-${idx}`}
-                      type="text"
-                      placeholder={`Línea ${idx + 1}`}
-                      value={line}
-                      onChange={e => updateHeader('general', idx, e.target.value)}
-                      className="input-field py-2 text-sm"
-                    />
-                  ))}
-                </div>
-                <p className="mt-2 text-[10px] text-gray-400">Si deja todas las líneas vacías, solo se mostrará el logo de COAT en el PDF.</p>
-              </div>
+          <section className="card p-8">
+            <div className="flex items-center justify-between mb-8 border-b border-main pb-4">
+              <h3 className="flex items-center gap-3 text-xl font-bold text-green-600">
+                <FileText size={24} className="bg-green-100 dark:bg-green-900/40 p-1 rounded-lg" />
+                Configuración de Membretes (8 líneas c/u)
+              </h3>
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between">
-                  <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
-                    <div className="w-2 h-2 rounded-full bg-purple-500" />
-                    Membrete Fibroscopia
-                  </h4>
-                  <button 
-                    onClick={() => { setPreviewType('fibro'); setIsPreviewOpen(true); }}
-                    className="flex items-center gap-1.5 px-3 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold rounded-lg hover:bg-purple-100 transition-colors border border-purple-200 dark:border-purple-900/30"
-                  >
-                    <Eye size={14} /> VISTA PREVIA
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 gap-2">
-                  {profile.headerFibro.map((line, idx) => (
-                    <input 
-                      key={`fib-${idx}`}
-                      type="text"
-                      placeholder={`Línea ${idx + 1}`}
-                      value={line}
-                      onChange={e => updateHeader('fibro', idx, e.target.value)}
-                      className="input-field py-2 text-sm"
-                    />
-                  ))}
-                </div>
+            {/* MEMBRETE GENERAL */}
+            <div className="mb-10 p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-main">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  MEMBRETE GENERAL (8 LÍNEAS)
+                </h4>
+                <button 
+                  onClick={() => { setPreviewType('general'); setIsPreviewOpen(true); }}
+                  className="text-xs flex items-center gap-1.5 px-3 py-1.5 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full hover:bg-blue-200 transition-colors font-bold uppercase"
+                >
+                  <Eye size={12} />
+                  Vista Previa
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {profile.headerGeneral.map((line, i) => (
+                  <input 
+                    key={i}
+                    type="text"
+                    value={line}
+                    onChange={(e) => updateHeader('general', i, e.target.value)}
+                    placeholder={`Línea ${i + 1}`}
+                    className="w-full px-4 py-2 text-sm bg-white dark:bg-slate-900 border border-main rounded-xl focus:ring-2 focus:ring-blue-500/20 outline-none"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* MEMBRETE FIBRO */}
+            <div className="p-6 bg-slate-50 dark:bg-slate-800/50 rounded-3xl border border-main">
+              <div className="flex items-center justify-between mb-4">
+                <h4 className="font-bold flex items-center gap-2">
+                  <div className="w-2 h-2 bg-purple-500 rounded-full" />
+                  MEMBRETE FIBROSCOPIA
+                </h4>
+                <button 
+                  onClick={() => { setPreviewType('fibro'); setIsPreviewOpen(true); }}
+                  className="text-xs flex items-center gap-1.5 px-3 py-1.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 rounded-full hover:bg-purple-200 transition-colors font-bold uppercase"
+                >
+                  <Eye size={12} />
+                  Vista Previa
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {profile.headerFibro.map((line, i) => (
+                  <input 
+                    key={i}
+                    type="text"
+                    value={line}
+                    onChange={(e) => updateHeader('fibro', i, e.target.value)}
+                    placeholder={`Línea ${i + 1}`}
+                    className="w-full px-4 py-2 text-sm bg-white dark:bg-slate-900 border border-main rounded-xl focus:ring-2 focus:ring-purple-500/20 outline-none"
+                  />
+                ))}
               </div>
             </div>
           </section>
         </div>
 
-        {/* Right Column: Signature & Security */}
-        <div className="space-y-6">
-          <section className="card p-6">
-            <h3 className="flex items-center gap-2 text-lg font-semibold border-b border-gray-100 dark:border-slate-800 pb-2 mb-4">
-              <Upload size={20} className="text-orange-500" />
+        {/* COLUMNA DERECHA - FIRMA Y OTROS */}
+        <div className="space-y-8">
+          <section className="card p-8 border-dashed border-2 flex flex-col items-center text-center">
+            <h3 className="flex items-center gap-2 text-lg font-bold mb-6 text-orange-500">
+              <Upload size={20} />
               Firma Digital
             </h3>
             
-            <div className="space-y-4">
-              <label 
-                className="aspect-video bg-[var(--bg-page)] rounded-xl border-2 border-dashed border-main flex flex-col items-center justify-center p-4 text-center cursor-pointer hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors overflow-hidden"
-              >
+            <div className="relative group w-full max-w-[240px]">
+              <div className="aspect-[4/3] bg-slate-50 dark:bg-slate-800 rounded-3xl border-2 border-dashed border-main flex flex-col items-center justify-center p-4 overflow-hidden relative transition-all group-hover:border-blue-500/50">
                 {profile.signatureBase64 ? (
-                  <img src={profile.signatureBase64} alt="Firma" className="max-h-full object-contain" />
+                  <img src={profile.signatureBase64} alt="Firma" className="max-h-full w-auto object-contain mix-blend-multiply dark:mix-blend-normal brightness-110" />
                 ) : (
                   <>
-                    <div className="w-12 h-12 bg-white dark:bg-slate-700 rounded-full shadow-sm flex items-center justify-center text-blue-500 mb-2">
+                    <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-full flex items-center justify-center mb-2">
                       <Upload size={24} />
                     </div>
-                    <p className="text-xs font-semibold">Subir Firma PNG</p>
+                    <p className="text-xs font-bold text-gray-500">Subir Firma PNG</p>
                     <p className="text-[10px] text-gray-400 mt-1">Fondo transparente recomendado</p>
                   </>
                 )}
                 <input 
-                  type="file" 
-                  accept="image/*" 
-                  className="hidden" 
+                  type="file"
+                  accept="image/png, image/jpeg"
                   onChange={handleSignatureUpload}
+                  className="absolute inset-0 opacity-0 cursor-pointer"
                 />
-              </label>
-              
-              <div className="flex gap-2">
-                <button 
-                  onClick={() => setProfile({...profile, signatureBase64: null})}
-                  className="w-full p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors flex items-center justify-center gap-2 text-xs font-bold"
-                >
-                  <Trash2 size={16} />
-                  ELIMINAR FIRMA
-                </button>
               </div>
+              
+              {profile.signatureBase64 && (
+                <button 
+                  onClick={() => setProfile({ ...profile, signatureBase64: null })}
+                  className="mt-4 flex items-center gap-1 text-red-500 text-[10px] font-bold uppercase hover:bg-red-50 px-3 py-1.5 rounded-full transition-all mx-auto"
+                >
+                  <Trash2 size={12} />
+                  Eliminar Firma
+                </button>
+              )}
             </div>
           </section>
 
@@ -508,10 +497,6 @@ const ProfilePage = () => {
                     <p>Informes Digitales COAT - Centro Otorrinolaringológico Audiológico Trenque Lauquen</p>
                   </div>
                 </div>
-              </div>
-
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 flex justify-center text-[11px] font-medium text-gray-500 italic">
-                * Esta es una representación visual del informe PDF final. El diseño puede variar levemente al imprimir.
               </div>
             </motion.div>
           </div>
