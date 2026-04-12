@@ -15,9 +15,9 @@ import {
   Key
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
-import { sendPasswordResetEmail } from 'firebase/auth';
-import { Eye, X as CloseIcon } from 'lucide-react';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { updatePassword, EmailAuthProvider, reauthenticateWithCredential, sendPasswordResetEmail } from 'firebase/auth';
+import { Eye, X as CloseIcon, Lock, ShieldCheck, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
@@ -31,9 +31,18 @@ const ProfilePage = () => {
   });
   
   const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState('general'); // 'general' o 'fibro'
+  const [isSaving, setIsSaving] = useState(false);
+  
+  // Password Change State
+  const [showPassModal, setShowPassModal] = useState(false);
+  const [currentPass, setCurrentPass] = useState('');
+  const [newPass, setNewPass] = useState('');
+  const [confirmPass, setConfirmPass] = useState('');
+  const [passError, setPassError] = useState('');
+  const [passSuccess, setPassSuccess] = useState('');
+  const [isChangingPass, setIsChangingPass] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -94,7 +103,8 @@ const ProfilePage = () => {
           setProfile(cleanProfile);
           
           // MIGRATION: Auto-save to official UID if it's currently stored elsewhere
-          await setDoc(docRef, cleanProfile, { merge: true });
+          await setDoc(docRef, { ...cleanProfile, isOfficial: true }, { merge: true });
+          setProfile({ ...cleanProfile, isOfficial: true });
         }
       } catch (err) {
         console.error("Error fetching profile:", err);
@@ -104,6 +114,57 @@ const ProfilePage = () => {
     };
     fetchProfile();
   }, [auth.currentUser]);
+
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setPassError('');
+    setPassSuccess('');
+    
+    if (newPass !== confirmPass) {
+      setPassError('Las nuevas contraseñas no coinciden');
+      return;
+    }
+    
+    if (newPass.length < 6) {
+      setPassError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+
+    setIsChangingPass(true);
+    try {
+      const user = auth.currentUser;
+      const credential = EmailAuthProvider.credential(user.email, currentPass);
+      
+      // Re-autenticar
+      await reauthenticateWithCredential(user, credential);
+      
+      // Cambiar contraseña
+      await updatePassword(user, newPass);
+      
+      setPassSuccess('¡Contraseña actualizada con éxito!');
+      setCurrentPass('');
+      setNewPass('');
+      setConfirmPass('');
+      
+      // Cerrar modal tras 2 segundos
+      setTimeout(() => setShowPassModal(false), 2000);
+    } catch (err) {
+      console.error(err);
+      if (err.code === 'auth/wrong-password') {
+        setPassError('La contraseña actual es incorrecta');
+      } else {
+        setPassError('Error al cambiar la contraseña. Reintente más tarde.');
+      }
+    } finally {
+      setIsChangingPass(false);
+    }
+  };
+
+  const handlePasswordReset = () => {
+    setShowPassModal(true);
+    setPassError('');
+    setPassSuccess('');
+  };
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {
@@ -456,6 +517,102 @@ const ProfilePage = () => {
           </div>
         )}
       </AnimatePresence>
+
+      {/* MODAL DE CAMBIO DE CONTRASEÑA */}
+      <AnimatePresence>
+        {showPassModal && (
+          <div className="fixed inset-0 z-[210] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-2xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 flex items-center justify-center">
+                    <Lock size={20} />
+                  </div>
+                  <h3 className="font-bold text-lg">Cambiar Contraseña</h3>
+                </div>
+                <button 
+                  onClick={() => setShowPassModal(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                >
+                  <CloseIcon size={20} />
+                </button>
+              </div>
+
+              <form onSubmit={handleChangePassword} className="p-6 space-y-4">
+                {passError && (
+                  <div className="p-3 bg-red-50 dark:bg-red-900/10 border border-red-100 dark:border-red-900/30 text-red-600 dark:text-red-400 text-sm rounded-xl flex items-center gap-2 animate-shake">
+                    <AlertCircle size={16} />
+                    {passError}
+                  </div>
+                )}
+                {passSuccess && (
+                  <div className="p-3 bg-green-50 dark:bg-green-900/10 border border-green-100 dark:border-green-900/30 text-green-600 dark:text-green-400 text-sm rounded-xl flex items-center gap-2">
+                    <CheckCircle2 size={16} />
+                    {passSuccess}
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 pl-1">Contraseña Actual</label>
+                  <input 
+                    type="password"
+                    required
+                    value={currentPass}
+                    onChange={(e) => setCurrentPass(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 pl-1">Nueva Contraseña</label>
+                  <input 
+                    type="password"
+                    required
+                    value={newPass}
+                    onChange={(e) => setNewPass(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                    placeholder="Mínimo 6 caracteres"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold uppercase tracking-wider text-slate-400 pl-1">Confirmar Nueva Contraseña</label>
+                  <input 
+                    type="password"
+                    required
+                    value={confirmPass}
+                    onChange={(e) => setConfirmPass(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800 border-none rounded-2xl focus:ring-2 focus:ring-purple-500/20 outline-none transition-all"
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <button 
+                  type="submit"
+                  disabled={isChangingPass || passSuccess}
+                  className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-2xl transition-all active:scale-95 shadow-lg shadow-purple-500/20 flex items-center justify-center gap-2 mt-4"
+                >
+                  {isChangingPass ? (
+                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : (
+                    <>
+                      <ShieldCheck size={20} />
+                      Actualizar Contraseña
+                    </>
+                  )}
+                </button>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 };
