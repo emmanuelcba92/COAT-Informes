@@ -57,7 +57,7 @@ const AdminPage = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [pasteData, setPasteData] = useState('');
-  const [manualUserForm, setManualUserForm] = useState({ nombre: '', mp: '', me: '', esp: '', u: '', password: '' });
+  const [manualUserForm, setManualUserForm] = useState({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '' });
   const [loading, setLoading] = useState(true);
   
   // State for Users
@@ -159,7 +159,7 @@ const AdminPage = () => {
             nombre: item.Nombre || item.nombre || (item.Usuario || 'Profesional'),
             mp: item.MP || item.mp || '-',
             me: item.ME || item.me || '-',
-            esp: item.Especialidad || item.especialidad || 'Médico Otorrinolaringólogo',
+            especialidad: item.Especialidad || item.especialidad || 'Médico Otorrinolaringólogo',
             u: (item.Usuario || item.usuario || (item.nombre || 'user')).toLowerCase().trim(),
             e: item.Email || item.email || `${(item.Usuario || item.usuario || 'user').toLowerCase().trim()}@coat.com.ar`,
             m: item.Matricula || item.Matrícula || item.matricula || '-'
@@ -216,7 +216,7 @@ const AdminPage = () => {
           nombre: (columns[0] || '').trim(),
           mp: (columns[1] || '').trim(),
           me: (columns[2] || '').trim(),
-          esp: (columns[3] || '').trim() || 'Médico Otorrinolaringólogo',
+          especialidad: (columns[3] || '').trim() || 'Médico Otorrinolaringólogo',
           u: (columns[4] || '').toLowerCase().trim(),
           e: `${(columns[4] || '').toLowerCase().trim()}@coat.com.ar`,
           m: (columns[1] || '').trim()
@@ -267,7 +267,7 @@ const AdminPage = () => {
         nombre: manualUserForm.nombre,
         mp: manualUserForm.mp || '-',
         me: manualUserForm.me || '-',
-        esp: manualUserForm.esp || 'Médico Otorrinolaringólogo',
+        especialidad: manualUserForm.especialidad || 'Médico Otorrinolaringólogo',
         u: manualUserForm.u.toLowerCase().trim(),
         e: `${manualUserForm.u.toLowerCase().trim()}@coat.com.ar`,
         m: manualUserForm.mp || '-'
@@ -299,7 +299,7 @@ const AdminPage = () => {
       }
 
       setIsManualModalOpen(false);
-      setManualUserForm({ nombre: '', mp: '', me: '', esp: '', u: '', password: '' });
+      setManualUserForm({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '' });
     } catch (error) {
       alert('Error al crear usuario: ' + error.message);
     }
@@ -548,7 +548,7 @@ const AdminPage = () => {
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 text-sm font-medium">{row.esp}</td>
+                      <td className="px-6 py-4 text-sm font-medium">{row.especialidad}</td>
                       <td className="px-6 py-4 text-sm font-mono">{row.m}</td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center gap-2">
@@ -919,8 +919,8 @@ const AdminPage = () => {
                       type="text" 
                       className="input-field" 
                       placeholder="Médico Otorrinolaringólogo"
-                      value={manualUserForm.esp}
-                      onChange={e => setManualUserForm({...manualUserForm, esp: e.target.value})}
+                      value={manualUserForm.especialidad}
+                      onChange={e => setManualUserForm({...manualUserForm, especialidad: e.target.value})}
                     />
                   </div>
                   <div className="space-y-1">
@@ -1008,8 +1008,8 @@ const AdminPage = () => {
                           <input 
                             type="text" 
                             className="input-field" 
-                            value={targetProf.esp} 
-                            onChange={e => setTargetProf({...targetProf, esp: e.target.value})}
+                            value={targetProf.especialidad || ''} 
+                            onChange={e => setTargetProf({...targetProf, especialidad: e.target.value})}
                           />
                         </div>
                         <div className="grid grid-cols-2 gap-3">

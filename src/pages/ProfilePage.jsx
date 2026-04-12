@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { Eye, X as CloseIcon } from 'lucide-react';
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
@@ -30,6 +32,8 @@ const ProfilePage = () => {
   
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false);
+  const [previewType, setPreviewType] = useState('general'); // 'general' o 'fibro'
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -91,6 +95,18 @@ const ProfilePage = () => {
       alert('Error al guardar perfil');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePasswordReset = async () => {
+    if (!auth.currentUser?.email) return;
+    if (window.confirm(`Se enviará un correo para restablecer tu contraseña a: ${auth.currentUser.email}. ¿Continuar?`)) {
+      try {
+        await sendPasswordResetEmail(auth, auth.currentUser.email);
+        alert("¡Correo enviado! Revisa tu bandeja de entrada o spam.");
+      } catch (err) {
+        alert("Error al enviar correo: " + err.message);
+      }
     }
   };
 
@@ -174,12 +190,20 @@ const ProfilePage = () => {
               Configuración de Membretes (8 líneas c/u)
             </h3>
             
-            <div className="space-y-8">
-              <div>
-                <h4 className="text-sm font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-blue-500" />
-                  Membrete General
-                </h4>
+            <div className="space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    Membrete General (8 líneas)
+                  </h4>
+                  <button 
+                    onClick={() => { setPreviewType('general'); setIsPreviewOpen(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-[10px] font-bold rounded-lg hover:bg-blue-100 transition-colors border border-blue-200 dark:border-blue-900/30"
+                  >
+                    <Eye size={14} /> VISTA PREVIA
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 gap-2">
                   {profile.headerGeneral.map((line, idx) => (
                     <input 
@@ -196,10 +220,18 @@ const ProfilePage = () => {
               </div>
 
               <div>
-                <h4 className="text-sm font-bold text-gray-400 uppercase mb-3 flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-purple-500" />
-                  Membrete Fibroscopia
-                </h4>
+                <div className="flex items-center justify-between">
+                  <h4 className="flex items-center gap-2 font-bold text-sm uppercase text-gray-500 tracking-wider">
+                    <div className="w-2 h-2 rounded-full bg-purple-500" />
+                    Membrete Fibroscopia
+                  </h4>
+                  <button 
+                    onClick={() => { setPreviewType('fibro'); setIsPreviewOpen(true); }}
+                    className="flex items-center gap-1.5 px-3 py-1 bg-purple-50 dark:bg-purple-900/20 text-purple-600 dark:text-purple-400 text-[10px] font-bold rounded-lg hover:bg-purple-100 transition-colors border border-purple-200 dark:border-purple-900/30"
+                  >
+                    <Eye size={14} /> VISTA PREVIA
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 gap-2">
                   {profile.headerFibro.map((line, idx) => (
                     <input 
@@ -265,13 +297,105 @@ const ProfilePage = () => {
               <Key size={20} className="text-purple-500" />
               Seguridad
             </h3>
-            <button className="w-full py-2 px-4 bg-[var(--bg-page)] hover:bg-gray-200 dark:hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2">
+            <button 
+              onClick={handlePasswordReset}
+              className="w-full py-2 px-4 bg-[var(--bg-page)] hover:bg-gray-200 dark:hover:bg-slate-700 text-sm font-semibold rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
               <Key size={16} />
               Cambiar Contraseña
             </button>
           </section>
         </div>
       </div>
+
+      {/* MODAL DE VISTA PREVIA */}
+      <AnimatePresence>
+        {isPreviewOpen && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="bg-white dark:bg-slate-900 w-full max-w-4xl max-h-[95vh] rounded-[2rem] shadow-2xl overflow-hidden flex flex-col border border-white/20"
+            >
+              <div className="p-6 border-b border-gray-100 dark:border-slate-800 flex items-center justify-between bg-white dark:bg-slate-900">
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${previewType === 'general' ? 'bg-blue-100 text-blue-600' : 'bg-purple-100 text-purple-600'}`}>
+                    <FileText size={20} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Vista Previa de Impresión</h3>
+                    <p className="text-[10px] opacity-50 uppercase tracking-widest font-bold">Documento A4 • Membrete {previewType === 'general' ? 'General' : 'Fibroscopia'}</p>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setIsPreviewOpen(false)}
+                  className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                >
+                  <CloseIcon size={24} />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-auto p-12 bg-slate-100 dark:bg-slate-950 flex justify-center">
+                {/* REPRESENTACIÓN DE HOJA A4 */}
+                <div className="bg-white text-slate-800 w-[210mm] min-h-[297mm] shadow-xl p-[20mm] flex flex-col font-serif relative">
+                  
+                  {/* MEMBRETE */}
+                  <div className="text-center space-y-0.5 mb-16 border-b-2 border-slate-100 pb-8">
+                    {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
+                      <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-2xl font-bold uppercase mb-2' : 'text-sm'}`}>
+                        {line}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* CUERPO SIMULADO */}
+                  <div className="flex-1">
+                    <div className="text-right mb-12">
+                      <p className="italic opacity-50">Ciudad, Fecha de 202X</p>
+                    </div>
+                    <h2 className="text-xl font-bold uppercase mb-8 border-b border-slate-200 inline-block">Informe Médico</h2>
+                    <div className="space-y-4 opacity-30">
+                      <div className="h-4 bg-slate-200 rounded w-full" />
+                      <div className="h-4 bg-slate-200 rounded w-[95%]" />
+                      <div className="h-4 bg-slate-200 rounded w-[98%]" />
+                      <div className="h-4 bg-slate-200 rounded w-[90%]" />
+                      <div className="h-4 bg-slate-200 rounded w-full" />
+                      <div className="h-4 bg-slate-200 rounded w-[40%] mt-8" />
+                    </div>
+                  </div>
+
+                  {/* FIRMA Y PIE */}
+                  <div className="mt-24 self-end text-center flex flex-col items-center min-w-[200px]">
+                    {profile.signatureBase64 ? (
+                      <img src={profile.signatureBase64} alt="Firma" className="max-h-24 w-auto mb-2 object-contain mix-blend-multiply" />
+                    ) : (
+                      <div className="h-24" />
+                    )}
+                    <div className="border-t border-slate-400 pt-2 w-full">
+                      <p className="font-bold uppercase text-sm">{profile.nombre || 'Nombre del Profesional'}</p>
+                      <p className="text-[11px] leading-tight">{profile.especialidad}</p>
+                      <div className="flex gap-2 justify-center text-[10px] mt-1">
+                        {profile.mp && <span>MP {profile.mp}</span>}
+                        {profile.me && <span>ME {profile.me}</span>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* MARCA DE AGUA INFERIOR */}
+                  <div className="absolute bottom-8 left-0 right-0 text-center opacity-20 text-[9px]">
+                    <p>Informes Digitales COAT - Centro Otorrinolaringológico Audiológico Trenque Lauquen</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-gray-100 dark:border-slate-800 flex justify-center text-[11px] font-medium text-gray-500 italic">
+                * Esta es una representación visual del informe PDF final. El diseño puede variar levemente al imprimir.
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
