@@ -358,11 +358,12 @@ const ProfilePage = () => {
                   {/* Paper simulation content */}
                   <div className="flex justify-between items-start mb-10 border-b-2 border-slate-100 pb-8">
                     <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
-                    <div className="text-right space-y-1">
+                    <div className="flex-1 text-center space-y-1">
                       {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
                         <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-xl font-black mb-2 text-slate-900' : 'text-xs text-slate-600 font-serif'}`}>{line}</div>
                       ))}
                     </div>
+                    <div className="w-24" /> {/* Spacer to balance the logo and keep text centered relative to the page area */}
                   </div>
                   
                   {/* Dummy report content */}
