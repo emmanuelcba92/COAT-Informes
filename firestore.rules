@@ -1,0 +1,41 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Función para verificar si es administrador
+    function isAdmin() {
+      return request.auth != null && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'Administrador';
+    }
+
+    // Colección de Usuarios
+    match /users/{userId} {
+      // Cualquier usuario logueado puede leer datos de usuarios
+      allow read: if request.auth != null;
+      
+      // Permitir actualización:
+      // 1. Si es admin, puede todo.
+      // 2. Si es el usuario dueño, puede todo EXCEPTO cambiar su rol.
+      allow update: if request.auth != null && (
+        isAdmin() || 
+        (request.auth.uid == userId && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role']))
+      );
+      
+      // Solo admins pueden crear o eliminar usuarios
+      allow create, delete: if isAdmin();
+    }
+
+    // Colección de Prácticas
+    match /practices/{practiceId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    // Ajustes Globales (Webhook, Email Admin, Token)
+    match /config/{configId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+  }
+}

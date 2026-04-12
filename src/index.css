@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-page: #e9ecef;
+    --bg-card: #f8f9fa;
+    --bg-secondary: #dee2e6;
+    --text-main: #212529;
+    --text-sub: #495057;
+    --border-main: #ced4da;
+    --hover-main: rgba(59, 130, 246, 0.12);
+  }
+
+  :root.dark,
+  body.dark,
+  .dark {
+    --bg-page: #020617;
+    --bg-card: #0f172a;
+    --bg-secondary: #1e293b;
+    --text-main: #f8fafc;
+    --text-sub: #94a3b8;
+    --border-main: #1e293b;
+    --hover-main: rgba(59, 130, 246, 0.15);
+  }
+
+  body {
+    @apply font-sans antialiased transition-colors duration-300;
+    background-color: var(--bg-page);
+    color: var(--text-main);
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-2xl transition-all duration-200 active:scale-95 shadow-lg shadow-blue-500/20 disabled:opacity-50;
+  }
+  
+  .input-field {
+    @apply w-full px-4 py-3 border rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-200 font-medium;
+    background-color: var(--bg-secondary);
+    border-color: var(--border-main);
+    color: var(--text-main);
+  }
+
+  .card {
+    @apply rounded-3xl border shadow-sm overflow-hidden transition-all duration-300;
+    background-color: var(--bg-card);
+    border-color: var(--border-main);
+  }
+
+  .glass {
+    @apply backdrop-blur-md border border-white/20;
+    background-color: var(--bg-card);
+  }
+
+  .border-main {
+    border-color: var(--border-main);
+  }
+}
+
+/* Custom animations for the "WOW" effect */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+/* Material Design 3 Navigation Rail custom styling */
+.nav-rail-item {
+  @apply flex flex-col items-center justify-center gap-1 p-3 cursor-pointer transition-all duration-300 rounded-2xl mx-2;
+}
+
+.nav-rail-item.active {
+  background-color: var(--hover-main);
+  @apply text-blue-600 font-semibold;
+}
+
+.nav-rail-item:hover:not(.active) {
+  background-color: var(--hover-main);
+}
+
+.header {
+  @apply h-16 flex items-center justify-between px-8 border-b sticky top-0 z-40 backdrop-blur-md;
+  background-color: var(--bg-card);
+  border-color: var(--border-main);
+}
+
+.border-main {
+  border-color: var(--border-main);
+}
+/* Quill size label fix */
+.ql-picker.ql-size .ql-picker-label::before,
+.ql-picker.ql-size .ql-picker-item::before {
+  content: "Tamaño" !important;
+}
+.ql-picker.ql-size .ql-picker-label[data-value="small"]::before,
+.ql-picker.ql-size .ql-picker-item[data-value="small"]::before {
+  content: "Pequeño" !important;
+}
+.ql-picker.ql-size .ql-picker-label[data-value="large"]::before,
+.ql-picker.ql-size .ql-picker-item[data-value="large"]::before {
+  content: "Grande" !important;
+}
+.ql-picker.ql-size .ql-picker-label[data-value="huge"]::before,
+.ql-picker.ql-size .ql-picker-item[data-value="huge"]::before {
+  content: "Muy Grande" !important;
+}
