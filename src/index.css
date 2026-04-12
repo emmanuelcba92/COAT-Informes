@@ -2,13 +2,13 @@
 
 @layer base {
   :root {
-    --bg-page: #e9ecef;
-    --bg-card: #f8f9fa;
-    --bg-secondary: #dee2e6;
-    --text-main: #212529;
-    --text-sub: #495057;
-    --border-main: #ced4da;
-    --hover-main: rgba(59, 130, 246, 0.12);
+    --bg-page: #f1f5f9;
+    --bg-card: #ffffff;
+    --bg-secondary: #f8fafc;
+    --text-main: #0f172a;
+    --text-sub: #334155;
+    --border-main: #e2e8f0;
+    --hover-main: rgba(59, 130, 246, 0.08);
   }
 
   :root.dark,

@@ -67,7 +67,8 @@ function App() {
 
   const isAdmin = (userProfile?.role || '').toLowerCase() === 'administrador' || 
                   (userProfile?.role || '').toLowerCase() === 'admin' ||
-                  currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar';
+                  currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
+                  currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
 
   const navItems = [
     { id: 'reports', label: 'Informes', icon: <FileText size={24} />, path: '/' },

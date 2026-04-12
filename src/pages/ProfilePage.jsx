@@ -37,10 +37,15 @@ const ProfilePage = () => {
 
   useEffect(() => {
     const fetchProfile = async () => {
-      if (!auth.currentUser) return;
+      const user = auth.currentUser;
+      if (!user) {
+        setIsLoading(false);
+        return;
+      }
+      
       try {
-        const uid = auth.currentUser.uid;
-        const email = auth.currentUser.email || '';
+        const uid = user.uid;
+        const email = (user.email || '').toLowerCase().trim();
         const docRef = doc(db, 'users', uid);
         let docSnap = await getDoc(docRef);
         
@@ -73,20 +78,21 @@ const ProfilePage = () => {
             if (!profileData) {
               profileData = standardizedLegacy;
             } else {
-              // Only overwrite if official data is missing or if legacy looks "newer/fuller"
-              // For simplicity, we merge fields that are empty in official
+              // Merge existing official data with legacy as fallback
               profileData = {
-                ...standardizedLegacy, // Start with legacy (newest admin updates)
-                ...profileData,      // Overwrite with existing official
+                ...standardizedLegacy, 
+                ...profileData,      
                 // Force overwrite identity fields if they are missing in official
                 nombre: profileData.nombre || standardizedLegacy.nombre,
                 especialidad: profileData.especialidad || standardizedLegacy.especialidad,
                 mp: profileData.mp || standardizedLegacy.mp,
                 me: profileData.me || standardizedLegacy.me,
+                // Ensure email is always the official one
+                email: email
               };
             }
             
-            // Save the merged version to the official location
+            // Save the merged version back to the official UID location automatically
             await setDoc(docRef, profileData, { merge: true });
           }
         }
@@ -110,7 +116,7 @@ const ProfilePage = () => {
       }
     };
     fetchProfile();
-  }, []);
+  }, [auth.currentUser]); // Re-run when user logs in/out
 
   const fileToBase64 = (file) => {
     return new Promise((resolve, reject) => {

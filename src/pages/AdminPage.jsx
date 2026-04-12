@@ -141,7 +141,7 @@ const AdminPage = () => {
   const getStandardUser = (u) => {
     return {
       nombre: u.nombre || u.n || 'Sin nombre',
-      email: (u.email || u.e || u.u || '').toLowerCase(),
+      email: (u.email || u.e || u.u || u.email || '').toLowerCase().trim(),
       especialidad: u.especialidad || u.esp || 'Médico Otorrinolaringólogo',
       mp: u.mp || u.m || '-',
       me: u.me || '-',
@@ -246,19 +246,19 @@ const AdminPage = () => {
 
         for (const item of data) {
           const userData = {
-            nombre: item.Profesional || item.Nombre || item.nombre || (item.Usuario || 'Profesional'),
+            nombre: (item.Profesional || item.Nombre || item.nombre || (item.Usuario || 'Profesional')).trim(),
             mp: item.MP || item.mp || '-',
             me: item.ME || item.me || '-',
             especialidad: item.Especialidad || item.especialidad || 'Médico Otorrinolaringólogo',
             u: (item.Usuario || item.usuario || (item.nombre || 'user')).toLowerCase().trim(),
-            e: item.Email || item.email || `${(item.Usuario || item.usuario || 'user').toLowerCase().trim()}@coat.com.ar`,
+            e: (item.Email || item.email || `${(item.Usuario || item.usuario || 'user').toLowerCase().trim()}@coat.com.ar`).toLowerCase().trim(),
             m: item.Matricula || item.Matrícula || item.matricula || '-'
           };
-          const password = item.Contraseña || item.contraseña || item.Contra || item.contra;
+          const password = (item.Contraseña || item.contraseña || item.Contra || item.contra || '').toString();
           
-          if (password && password.toString().length >= 6) {
+          if (password && password.length >= 6) {
             try {
-              const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.e, password.toString());
+              const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.e, password);
               const uid = userCredential.user.uid;
               await setDoc(doc(db, 'users', uid), { ...userData, role: 'médico' }, { merge: true });
               await signOut(secondaryAuth);
@@ -656,9 +656,9 @@ const AdminPage = () => {
                         {user._std.nombre.charAt(0).toUpperCase()}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <h4 className="font-bold text-lg leading-tight truncate">{user._std.nombre}</h4>
-                        <p className="text-sm text-gray-400 font-medium truncate">{user._std.email || 'Sin email'}</p>
-                        <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">{user._std.isOfficial ? 'ID Cuenta' : 'ID Provisorio'}</p>
+                        <h4 className="font-bold text-lg leading-tight truncate text-[var(--text-main)]">{user._std.nombre}</h4>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 font-medium truncate">{user._std.email || 'Sin email'}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-wider">{user._std.isOfficial ? 'Cuenta Oficial' : 'Perfil Pendiente'}</p>
                       </div>
                     </div>
                     <div className="flex gap-1">
