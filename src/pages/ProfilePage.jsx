@@ -356,11 +356,15 @@ const ProfilePage = () => {
               <div className="flex-1 overflow-auto bg-slate-200 p-12 flex justify-center">
                 <div className="bg-white text-slate-900 w-[210mm] min-h-[297mm] shadow-2xl p-[15mm] flex flex-col relative">
                   {/* Paper simulation content */}
-                  <div className="text-center space-y-1 mb-12 border-b-2 border-slate-100 pb-8">
-                    {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
-                      <div key={i} className={`min-h-[1.5rem] ${i === 0 ? 'text-2xl font-black mb-3 text-slate-900' : 'text-sm font-serif text-slate-700'}`}>{line}</div>
-                    ))}
+                  <div className="flex justify-between items-start mb-10 border-b-2 border-slate-100 pb-8">
+                    <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
+                    <div className="text-right space-y-1">
+                      {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
+                        <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-xl font-black mb-2 text-slate-900' : 'text-xs text-slate-600 font-serif'}`}>{line}</div>
+                      ))}
+                    </div>
                   </div>
+                  
                   {/* Dummy report content */}
                   <div className="flex-1 px-8 opacity-10 flex flex-col gap-6 mt-12 pointer-events-none">
                     <div className="h-8 bg-slate-900 rounded w-48" />
