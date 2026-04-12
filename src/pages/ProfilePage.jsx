@@ -321,10 +321,16 @@ const ProfilePage = () => {
       {/* MODAL: VISTA PREVIA (MODERNIZED) */}
       <AnimatePresence>
         {isPreviewOpen && (
-          <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+            onClick={() => setIsPreviewOpen(false)}
+          >
             <motion.div 
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-[3rem] overflow-hidden flex flex-col h-[90vh] shadow-2xl shadow-blue-500/20 shadow-inner"
+              initial={{ scale: 0.9, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 w-full max-w-5xl rounded-[3rem] overflow-hidden flex flex-col h-[90vh] shadow-2xl relative"
             >
               <div className="p-8 border-b border-main flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
@@ -332,13 +338,21 @@ const ProfilePage = () => {
                     <FileText />
                   </div>
                   <div>
-                    <h3 className="font-black text-xl">Simulación de Reporte A4</h3>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Visualización de encabezado y firma</p>
+                    <h3 className="font-black text-xl text-[var(--text-main)] transition-colors">Simulación de Reporte A4</h3>
+                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest transition-colors">Visualización de encabezado y firma</p>
                   </div>
                 </div>
-                <button onClick={() => setIsPreviewOpen(false)} className="p-3 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all active:rotate-90">
-                  <CloseIcon size={24} />
-                </button>
+                <div className="flex items-center gap-4">
+                  <button 
+                    onClick={() => setIsPreviewOpen(false)}
+                    className="px-6 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 font-bold text-xs transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                  <button onClick={() => setIsPreviewOpen(false)} className="p-3 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-all text-[var(--text-main)]">
+                    <CloseIcon size={24} />
+                  </button>
+                </div>
               </div>
 
               <div className="flex-1 overflow-auto bg-slate-100 dark:bg-slate-950 p-12 flex justify-center">
@@ -372,31 +386,59 @@ const ProfilePage = () => {
       {/* MODAL: CAMBIO DE CONTRASEÑA */}
       <AnimatePresence>
         {showPassModal && (
-          <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-white/10">
+          <div 
+            className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md"
+            onClick={() => setShowPassModal(false)}
+          >
+            <motion.div 
+              initial={{ y: 20, opacity: 0 }} 
+              animate={{ y: 0, opacity: 1 }} 
+              exit={{ y: 20, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] shadow-2xl p-8 border border-white/10 relative"
+            >
               <div className="flex items-center justify-between mb-8">
-                <h3 className="text-xl font-black">Actualizar Contraseña</h3>
-                <button onClick={() => setShowPassModal(false)}><CloseIcon size={20} /></button>
+                <h3 className="text-xl font-black text-[var(--text-main)] transition-colors">Actualizar Contraseña</h3>
+                <button onClick={() => setShowPassModal(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors text-[var(--text-main)]">
+                  <CloseIcon size={20} />
+                </button>
               </div>
               <form onSubmit={handleChangePassword} className="space-y-4">
                 {passError && <div className="p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold">{passError}</div>}
                 {passSuccess && <div className="p-4 bg-green-50 text-green-600 rounded-2xl text-xs font-bold">{passSuccess}</div>}
+                
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1">Contraseña Actual</label>
+                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1 text-[var(--text-sub)]">Contraseña Actual</label>
                   <input type="password" required value={currentPass} onChange={e => setCurrentPass(e.target.value)} className="input-field" placeholder="••••••" />
                 </div>
+                
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1">Nueva Contraseña</label>
+                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1 text-[var(--text-sub)]">Nueva Contraseña</label>
                   <input type="password" required value={newPass} onChange={e => setNewPass(e.target.value)} className="input-field" placeholder="Mínimo 6 caracteres" />
                 </div>
+                
                 <div className="space-y-1">
-                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1">Confirmar Nueva</label>
+                  <label className="text-[10px] font-bold uppercase opacity-50 ml-1 text-[var(--text-sub)]">Confirmar Nueva</label>
                   <input type="password" required value={confirmPass} onChange={e => setConfirmPass(e.target.value)} className="input-field" placeholder="••••••" />
                 </div>
-                <button type="submit" disabled={isChangingPass} className="btn-primary w-full mt-6 py-4 flex justify-center items-center gap-2">
-                  {isChangingPass && <Loader2 className="animate-spin" size={20} />}
-                  Cambiar Ahora
-                </button>
+                
+                <div className="grid grid-cols-2 gap-4 mt-8">
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassModal(false)}
+                    className="py-4 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-2xl transition-all font-bold text-sm text-[var(--text-main)]"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    type="submit" 
+                    disabled={isChangingPass} 
+                    className="btn-primary py-4 flex justify-center items-center gap-2"
+                  >
+                    {isChangingPass && <Loader2 className="animate-spin" size={20} />}
+                    Cambiar
+                  </button>
+                </div>
               </form>
             </motion.div>
           </div>
