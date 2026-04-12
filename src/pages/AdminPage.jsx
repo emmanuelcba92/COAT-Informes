@@ -42,10 +42,10 @@ import {
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAMC5Fjaop2AVwck9c3aiYFuZj_IfSgnLc",
-  authDomain: "informes-coat-a6688.firebaseapp.com",
-  projectId: "informes-coat-a6688",
-  storageBucket: "informes-coat-a6688.firebasestorage.app",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
 };
 
 const AdminPage = () => {
