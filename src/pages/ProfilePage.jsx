@@ -384,23 +384,22 @@ const ProfilePage = () => {
               <div className="flex-1 overflow-auto bg-slate-200 p-12 flex justify-center">
                 <div className="bg-white text-slate-900 w-[210mm] min-h-[297mm] shadow-2xl p-[15mm] flex flex-col relative">
                   {/* Paper simulation content */}
-                  <div className="flex items-start mb-10 border-b-2 border-slate-100 pb-8">
-                    <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
-                    <div className="flex-1 text-center space-y-0.5 min-h-[100px]">
+                  <div className="flex items-start mb-10 border-b-2 border-slate-100 pb-8 h-[120px]">
+                    <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain mt-1" />
+                    <div className="flex-1 text-center pt-4">
                       {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => {
-                        let sizeClass = "text-[7.5pt]";
-                        let weightClass = "font-normal";
-                        if (i === 0) { sizeClass = "text-[11pt]"; weightClass = "font-bold"; }
-                        else if (i === 1 || i === 2) { sizeClass = "text-[10pt]"; }
+                        let sizeClass = "text-[11pt]";
+                        let weightClass = "font-bold";
+                        if (i === 1 || i === 2) { sizeClass = "text-[10pt]"; weightClass = "font-normal"; }
+                        else if (i >= 3) { sizeClass = "text-[7.5pt]"; weightClass = "font-normal"; }
                         
                         return (
-                          <p key={i} className={`leading-tight text-[var(--text-main)] ${sizeClass} ${weightClass}`} style={{fontFamily: 'Arial, sans-serif'}}>
+                          <p key={i} className={`leading-tight text-slate-800 ${sizeClass} ${weightClass}`} style={{fontFamily: 'Arial, sans-serif', marginBottom: (i < 3 ? '1px' : '0px')}}>
                             {line.trim() || '\u00A0'}
                           </p>
                         );
                       })}
                     </div>
-                    <div className="w-24" /> {/* Spacer to balance logo */}
                   </div>
                   
                   {/* Dummy report content */}
