@@ -634,12 +634,12 @@ const AdminPage = () => {
       {/* MODAL: MANAGE PROFESSIONAL PROFILE */}
       <AnimatePresence>
         {isManageProfessionalModalOpen && targetProf && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }} 
               animate={{ opacity: 1, scale: 1 }} 
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[var(--bg-main)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
+              className="bg-[var(--bg-card)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
             >
               <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-card)]">
                 <div className="flex items-center gap-3">
@@ -666,7 +666,7 @@ const AdminPage = () => {
 
               <div className="flex-1 overflow-y-auto p-8 space-y-8">
                 {/* Basic Info */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Nombre</label>
                     <input type="text" value={targetProf.nombre} onChange={e => setTargetProf({...targetProf, nombre: e.target.value})} className="input-field" />
@@ -682,6 +682,17 @@ const AdminPage = () => {
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1">ME</label>
                     <input type="text" value={targetProf.me} onChange={e => setTargetProf({...targetProf, me: e.target.value})} className="input-field" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-black text-blue-500">Rol de Acceso</label>
+                    <select 
+                      value={targetProf.role || 'médico'} 
+                      onChange={e => setTargetProf({...targetProf, role: e.target.value})}
+                      className="input-field appearance-none cursor-pointer"
+                    >
+                      <option value="médico">Médico (Solo Informes)</option>
+                      <option value="admin">Administrador (Control Total)</option>
+                    </select>
                   </div>
                 </div>
 
@@ -790,10 +801,10 @@ const AdminPage = () => {
       {/* MODAL: MANUAL USER CREATE */}
       <AnimatePresence>
         {isManualModalOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
             <motion.div 
                initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-white/10"
+               className="bg-[var(--bg-card)] w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)]"
             >
               <div className="p-6 border-b border-main flex items-center justify-between">
                 <h3 className="font-bold flex items-center gap-2"><UserPlus /> Nuevo Profesional</h3>
