@@ -252,7 +252,7 @@ const ReportsPage = () => {
 
     lines.forEach(line => {
       if (!line.trim()) {
-        yPos += 2.5;
+        yPos += 1.5;
         return;
       }
 
