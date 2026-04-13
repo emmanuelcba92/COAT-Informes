@@ -531,7 +531,7 @@ const AdminPage = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
-                    <Mail size={14} /> Email de la Clínica (Remitente Oficial)
+                    <Mail size={14} /> Email para Copias (Destinatario)
                   </label>
                   <input 
                     type="email" 
@@ -540,6 +540,7 @@ const AdminPage = () => {
                     className="input-field" 
                     placeholder="consultas@coat.com.ar"
                   />
+                  <p className="text-[10px] text-gray-400 ml-1">Aquí llegará una copia automática de cada informe enviado por los médicos.</p>
                 </div>
 
                 <div className="space-y-2">
