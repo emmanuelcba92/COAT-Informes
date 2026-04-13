@@ -12,7 +12,9 @@ import {
   Copy, 
   Info,
   Type,
-  Loader2
+  Loader2,
+  Trash2,
+  RotateCcw
 } from 'lucide-react';
 
 const PracticesPage = () => {
@@ -62,10 +64,7 @@ const PracticesPage = () => {
       const userRef = doc(db, 'users', auth.currentUser.uid);
       const updatedPersonal = {
         ...personalPractices,
-        [selectedPractice.id]: {
-          b: editorContent,
-          n: selectedPractice.n
-        }
+        [selectedPractice.id]: editorContent // Simplified to just string as per previous bug found
       };
       await setDoc(userRef, { personalPractices: updatedPersonal }, { merge: true });
       setPersonalPractices(updatedPersonal);
@@ -73,6 +72,30 @@ const PracticesPage = () => {
     } catch (err) {
       console.error("Error saving customization:", err);
       alert('Error al guardar la plantilla.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleResetPersonal = async () => {
+    if (!auth.currentUser || !selectedPractice) return;
+    if (!window.confirm("¿Seguro que quiere eliminar su versión personalizada y volver a la original del sistema?")) return;
+    
+    setIsSaving(true);
+    try {
+      const userRef = doc(db, 'users', auth.currentUser.uid);
+      const updatedPersonal = { ...personalPractices };
+      delete updatedPersonal[selectedPractice.id];
+      
+      await setDoc(userRef, { personalPractices: updatedPersonal }, { merge: true });
+      setPersonalPractices(updatedPersonal);
+      
+      // Update editor content immediate
+      setEditorContent(selectedPractice.b || '');
+      alert('Restaurada plantilla del sistema.');
+    } catch (err) {
+      console.error("Error resetting customization:", err);
+      alert('Error al restaurar.');
     } finally {
       setIsSaving(false);
     }
@@ -152,6 +175,16 @@ const PracticesPage = () => {
                 </div>
               </div>
               <div className="flex gap-2">
+                {personalPractices[selectedPractice.id] && (
+                  <button 
+                    onClick={handleResetPersonal}
+                    disabled={isSaving}
+                    className="flex items-center gap-2 text-xs px-4 py-2 border border-red-100 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all font-bold"
+                  >
+                    <RotateCcw size={14} />
+                    Restaurar Original
+                  </button>
+                )}
                 <button 
                   onClick={handleSavePersonal}
                   disabled={isSaving}
