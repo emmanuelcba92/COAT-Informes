@@ -144,11 +144,20 @@ const ReportsPage = () => {
     const p = dbPractices.find(item => item.n === practiceName);
     if (p) {
       const personal = (professional?.personalPractices || {})[p.id];
+      let bodyText = "";
+      
       if (personal) {
-        setContent(typeof personal === 'string' ? personal : (personal.b || ''));
+        bodyText = typeof personal === 'string' ? personal : (personal.b || '');
       } else {
-        setContent(p.b || '');
+        bodyText = p.b || '';
       }
+
+      // Preserve formatting by converting newlines to HTML paragraphs for Quill
+      if (bodyText && !bodyText.includes('<p>')) {
+        bodyText = bodyText.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '<p><br></p>').join('');
+      }
+      
+      setContent(bodyText);
     }
   };
 
@@ -261,7 +270,7 @@ const ReportsPage = () => {
 
       const splitLines = doc.splitTextToSize(line.trim(), 180);
       
-      if (yPos + (splitLines.length * 4.5) > pageHeight - 20) {
+      if (yPos + (splitLines.length * 4.5) > pageHeight - 60) {
         doc.addPage();
         yPos = 20;
       }
@@ -270,19 +279,40 @@ const ReportsPage = () => {
       yPos += (splitLines.length * 4.5);
     });
 
-    // Signature Area
-    const sigY = pageHeight - 50;
+    // 6. Signature Area (3-row centered format)
+    currentY = yPos + 15;
     if (prof.signatureBase64) {
       try {
-        doc.addImage(prof.signatureBase64, 'PNG', 150, pageHeight - 60, 40, 20);
+        const sigW = 40;
+        const sigH = 15;
+        const sigX = 140; 
+        doc.addImage(prof.signatureBase64, 'PNG', sigX, currentY, sigW, sigH);
+        currentY += sigH + 3;
       } catch (e) {
         console.error("Error signature:", e);
       }
+    } else {
+        currentY += 10;
     }
-    doc.line(140, pageHeight - 35, 190, pageHeight - 35);
+    
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(9);
-    doc.text(`${prof.nombre || ''}`, 150, pageHeight - 30);
-    doc.text(`MP ${prof.mp || ''}`, 150, pageHeight - 26);
+    
+    const footerLines = [
+      prof.nombre || 'Profesional',
+      prof.especialidad || 'Especialista',
+      `MP: ${prof.mp || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
+    ];
+
+    footerLines.forEach((text, i) => {
+      if (i === 1) {
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(8);
+      }
+      // Center the text block around the x=160 axis (right side of page)
+      doc.text(text, 160, currentY, { align: 'center' });
+      currentY += (i === 0 ? 4 : 3.5);
+    });
 
     if (shouldPrint === 'print') {
       const pdfUrl = doc.output('bloburl');

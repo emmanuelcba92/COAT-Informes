@@ -412,11 +412,11 @@ const ProfilePage = () => {
                     </div>
                   </div>
                   {/* Professional signature on paper */}
-                  <div className="mt-auto self-end flex flex-col items-center min-w-[300px] border-t-2 border-slate-100 pt-8 text-center">
-                    {profile.signatureBase64 && <img src={profile.signatureBase64} alt="Firma" className="max-h-24 w-auto mb-2 mix-blend-multiply" />}
-                    <p className="font-black uppercase text-sm text-slate-900">{profile.nombre}</p>
-                    <p className="text-xs text-slate-700">{profile.especialidad}</p>
-                    <p className="text-[10px] mt-1 text-slate-500">MP: {profile.mp} | ME: {profile.me}</p>
+                  <div className="mt-auto self-end flex flex-col items-center min-w-[300px] pt-8 text-center" style={{marginRight: '15mm'}}>
+                    {profile.signatureBase64 && <img src={profile.signatureBase64} alt="Firma" className="max-h-20 w-auto mb-2 mix-blend-multiply" />}
+                    <p className="font-bold text-[10pt] text-slate-900 leading-tight">{profile.nombre}</p>
+                    <p className="text-[9pt] text-slate-700 leading-tight">{profile.especialidad || 'Especialista'}</p>
+                    <p className="text-[8pt] text-slate-500 leading-tight">MP: {profile.mp} {profile.me ? ` | ME: ${profile.me}` : ''}</p>
                   </div>
                 </div>
               </div>
