@@ -65,18 +65,22 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  const isAdmin = (userProfile?.role || '').toLowerCase() === 'administrador' || 
-                  (userProfile?.role || '').toLowerCase() === 'admin' ||
+  const role = (userProfile?.role || '').toLowerCase();
+  const isAdmin = role === 'administrador' || 
+                  role === 'admin' ||
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
                   currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
+
+  const isSecretaria = role === 'secretaría';
 
   const navItems = [
     { id: 'reports', label: 'Informes', icon: <FileText size={24} />, path: '/' },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile' },
-    { id: 'practices', label: 'Mis Prácticas', icon: <Activity size={24} />, path: '/practices' },
+    { id: 'practices', label: 'Mis Prácticas', icon: <Activity size={24} />, path: '/practices', hideForSecretaria: true },
     { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', adminOnly: true },
   ].filter(item => {
     if (item.adminOnly && !isAdmin) return false;
+    if (item.hideForSecretaria && isSecretaria) return false;
     return true;
   });
 

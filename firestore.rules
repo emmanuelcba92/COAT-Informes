@@ -7,10 +7,18 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && (
         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'admin' || 
          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'administrador') ||
         request.auth.token.email.lower() == 'egomez@coat.com.ar' ||
         request.auth.token.email.lower() == 'aparedes@coat.com.ar'
       );
+    }
+
+    // Función para verificar si es secretaría
+    function isSecretaria() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'secretaría';
     }
 
     // Usuarios
@@ -18,7 +26,7 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null && (
         isAdmin() || 
-        (request.auth.uid == userId && request.resource.data.get('role', 'médico').lower() != 'administrador')
+        (request.auth.uid == userId && request.resource.data.get('role', 'médico').lower() != 'admin')
       );
       allow update: if request.auth != null && (
         isAdmin() || 
@@ -29,9 +37,19 @@ service cloud.firestore {
 
     // Historial de Informes
     match /reports_history/{reportId} {
-      allow read: if request.auth != null && (isAdmin() || resource.data.userId == request.auth.uid);
-      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if request.auth != null && (isAdmin() || resource.data.userId == request.auth.uid);
+      allow read: if request.auth != null && (
+        isAdmin() || 
+        isSecretaria() || 
+        resource.data.userId == request.auth.uid
+      );
+      allow create: if request.auth != null && (
+        request.resource.data.userId == request.auth.uid &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() != 'secretaría'
+      );
+      allow update, delete: if request.auth != null && (
+        isAdmin() || 
+        resource.data.userId == request.auth.uid
+      );
     }
 
     // Prácticas

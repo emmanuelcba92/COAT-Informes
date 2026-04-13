@@ -690,7 +690,9 @@ const AdminPage = () => {
                       onChange={e => setTargetProf({...targetProf, role: e.target.value})}
                       className="input-field appearance-none cursor-pointer"
                     >
-                      <option value="médico">Médico (Solo Informes)</option>
+                      <option value="médico">Médico (Solo sus informes)</option>
+                      <option value="fonoaudiología">Fonoaudiología (Solo sus informes)</option>
+                      <option value="secretaría">Secretaría (Ve todo, no crea/edita)</option>
                       <option value="admin">Administrador (Control Total)</option>
                     </select>
                   </div>

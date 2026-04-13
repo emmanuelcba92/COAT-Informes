@@ -63,15 +63,27 @@ const ReportsPage = () => {
   };
 
   const fetchHistory = async () => {
-    if (!auth.currentUser) return;
+    if (!auth.currentUser || !professional) return;
     setIsLoadingHistory(true);
     try {
-      const q = query(
-        collection(db, 'reports_history'), 
-        where('userId', '==', auth.currentUser.uid),
-        orderBy('createdAt', 'desc'),
-        firestoreLimit(50)
-      );
+      const isAdmin = professional.role === 'admin' || professional.role === 'administrador';
+      const isSecretaria = professional.role === 'secretaría';
+
+      let q;
+      if (isAdmin || isSecretaria) {
+        q = query(
+          collection(db, 'reports_history'), 
+          orderBy('createdAt', 'desc'),
+          firestoreLimit(50)
+        );
+      } else {
+        q = query(
+          collection(db, 'reports_history'), 
+          where('userId', '==', auth.currentUser.uid),
+          orderBy('createdAt', 'desc'),
+          firestoreLimit(50)
+        );
+      }
       const snap = await getDocs(q);
       setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     } catch (err) {
@@ -407,10 +419,28 @@ const ReportsPage = () => {
           className="flex items-center gap-2 px-4 py-2 bg-[var(--hover-main)] hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 rounded-xl transition-all font-bold text-sm"
         >
           <History size={18} />
-          <span>Ver Historial</span>
+          <span>Historial</span>
         </button>
       </div>
-      <section className="card p-8 space-y-8 shadow-xl">
+
+      {professional?.role === 'secretaría' ? (
+        <div className="bg-[var(--bg-card)] p-12 rounded-3xl border border-main shadow-sm text-center space-y-4">
+          <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto">
+            <History size={40} />
+          </div>
+          <div>
+            <h3 className="text-xl font-bold">Modo Secretaría Activo</h3>
+            <p className="text-gray-400 max-w-md mx-auto mt-2">Usted puede visualizar el historial de todos los profesionales, pero no tiene permisos para crear o editar informes.</p>
+          </div>
+          <button 
+            onClick={() => setIsHistoryOpen(true)}
+            className="btn-primary px-8"
+          >
+            Abrir Historial de Informes
+          </button>
+        </div>
+      ) : (
+        <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-main shadow-sm space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
         <div className="flex items-center justify-between border-b border-main pb-4">
           <div className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
@@ -671,9 +701,16 @@ const ReportsPage = () => {
                          }}
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-2 py-0.5 rounded-full">
-                          {new Date(item.date).toLocaleDateString('es-AR')}
-                        </span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-2 py-0.5 rounded-full self-start">
+                            {new Date(item.date).toLocaleDateString('es-AR')}
+                          </span>
+                          {(professional?.role === 'admin' || professional?.role === 'administrador' || professional?.role === 'secretaría') && (
+                            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tight">
+                              Prof: {item.profName || 'Desconocido'}
+                            </span>
+                          )}
+                        </div>
                         <span className="text-[10px] text-gray-400 font-mono">{item.id.substring(0,6)}</span>
                       </div>
                       <h4 className="font-bold text-sm uppercase group-hover:text-blue-600 transition-colors">{item.patient}</h4>
