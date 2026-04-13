@@ -72,31 +72,22 @@ const ProfilePage = () => {
           profileData = null; 
         }
 
-        // Fallback Logic
+        // Fallback Logic: Try legacy ID
         if (!profileData && email) {
           const legacyId = email.replace(/[@.]/g, '_');
           const legacyRef = doc(db, 'users', legacyId);
           const legacySnap = await getDoc(legacyRef);
-          if (legacySnap.exists()) {
-            profileData = legacySnap.data();
-            // Cleanup legacy
-            await deleteDoc(legacyRef).catch(() => {});
-          }
+          if (legacySnap.exists()) profileData = legacySnap.data();
         }
 
+        // Fallback Logic: Try searching by email fields
         if (!profileData && email) {
           const usersRef = collection(db, 'users');
           const q1 = query(usersRef, where('e', '==', email), limit(1));
           const q2 = query(usersRef, where('email', '==', email), limit(1));
           const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
           const foundDoc = s1.docs[0] || s2.docs[0];
-          if (foundDoc) {
-            profileData = foundDoc.data();
-            // Cleanup legacy doc if it's not the official one
-            if (foundDoc.id !== uid) {
-              await deleteDoc(doc(db, 'users', foundDoc.id)).catch(() => {});
-            }
-          }
+          if (foundDoc) profileData = foundDoc.data();
         }
 
         if (profileData) {
@@ -112,9 +103,23 @@ const ProfilePage = () => {
             role: profileData.role || 'médico'
           };
           setProfile(cleanProfile);
+          
+          // 1. Save to Official UID
           await setDoc(docRef, { ...cleanProfile, isOfficial: true }, { merge: true });
+          
+          // 2. Clean up legacy versions
+          const legacyId = email.replace(/[@.]/g, '_');
+          await deleteDoc(doc(db, 'users', legacyId)).catch(() => {});
+          
+          const usersRef = collection(db, 'users');
+          const q1 = query(usersRef, where('e', '==', email), limit(5));
+          const q2 = query(usersRef, where('email', '==', email), limit(5));
+          const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+          const otherDocs = [...s1.docs, ...s2.docs].filter(d => d.id !== uid);
+          for (const d of otherDocs) {
+            await deleteDoc(doc(db, 'users', d.id)).catch(() => {});
+          }
         } else {
-          // New user, but at least set the email
           setProfile(prev => ({ ...prev, email }));
         }
       } catch (err) {
