@@ -360,7 +360,7 @@ const ProfilePage = () => {
                     <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
                     <div className="flex-1 text-center space-y-1">
                       {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
-                        <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-xl font-black mb-2 text-slate-900' : 'text-xs text-slate-600 font-serif'}`}>{line}</div>
+                        <div key={i} className={`min-h-[1.2rem] ${i === 0 ? 'text-xl font-bold mb-2 text-slate-900 font-sans' : 'text-[11px] text-slate-600 font-sans'}`}>{line}</div>
                       ))}
                     </div>
                     <div className="w-24" /> {/* Spacer to balance the logo and keep text centered relative to the page area */}
