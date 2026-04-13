@@ -631,6 +631,162 @@ const AdminPage = () => {
         )}
       </div>
 
+      {/* MODAL: MANAGE PROFESSIONAL PROFILE */}
+      <AnimatePresence>
+        {isManageProfessionalModalOpen && targetProf && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[var(--bg-main)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
+            >
+              <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-card)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center">
+                    <UserCog size={24} />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-lg">Configurar Perfil: {targetProf.nombre}</h3>
+                    <p className="text-xs text-gray-500">Ajuste de membretes y datos oficiales</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => setIsPreviewOpen(true)}
+                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-[var(--text-main)] rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors"
+                  >
+                    <FileText size={16} /> Vista Previa
+                  </button>
+                  <button onClick={() => setIsManageProfessionalModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500">
+                    <X size={20} />
+                  </button>
+                </div>
+              </div>
+
+              <div className="flex-1 overflow-y-auto p-8 space-y-8">
+                {/* Basic Info */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Nombre</label>
+                    <input type="text" value={targetProf.nombre} onChange={e => setTargetProf({...targetProf, nombre: e.target.value})} className="input-field" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Especialidad</label>
+                    <input type="text" value={targetProf.especialidad} onChange={e => setTargetProf({...targetProf, especialidad: e.target.value})} className="input-field" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">MP</label>
+                    <input type="text" value={targetProf.mp} onChange={e => setTargetProf({...targetProf, mp: e.target.value})} className="input-field" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">ME</label>
+                    <input type="text" value={targetProf.me} onChange={e => setTargetProf({...targetProf, me: e.target.value})} className="input-field" />
+                  </div>
+                </div>
+
+                {/* Headers */}
+                <div className="space-y-4">
+                   <div className="flex gap-4 border-b border-main">
+                      <button 
+                        onClick={() => setPreviewType('general')}
+                        className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === 'general' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400'}`}
+                      >
+                        Membrete General
+                      </button>
+                      <button 
+                         onClick={() => setPreviewType('fibro')}
+                         className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === 'fibro' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400'}`}
+                      >
+                        Membrete Fibroscopía
+                      </button>
+                   </div>
+
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-card)] p-6 rounded-3xl border border-main">
+                      {Array(8).fill(0).map((_, i) => (
+                        <div key={i} className="space-y-1">
+                          <label className="text-[9px] font-bold text-gray-400 ml-1">Línea {i+1} {i === 0 ? '(Principal)' : (i < 3 ? '(Secundaria)' : '(Pie)')}</label>
+                          <input 
+                            type="text" 
+                            className="input-field text-sm" 
+                            value={previewType === 'general' ? targetProf.headerGeneral[i] : targetProf.headerFibro[i]}
+                            onChange={(e) => updateTargetHeader(previewType, i, e.target.value)}
+                            placeholder={`Línea ${i+1}...`}
+                          />
+                        </div>
+                      ))}
+                   </div>
+                </div>
+              </div>
+
+              <div className="p-8 border-t border-main flex gap-4 bg-[var(--bg-card)]">
+                <button 
+                  onClick={handleSaveManagedUser}
+                  disabled={isProfSaving}
+                  className="btn-primary flex-1 py-4 font-black flex items-center justify-center gap-2"
+                >
+                  {isProfSaving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                  GUARDAR CAMBIOS EN PERFIL
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL: PREVIEW (SINCRO WITH PDF) */}
+      <AnimatePresence>
+        {isPreviewOpen && targetProf && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-white w-[210mm] h-[60mm] shadow-2xl overflow-hidden relative border border-gray-200 rounded-lg flex"
+            >
+              {/* Logo Area (Approx PDF coords 10,8) */}
+              <div className="w-[45mm] h-full flex items-center justify-center p-4 relative">
+                 {targetProf.logoBase64 ? (
+                   <img src={targetProf.logoBase64} className="max-w-full max-h-full object-contain" alt="logo" />
+                 ) : (
+                   <div className="w-full h-full border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 font-bold">LOGO</div>
+                 )}
+              </div>
+
+              {/* Text Area (Aligned with PDF logic) */}
+              <div className="flex-1 p-6 flex flex-col justify-start">
+                  {(previewType === 'general' ? targetProf.headerGeneral : targetProf.headerFibro).map((line, i) => {
+                    if (!line) return <div key={i} style={{ height: (i < 3 ? '1.2rem' : '0.9rem') }}></div>;
+                    
+                    let fontSize = '7.5pt';
+                    let fontWeight = 'normal';
+                    if (i === 0) { fontSize = '11pt'; fontWeight = 'bold'; }
+                    else if (i < 3) { fontSize = '10pt'; }
+
+                    return (
+                      <p key={i} style={{ 
+                        fontSize, 
+                        fontWeight, 
+                        textAlign: 'center', 
+                        lineHeight: '1.2',
+                        margin: 0,
+                        color: '#000'
+                      }}>
+                        {line}
+                      </p>
+                    );
+                  })}
+              </div>
+
+              <button 
+                onClick={() => setIsPreviewOpen(false)}
+                className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
       {/* MODAL: MANUAL USER CREATE */}
       <AnimatePresence>
         {isManualModalOpen && (
