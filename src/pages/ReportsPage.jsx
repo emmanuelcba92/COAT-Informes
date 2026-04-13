@@ -168,33 +168,30 @@ const ReportsPage = () => {
     const activeHeader = isFibro ? (prof.headerFibro || []) : (prof.headerGeneral || []);
     const hasCustomHeader = activeHeader.some(l => l && l.trim() !== '');
 
-    // 1. Logo (Top Left Corner)
-    const logoToUse = prof.logoUrl || "/coat_logo.png";
+    // 1. Logo (Centered at top)
+    const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoToUse, 'PNG', 10, 10, 35, 18);
+      doc.addImage(logoUrl, 'PNG', (210 - 25) / 2, 8, 25, 25);
     } catch (e) {
       console.error("Logo error:", e);
     }
 
-    // 2. Letterhead (Centered with Specific Sizes) - Centered horizontally
-    let headerY = 18;
+    // 2. Header Text (Centered below logo)
+    doc.setTextColor(60, 60, 60);
+    let headerY = 36; // Start below the logo (which ends at 33)
     activeHeader.forEach((line, index) => {
       if (line && line.trim() !== '') {
-        // Line 1: 11 pts, 2-3: 10 pts, 4-8: 7.5 pts
-        let fontSize = 7.5;
+        // Line 1: 11 pts, others: 9 pts
+        let fontSize = 9;
         if (index === 0) fontSize = 11;
-        else if (index === 1 || index === 2) fontSize = 10;
-
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        
-        const textWidth = doc.getTextWidth(line.toUpperCase());
-        doc.text(line.toUpperCase(), (210 - textWidth) / 2, headerY);
-        headerY += (fontSize/2.8) + 1;
+        doc.text(line.toUpperCase(), 105, headerY, { align: 'center' });
       }
+      headerY += 4.5; // Always increment to allow empty line spacing
     });
 
-    let currentY = Math.max(headerY + 10, 45); 
+    let currentY = Math.max(headerY + 5, 55); 
     doc.setDrawColor(200);
     doc.line(10, currentY - 5, 200, currentY - 5);
 
