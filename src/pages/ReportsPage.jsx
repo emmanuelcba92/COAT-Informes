@@ -168,27 +168,27 @@ const ReportsPage = () => {
     const activeHeader = isFibro ? (prof.headerFibro || []) : (prof.headerGeneral || []);
     const hasCustomHeader = activeHeader.some(l => l && l.trim() !== '');
 
-    // 1. Logo (Centered at top)
+    // 1. Logo (Top Left Corner)
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', (210 - 25) / 2, 8, 25, 25);
+      doc.addImage(logoUrl, 'PNG', 10, 8, 30, 20); // Top-left position
     } catch (e) {
       console.error("Logo error:", e);
     }
 
-    // 2. Header Text (Centered below logo)
+    // 2. Header Text (To the right of the logo, centered in the remaining space)
     doc.setTextColor(60, 60, 60);
-    let headerY = 36; // Start below the logo (which ends at 33)
+    let headerY = 16; 
     activeHeader.forEach((line, index) => {
       if (line && line.trim() !== '') {
-        // Line 1: 11 pts, others: 9 pts
         let fontSize = 9;
         if (index === 0) fontSize = 11;
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        doc.text(line.toUpperCase(), 105, headerY, { align: 'center' });
+        // Centered relative to the area to the right of the logo (approx 125 is the center of 40..210)
+        doc.text(line.toUpperCase(), 125, headerY, { align: 'center' });
       }
-      headerY += 4.5; // Always increment to allow empty line spacing
+      headerY += 4.5; 
     });
 
     let currentY = Math.max(headerY + 5, 55); 

@@ -384,15 +384,16 @@ const ProfilePage = () => {
               <div className="flex-1 overflow-auto bg-slate-200 p-12 flex justify-center">
                 <div className="bg-white text-slate-900 w-[210mm] min-h-[297mm] shadow-2xl p-[15mm] flex flex-col relative">
                   {/* Paper simulation content */}
-                  <div className="flex flex-col items-center mb-10 border-b-2 border-slate-100 pb-8 text-center">
-                    <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain mb-4" />
-                    <div className="space-y-0.5 min-h-[100px]">
+                  <div className="flex items-start mb-10 border-b-2 border-slate-100 pb-8">
+                    <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
+                    <div className="flex-1 text-center space-y-0.5 min-h-[100px]">
                       {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
                         <p key={i} className={`text-[12px] leading-tight text-[var(--text-main)] ${i === 0 ? 'font-bold' : ''}`} style={{fontFamily: 'Arial, sans-serif'}}>
                           {line.trim() || '\u00A0'}
                         </p>
                       ))}
                     </div>
+                    <div className="w-24" /> {/* Spacer to balance logo */}
                   </div>
                   
                   {/* Dummy report content */}
