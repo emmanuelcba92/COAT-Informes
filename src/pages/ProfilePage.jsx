@@ -149,12 +149,17 @@ const ProfilePage = () => {
 
   const handleSave = async () => {
     if (!auth.currentUser) return;
+    if (!profile.nombre) {
+      alert('Error: No se pudo cargar el perfil correctamente o el nombre está vacío. Intente recargar la página.');
+      return;
+    }
     setIsSaving(true);
     try {
       await setDoc(doc(db, 'users', auth.currentUser.uid), profile, { merge: true });
-      alert('Perfil guardado');
+      alert('Perfil guardado con éxito');
     } catch (err) {
-      alert('Error al guardar');
+      console.error("Save error:", err);
+      alert('Error al guardar el perfil. Verifique su conexión o permisos.');
     } finally {
       setIsSaving(false);
     }

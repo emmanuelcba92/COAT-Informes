@@ -252,7 +252,7 @@ const ReportsPage = () => {
 
     lines.forEach(line => {
       if (!line.trim()) {
-        yPos += 5;
+        yPos += 2.5;
         return;
       }
 
@@ -261,13 +261,13 @@ const ReportsPage = () => {
 
       const splitLines = doc.splitTextToSize(line.trim(), 180);
       
-      if (yPos + (splitLines.length * 5) > pageHeight - 20) {
+      if (yPos + (splitLines.length * 4.5) > pageHeight - 20) {
         doc.addPage();
         yPos = 20;
       }
 
       doc.text(splitLines, 10, yPos);
-      yPos += (splitLines.length * 5) + 1;
+      yPos += (splitLines.length * 4.5);
     });
 
     // Signature Area
