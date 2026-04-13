@@ -356,7 +356,7 @@ const AdminPage = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 dark:bg-slate-900/50 border-b border-main">
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Profesional</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Médico</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Especialidad</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Estado</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Acciones</th>

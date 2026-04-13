@@ -208,7 +208,7 @@ const ProfilePage = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h1 className="text-4xl font-black text-[var(--text-main)] transition-colors">Mi Perfil Profesional</h1>
+          <h1 className="text-4xl font-black text-[var(--text-main)] transition-colors">Mi Perfil Médico</h1>
           <p className="text-[var(--text-sub)] mt-1">Configure sus datos de firma y membretes oficiales</p>
         </div>
         <button 
