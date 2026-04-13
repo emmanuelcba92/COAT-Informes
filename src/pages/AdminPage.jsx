@@ -293,6 +293,40 @@ const AdminPage = () => {
     }
   };
 
+  const handleManualUserCreate = async () => {
+    if (!manualUserForm.nombre || !manualUserForm.u || !manualUserForm.password) {
+      return alert('Completa nombre, usuario y contraseña');
+    }
+
+    const secondaryApp = initializeApp(firebaseConfig, "SecondaryManual");
+    const secondaryAuth = getAuth(secondaryApp);
+
+    try {
+      const email = `${manualUserForm.u.toLowerCase().trim()}@coat.com.ar`;
+      const res = await createUserWithEmailAndPassword(secondaryAuth, email, manualUserForm.password);
+      
+      await setDoc(doc(db, 'users', res.user.uid), {
+        nombre: manualUserForm.nombre.trim(),
+        u: manualUserForm.u.toLowerCase().trim(),
+        email: email,
+        especialidad: 'Otorrinolaringólogo',
+        mp: '-',
+        me: '-',
+        isOfficial: true,
+        role: 'médico'
+      }, { merge: true });
+
+      await signOut(secondaryAuth);
+      setIsManualModalOpen(false);
+      setManualUserForm({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '' });
+      alert('Usuario creado con éxito');
+    } catch (err) {
+      alert('Error: ' + err.message);
+    } finally {
+      await deleteApp(secondaryApp);
+    }
+  };
+
   const updateTargetHeader = (type, index, value) => {
     const key = type === 'general' ? 'headerGeneral' : 'headerFibro';
     const newHeader = [...targetProf[key]];
