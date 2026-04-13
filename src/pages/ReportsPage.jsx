@@ -181,14 +181,17 @@ const ReportsPage = () => {
     let headerY = 16; 
     activeHeader.forEach((line, index) => {
       if (line && line.trim() !== '') {
-        let fontSize = 9;
+        let fontSize = 7.5;
         if (index === 0) fontSize = 11;
+        else if (index === 1 || index === 2) fontSize = 10;
+        
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        // Centered relative to the area to the right of the logo (approx 125 is the center of 40..210)
         doc.text(line.toUpperCase(), 125, headerY, { align: 'center' });
+        headerY += (fontSize / 2.8) + 0.8; // Dynamic spacing based on font size
+      } else {
+        headerY += 4.5; // Fixed space for empty lines
       }
-      headerY += 4.5; 
     });
 
     let currentY = Math.max(headerY + 5, 55); 

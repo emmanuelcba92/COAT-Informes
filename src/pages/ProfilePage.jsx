@@ -387,11 +387,18 @@ const ProfilePage = () => {
                   <div className="flex items-start mb-10 border-b-2 border-slate-100 pb-8">
                     <img src="/coat_logo.png" alt="COAT Logo" className="w-24 h-24 object-contain" />
                     <div className="flex-1 text-center space-y-0.5 min-h-[100px]">
-                      {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => (
-                        <p key={i} className={`text-[12px] leading-tight text-[var(--text-main)] ${i === 0 ? 'font-bold' : ''}`} style={{fontFamily: 'Arial, sans-serif'}}>
-                          {line.trim() || '\u00A0'}
-                        </p>
-                      ))}
+                      {(previewType === 'general' ? profile.headerGeneral : profile.headerFibro).map((line, i) => {
+                        let sizeClass = "text-[7.5pt]";
+                        let weightClass = "font-normal";
+                        if (i === 0) { sizeClass = "text-[11pt]"; weightClass = "font-bold"; }
+                        else if (i === 1 || i === 2) { sizeClass = "text-[10pt]"; }
+                        
+                        return (
+                          <p key={i} className={`leading-tight text-[var(--text-main)] ${sizeClass} ${weightClass}`} style={{fontFamily: 'Arial, sans-serif'}}>
+                            {line.trim() || '\u00A0'}
+                          </p>
+                        );
+                      })}
                     </div>
                     <div className="w-24" /> {/* Spacer to balance logo */}
                   </div>
