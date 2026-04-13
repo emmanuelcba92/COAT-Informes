@@ -109,12 +109,31 @@ const AdminPage = () => {
       // Deduplicate by email/user to avoid double entries during migration
       const uniqueUsers = {};
       list.forEach(u => {
-        const key = ((u.e || u.u || u.email ||'').includes('@') ? (u.e || u.u || u.email) : (u.id)).toLowerCase();
-        if (key && (!uniqueUsers[key] || u.id.length === 28)) {
+        // Try to find a common identifier (email or username)
+        const email = (u.email || u.e || (typeof u.id === 'string' && u.id.includes('@') ? u.id : '')).toLowerCase().trim();
+        const username = (u.u || '').toLowerCase().trim();
+        const key = email || username || u.id;
+        
+        if (!key) return;
+
+        if (!uniqueUsers[key]) {
           uniqueUsers[key] = u;
+        } else {
+          const existing = uniqueUsers[key];
+          const currentHasName = !!(u.nombre || u.n);
+          const existingHasName = !!(existing.nombre || existing.n);
+          
+          // Prioritize record with name
+          if (currentHasName && !existingHasName) {
+            uniqueUsers[key] = u;
+          } 
+          // If both have name or both don't, prioritize Official (UID length 28)
+          else if (currentHasName === existingHasName && u.id.length === 28) {
+            uniqueUsers[key] = u;
+          }
         }
       });
-      setUsers(Object.values(uniqueUsers));
+      setUsers(Object.values(uniqueUsers).filter(u => u.nombre || u.n || u.email || u.e || u.u));
       setLoading(false);
     });
 

@@ -67,12 +67,21 @@ const ProfilePage = () => {
         
         let profileData = docSnap.exists() ? docSnap.data() : null;
 
-        // Fallback Logic (same as before)
+        // Force migration if official doc exists but is practically empty (no name)
+        if (profileData && !profileData.nombre && email) {
+          profileData = null; 
+        }
+
+        // Fallback Logic
         if (!profileData && email) {
           const legacyId = email.replace(/[@.]/g, '_');
           const legacyRef = doc(db, 'users', legacyId);
           const legacySnap = await getDoc(legacyRef);
-          if (legacySnap.exists()) profileData = legacySnap.data();
+          if (legacySnap.exists()) {
+            profileData = legacySnap.data();
+            // Cleanup legacy
+            await deleteDoc(legacyRef).catch(() => {});
+          }
         }
 
         if (!profileData && email) {
@@ -81,7 +90,13 @@ const ProfilePage = () => {
           const q2 = query(usersRef, where('email', '==', email), limit(1));
           const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
           const foundDoc = s1.docs[0] || s2.docs[0];
-          if (foundDoc) profileData = foundDoc.data();
+          if (foundDoc) {
+            profileData = foundDoc.data();
+            // Cleanup legacy doc if it's not the official one
+            if (foundDoc.id !== uid) {
+              await deleteDoc(doc(db, 'users', foundDoc.id)).catch(() => {});
+            }
+          }
         }
 
         if (profileData) {
@@ -98,9 +113,12 @@ const ProfilePage = () => {
           };
           setProfile(cleanProfile);
           await setDoc(docRef, { ...cleanProfile, isOfficial: true }, { merge: true });
+        } else {
+          // New user, but at least set the email
+          setProfile(prev => ({ ...prev, email }));
         }
       } catch (err) {
-        console.error(err);
+        console.error("Fetch profile error:", err);
       } finally {
         setIsLoading(false);
       }
