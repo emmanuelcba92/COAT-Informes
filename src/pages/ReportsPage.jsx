@@ -367,14 +367,14 @@ const ReportsPage = () => {
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex justify-between items-center bg-white dark:bg-slate-800 p-4 rounded-3xl shadow-sm border border-main">
+      <div className="flex justify-between items-center bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-main">
         <div>
-          <h1 className="text-xl font-bold">Generador de Informes</h1>
-          <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
+          <h1 className="text-xl font-bold text-[var(--text-main)]">Generador de Informes</h1>
+          <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
         </div>
         <button 
           onClick={() => setIsHistoryOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 rounded-xl transition-all font-bold text-sm"
+          className="flex items-center gap-2 px-4 py-2 bg-[var(--hover-main)] hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 rounded-xl transition-all font-bold text-sm"
         >
           <History size={18} />
           <span>Ver Historial</span>
@@ -585,40 +585,40 @@ const ReportsPage = () => {
               onClick={() => setIsHistoryOpen(false)}
               className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]"
             />
-            <motion.div 
-              initial={{ x: '100%' }}
-              animate={{ x: 0 }}
-              exit={{ x: '100%' }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-white dark:bg-slate-950 z-[101] shadow-2xl flex flex-col"
-            >
-              <div className="p-6 border-b border-main flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-600 flex items-center justify-center">
-                    <History size={20} />
+              <motion.div 
+                initial={{ x: '100%' }}
+                animate={{ x: 0 }}
+                exit={{ x: '100%' }}
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+                className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-[var(--bg-card)] z-[101] shadow-2xl flex flex-col border-l border-main"
+              >
+                <div className="p-6 border-b border-main flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+                      <History size={20} />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-lg text-[var(--text-main)]">Historial Reciente</h3>
+                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold">Últimos 50 informes generados</p>
+                    </div>
                   </div>
-                  <div>
-                    <h3 className="font-bold text-lg">Historial Reciente</h3>
-                    <p className="text-[10px] text-gray-400 font-bold uppercase">Últimos 50 informes generados</p>
-                  </div>
+                  <button onClick={() => setIsHistoryOpen(false)} className="p-2 hover:bg-[var(--hover-main)] rounded-full transition-colors text-[var(--text-main)]">
+                    <CloseIcon size={24} />
+                  </button>
                 </div>
-                <button onClick={() => setIsHistoryOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full">
-                  <CloseIcon size={24} />
-                </button>
-              </div>
 
-              <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-main">
-                <div className="relative">
-                  <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                  <input 
-                    type="text"
-                    placeholder="Buscar por paciente o práctica..."
-                    className="w-full pl-10 pr-4 py-3 bg-white dark:bg-slate-800 rounded-xl border border-main text-sm focus:ring-2 focus:ring-blue-500/50"
-                    value={historySearch}
-                    onChange={e => setHistorySearch(e.target.value)}
-                  />
+                <div className="p-4 bg-[var(--bg-secondary)] border-b border-main">
+                  <div className="relative">
+                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)]" size={18} />
+                    <input 
+                      type="text"
+                      placeholder="Buscar por paciente o práctica..."
+                      className="w-full pl-10 pr-4 py-3 bg-[var(--bg-card)] rounded-xl border border-main text-sm focus:ring-2 focus:ring-blue-500/50 text-[var(--text-main)] placeholder:text-gray-400"
+                      value={historySearch}
+                      onChange={e => setHistorySearch(e.target.value)}
+                    />
+                  </div>
                 </div>
-              </div>
 
               <div className="flex-1 overflow-auto p-4 space-y-3">
                 {isLoadingHistory ? (
@@ -654,12 +654,12 @@ const ReportsPage = () => {
                 )}
               </div>
               
-              <div className="p-6 bg-slate-50 dark:bg-slate-900 border-t border-main">
-                <p className="text-[10px] text-center text-gray-400 leading-relaxed">
-                  El historial solo almacena metadatos básicos y los primeros 500 caracteres del informe para optimizar espacio.
-                </p>
-              </div>
-            </motion.div>
+                <div className="p-6 bg-[var(--bg-secondary)] border-t border-main">
+                  <p className="text-[10px] text-center text-[var(--text-sub)] leading-relaxed">
+                    El historial solo almacena metadatos básicos y los primeros 500 caracteres del informe para optimizar espacio.
+                  </p>
+                </div>
+              </motion.div>
           </>
         )}
       </AnimatePresence>
