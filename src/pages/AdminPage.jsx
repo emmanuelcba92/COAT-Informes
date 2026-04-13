@@ -253,6 +253,22 @@ const AdminPage = () => {
     if (window.confirm('¿Eliminar práctica?')) await deleteDoc(doc(db, 'practices', id));
   };
 
+  const handleSaveSettings = async () => {
+    setIsSavingSettings(true);
+    try {
+      await setDoc(doc(db, 'config', 'settings'), {
+        appsScriptUrl,
+        adminEmail,
+        token
+      });
+      alert('Configuración guardada correctamente');
+    } catch (err) {
+      alert('Error al guardar: ' + err.message);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   const handleManageUser = (user) => {
     setTargetProf({
       ...user,
@@ -479,6 +495,75 @@ const AdminPage = () => {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'settings' && (
+          <div className="max-w-3xl mx-auto">
+            <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">
+              <div className="flex items-center gap-4 border-b border-main pb-6">
+                <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+                  <Mail size={28} />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold">Configuración del Sistema</h3>
+                  <p className="text-gray-400">Parámetros globales de correo y servicios externos</p>
+                </div>
+              </div>
+
+              <div className="space-y-6">
+                <div className="space-y-2">
+                  <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
+                    <ExternalLink size={14} /> URL de Google Apps Script (Envío de Mails)
+                  </label>
+                  <input 
+                    type="text" 
+                    value={appsScriptUrl} 
+                    onChange={e => setAppsScriptUrl(e.target.value)} 
+                    className="input-field font-mono text-sm" 
+                    placeholder="https://script.google.com/macros/s/.../exec"
+                  />
+                  <p className="text-[10px] text-gray-400 ml-1">Este enlace comunica la app con el servidor de correos de Google.</p>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
+                    <Mail size={14} /> Email de la Clínica (Remitente Oficial)
+                  </label>
+                  <input 
+                    type="email" 
+                    value={adminEmail} 
+                    onChange={e => setAdminEmail(e.target.value)} 
+                    className="input-field" 
+                    placeholder="consultas@coat.com.ar"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
+                    <Key size={14} /> Token de Seguridad (Opcional)
+                  </label>
+                  <input 
+                    type="password" 
+                    value={token} 
+                    onChange={e => setToken(e.target.value)} 
+                    className="input-field" 
+                    placeholder="••••••••"
+                  />
+                </div>
+
+                <div className="pt-6">
+                  <button 
+                    onClick={handleSaveSettings}
+                    disabled={isSavingSettings}
+                    className="btn-primary w-full py-5 flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30"
+                  >
+                    {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                    <span className="text-base uppercase tracking-widest">Guardar Cambios</span>
+                  </button>
                 </div>
               </div>
             </div>
