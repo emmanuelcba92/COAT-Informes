@@ -12,6 +12,17 @@
   </head>
   <body class="bg-gray-50 text-gray-900 transition-colors duration-300">
     <div id="root"></div>
+    <script>
+      // Forzar eliminación de Service Workers antiguos
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+            console.log('SW unregistered');
+          }
+        });
+      }
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

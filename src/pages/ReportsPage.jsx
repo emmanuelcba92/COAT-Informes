@@ -12,12 +12,15 @@ import {
   UserPlus,
   Settings2,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  ClipboardList,
+  ArrowRight,
+  Settings
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, collection, getDocs, addDoc, query, where, orderBy, limit as firestoreLimit } from 'firebase/firestore';
-import { History, Search as SearchIcon, X as CloseIcon, ChevronDown } from 'lucide-react';
+import { doc, getDoc, collection, getDocs, addDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const ReportsPage = () => {
   const [reportData, setReportData] = useState({
@@ -35,76 +38,64 @@ const ReportsPage = () => {
   const [content, setContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '' });
+  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
   const [professional, setProfessional] = useState(null);
   const [dbPractices, setDbPractices] = useState([]);
-  const [history, setHistory] = useState([]);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [historySearch, setHistorySearch] = useState('');
-  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const editId = new URLSearchParams(location.search).get('edit');
+  const [isEditing, setIsEditing] = useState(false);
+  
+  // Sistema de Notificaciones Toast
+  const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const showToast = (message, type = 'success') => {
+    setToast({ show: true, message, type });
+    setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
 
-  const saveToHistory = async () => {
+  // Guardar en el historial corregido para manejar EDICIÓN
+  const saveToHistory = async (pdfUrl = null) => {
     if (!auth.currentUser || !reportData.patient) return;
     try {
-      await addDoc(collection(db, 'reports_history'), {
-        userId: auth.currentUser.uid,
-        profName: professional?.nombre || '',
-        patient: reportData.patient.toUpperCase(),
-        socialWork: reportData.socialWork.toUpperCase(),
-        date: reportData.date,
-        practice: selectedPractice,
-        content: content.substring(0, 500), // Only first 500 chars to save space
-        createdAt: new Date().toISOString()
-      });
-      fetchHistory(); // Refresh
+      const data = {
+        profesionalId: auth.currentUser.uid,
+        profesionalNombre: professional?.nombre || 'Desconocido',
+        pacienteNombre: reportData.patient.toUpperCase(),
+        pacienteDni: reportData.dni || '',
+        obraSocial: reportData.socialWork.toUpperCase(),
+        fecha: reportData.date,
+        practicaNombre: selectedPractice,
+        tipoReporte: selectedPractice.toLowerCase().includes('fibro') ? 'fibro' : 'clinico',
+        contenidoTexto: content,
+        requester: reportData.requester || '',
+        reason: reportData.reason || '',
+        patientEmail: reportData.patientEmail || '',
+        includeTitle: reportData.includeTitle,
+        pdfUrl: pdfUrl,
+        fechaUpdatedAt: new Date().toISOString()
+      };
+
+      if (!editId) {
+        data.fechaCreatedAt = new Date().toISOString();
+        await addDoc(collection(db, 'reports'), data);
+      } else {
+        const { setDoc, doc } = await import('firebase/firestore');
+        await setDoc(doc(db, 'reports', editId), data, { merge: true });
+        showToast("¡Informe actualizado correctamente!");
+        setTimeout(() => navigate('/history'), 1500);
+      }
     } catch (err) {
       console.error("Error saving history:", err);
     }
   };
 
-  const fetchHistory = async () => {
-    if (!auth.currentUser || !professional) return;
-    setIsLoadingHistory(true);
-    try {
-      const isAdmin = professional.role === 'admin' || professional.role === 'administrador';
-      const isSecretaria = professional.role === 'secretaría';
-
-      let q;
-      if (isAdmin || isSecretaria) {
-        q = query(
-          collection(db, 'reports_history'), 
-          orderBy('createdAt', 'desc'),
-          firestoreLimit(50)
-        );
-      } else {
-        q = query(
-          collection(db, 'reports_history'), 
-          where('userId', '==', auth.currentUser.uid),
-          orderBy('createdAt', 'desc'),
-          firestoreLimit(50)
-        );
-      }
-      const snap = await getDocs(q);
-      setHistory(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    } catch (err) {
-      console.error("Error fetching history:", err);
-    } finally {
-      setIsLoadingHistory(false);
-    }
-  };
-
   useEffect(() => {
-    if (isHistoryOpen) fetchHistory();
-  }, [isHistoryOpen]);
-
-  React.useEffect(() => {
     const fetchData = async () => {
       if (!auth.currentUser) return;
       try {
         const uid = auth.currentUser.uid;
         const email = auth.currentUser.email || '';
         
-        // 1. Fetch Professional (with adoption check)
         const docRef = doc(db, 'users', uid);
         let docSnap = await getDoc(docRef);
         let profData = null;
@@ -121,7 +112,6 @@ const ReportsPage = () => {
         }
 
         if (profData) {
-          // Standardize for use in component
           setProfessional({
             ...profData,
             nombre: profData.nombre || profData.n || 'Médico',
@@ -132,13 +122,11 @@ const ReportsPage = () => {
           });
         }
 
-        // 2. Fetch Practices from Firestore
         const practicesRef = collection(db, 'practices');
         const practicesSnap = await getDocs(practicesRef);
         const list = practicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setDbPractices(list);
 
-        // 3. Fetch System Config
         const configRef = doc(db, 'config', 'settings');
         const configSnap = await getDoc(configRef);
         if (configSnap.exists()) {
@@ -150,6 +138,37 @@ const ReportsPage = () => {
     };
     fetchData();
   }, []);
+
+  // Lógica para CARGAR el informe si estamos editando
+  useEffect(() => {
+    const loadReportToEdit = async () => {
+      if (editId) {
+        setIsEditing(true);
+        try {
+          const docRef = doc(db, 'reports', editId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setReportData({
+              patient: data.pacienteNombre || '',
+              socialWork: data.obraSocial || '',
+              dni: data.pacienteDni || '',
+              date: data.fecha || new Date().toISOString().split('T')[0],
+              requester: data.requester || '',
+              reason: data.reason || '',
+              patientEmail: data.patientEmail || '',
+              includeTitle: data.includeTitle !== undefined ? data.includeTitle : true
+            });
+            setSelectedPractice(data.practicaNombre || '');
+            setContent(data.contenidoTexto || ''); // Cargamos el texto enriquecido guardado
+          }
+        } catch (err) {
+          console.error("Error cargando informe para editar:", err);
+        }
+      }
+    };
+    loadReportToEdit();
+  }, [editId]);
 
   const handlePracticeChange = (practiceName) => {
     setSelectedPractice(practiceName);
@@ -164,7 +183,6 @@ const ReportsPage = () => {
         bodyText = p.b || '';
       }
 
-      // Preserve formatting by converting newlines to HTML paragraphs for Quill
       if (bodyText && !bodyText.includes('<p>')) {
         bodyText = bodyText.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '<p><br></p>').join('');
       }
@@ -173,10 +191,10 @@ const ReportsPage = () => {
     }
   };
 
-  const generatePDF = (shouldPrint = false) => {
+  const generatePDF = (mode = 'print') => {
     if (!reportData.patient || !reportData.socialWork || !reportData.date) {
-      alert('Por favor complete los campos obligatorios: Paciente, Obra Social y Fecha.');
-      return;
+      showToast('Complete los campos obligatorios: Paciente, Obra Social y Fecha.', 'error');
+      return null;
     }
 
     setIsGenerating(true);
@@ -187,17 +205,16 @@ const ReportsPage = () => {
     // Select Header
     const isFibro = (selectedPractice || '').toLowerCase().includes('rinofaringolaringofibroscopia');
     const activeHeader = isFibro ? (prof.headerFibro || []) : (prof.headerGeneral || []);
-    const hasCustomHeader = activeHeader.some(l => l && l.trim() !== '');
 
-    // 1. Logo (Top Left Corner)
+    // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 30, 20); // Top-left position
+      doc.addImage(logoUrl, 'PNG', 10, 8, 30, 20);
     } catch (e) {
       console.error("Logo error:", e);
     }
 
-    // 2. Header Text (To the right of the logo, centered in the remaining space)
+    // 2. Header Text
     doc.setTextColor(60, 60, 60);
     let headerY = 16; 
     activeHeader.forEach((line, index) => {
@@ -209,9 +226,9 @@ const ReportsPage = () => {
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
         doc.text(line.toUpperCase(), 125, headerY, { align: 'center' });
-        headerY += (fontSize / 2.8) + 0.8; // Dynamic spacing based on font size
+        headerY += (fontSize / 2.8) + 0.8;
       } else {
-        headerY += 4.5; // Fixed space for empty lines
+        headerY += 4.5;
       }
     });
 
@@ -219,11 +236,10 @@ const ReportsPage = () => {
     doc.setDrawColor(200);
     doc.line(10, currentY - 5, 200, currentY - 5);
 
-    // Patients Data (10pt Arial/Helvetica) - Condensed 2 lines
+    // Patients Data
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     
-    // Line 1: Patient Info
     const pInfo = [];
     if (reportData.patient) pInfo.push(`PACIENTE: ${reportData.patient.toUpperCase()}`);
     if (reportData.socialWork) pInfo.push(`OBRA SOCIAL: ${reportData.socialWork.toUpperCase()}`);
@@ -231,7 +247,6 @@ const ReportsPage = () => {
     doc.text(pInfo.join('  |  '), 10, currentY);
     currentY += 6;
 
-    // Line 2: Clinical Info
     const cInfo = [];
     cInfo.push(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`);
     if (reportData.requester && reportData.requester.trim()) cInfo.push(`SOLICITANTE: ${reportData.requester.toUpperCase()}`);
@@ -242,7 +257,7 @@ const ReportsPage = () => {
     doc.line(10, currentY, 200, currentY);
     currentY += 10;
 
-    // Report Title (Optional) - BOLD, UNDERLINED, CENTERED - 10pt
+    // Report Title
     if (reportData.includeTitle && selectedPractice) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
@@ -255,11 +270,10 @@ const ReportsPage = () => {
       currentY += 12;
     }
 
-    // Main Content - 10pt Arial/Helvetica
+    // Main Content
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     
-    // Convert HTML to Plain Text with improved regex splitting
     const cleanContent = (content || "Sin observaciones registradas.")
       .replace(/<\/p>/g, '\n')
       .replace(/<\/div>/g, '\n')
@@ -276,30 +290,23 @@ const ReportsPage = () => {
         yPos += 1.5;
         return;
       }
-
       const isHeader = line.includes(':') && line.indexOf(':') < 20;
       doc.setFont("helvetica", isHeader ? "bold" : "normal");
-
       const splitLines = doc.splitTextToSize(line.trim(), 180);
-      
       if (yPos + (splitLines.length * 4.5) > pageHeight - 60) {
         doc.addPage();
         yPos = 20;
       }
-
       doc.text(splitLines, 10, yPos);
       yPos += (splitLines.length * 4.5);
     });
 
-    // 6. Signature Area (3-row centered format)
+    // Signature Area
     currentY = yPos + 15;
     if (prof.signatureBase64) {
       try {
-        const sigW = 40;
-        const sigH = 15;
-        const sigX = 140; 
-        doc.addImage(prof.signatureBase64, 'PNG', sigX, currentY, sigW, sigH);
-        currentY += sigH + 3;
+        doc.addImage(prof.signatureBase64, 'PNG', 140, currentY, 40, 15);
+        currentY += 18;
       } catch (e) {
         console.error("Error signature:", e);
       }
@@ -321,38 +328,41 @@ const ReportsPage = () => {
         doc.setFont("helvetica", "normal");
         doc.setFontSize(8);
       }
-      // Center the text block around the x=160 axis (right side of page)
       doc.text(text, 160, currentY, { align: 'center' });
       currentY += (i === 0 ? 4 : 3.5);
     });
 
-    if (shouldPrint === 'print') {
+    if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
       window.open(pdfUrl, '_blank');
       saveToHistory();
-    } else if (shouldPrint === 'save') {
+    } else if (mode === 'save') {
       doc.save(`Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`);
       saveToHistory();
-    } else if (shouldPrint === 'instance') {
-      return doc;
     }
+    
     setIsGenerating(false);
+    return doc;
   };
 
   const handleSendReport = async () => {
     if (!config.appsScriptUrl) {
-      alert('Error: No se ha configurado el Webhook de Google Apps Script en Administración.');
+      showToast('Falta configurar el Webhook de Google Apps Script.', 'error');
       return;
     }
     
     if (!reportData.patient || !selectedPractice) {
-      alert('Complete al menos Paciente y Práctica para enviar.');
+      showToast('Complete al menos Paciente y Práctica para enviar.', 'error');
       return;
     }
 
     setIsSending(true);
     try {
       const pdfDoc = generatePDF('instance');
+      if (!pdfDoc) {
+        setIsSending(false);
+        return;
+      }
       const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
 
       const recipientEmails = [config.adminEmail];
@@ -361,7 +371,7 @@ const ReportsPage = () => {
       }
 
       const subject = `COAT Informes - Paciente: ${reportData.patient} - ${selectedPractice}`;
-      const body = `
+      const bodyText = `
         <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
           <h2 style="color: #2563eb;">Nuevo Informe Clínico - COAT</h2>
           <p>Estimado/a,</p>
@@ -384,350 +394,224 @@ const ReportsPage = () => {
         mode: 'no-cors',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          token: config.token, // Security token from Firestore
+          token: config.token,
           pdfBase64,
           recipientEmails,
           subject,
-          message: body,
+          message: bodyText,
           fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
         })
       });
       saveToHistory();
-      alert('¡Informe enviado con éxito!');
+      showToast('¡Informe enviado con éxito!');
     } catch (err) {
       console.error(err);
-      alert('Error al enviar el informe. Verifique la conexión.');
+      showToast('Error al enviar el informe técnico.', 'error');
     } finally {
       setIsSending(false);
     }
   };
 
-  const filteredHistory = history.filter(h => 
-    (h.patient || '').toLowerCase().includes(historySearch.toLowerCase()) ||
-    (h.practice || '').toLowerCase().includes(historySearch.toLowerCase())
-  );
-
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex justify-between items-center bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-main">
-        <div>
-          <h1 className="text-xl font-bold text-[var(--text-main)]">Generador de Informes</h1>
-          <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
-        </div>
-        <button 
-          onClick={() => setIsHistoryOpen(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-[var(--hover-main)] hover:bg-blue-100 dark:hover:bg-blue-900/20 text-blue-600 rounded-xl transition-all font-bold text-sm"
-        >
-          <History size={18} />
-          <span>Historial</span>
-        </button>
+      <div className="bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-main">
+        <h1 className="text-xl font-bold text-[var(--text-main)]">Generador de Informes</h1>
+        <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
       </div>
 
-      {professional?.role === 'secretaría' ? (
-        <div className="bg-[var(--bg-card)] p-12 rounded-3xl border border-main shadow-sm text-center space-y-4">
-          <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto">
-            <History size={40} />
+      {professional?.role?.toLowerCase().includes('secre') ? (
+        <div className="bg-[var(--bg-card)] p-12 rounded-3xl border border-main shadow-sm text-center space-y-6">
+          <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
+            <ClipboardList size={40} />
           </div>
-          <div>
-            <h3 className="text-xl font-bold">Modo Secretaría Activo</h3>
-            <p className="text-gray-400 max-w-md mx-auto mt-2">Usted puede visualizar el historial de todos los profesionales, pero no tiene permisos para crear o editar informes.</p>
+          <div className="space-y-2">
+            <h3 className="text-2xl font-black tracking-tight">Modo Secretaría</h3>
+            <p className="text-gray-400 max-w-sm mx-auto font-medium leading-relaxed">
+              En este apartado solo se pueden generar informes. Para visualizar informes existentes, por favor diríjase a la sección <strong>"Ver Informes"</strong> en el menú lateral.
+            </p>
           </div>
           <button 
-            onClick={() => setIsHistoryOpen(true)}
-            className="btn-primary px-8"
+            onClick={() => navigate('/history')}
+            className="group btn-primary px-8 py-4 flex items-center gap-3 mx-auto shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
           >
-            Abrir Historial de Informes
+            <span>Ir a Ver Informes</span>
+            <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
       ) : (
         <div className="bg-[var(--bg-card)] p-8 rounded-3xl border border-main shadow-sm space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700">
-        <div className="flex items-center justify-between border-b border-main pb-4">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
-              <FilePlus size={24} />
+          <div className="flex items-center justify-between border-b border-main pb-4">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
+                <FilePlus size={24} />
+              </div>
+              <div>
+                <h2 className="text-2xl font-bold">{isEditing ? 'Editar Informe' : 'Nuevo Informe Clínico'}</h2>
+                <p className="text-xs text-gray-400">{isEditing ? 'Modificando informe guardado' : 'Complete los datos para generar el PDF protocolizado'}</p>
+              </div>
             </div>
-            <div>
-              <h2 className="text-2xl font-bold font-outfit">Nuevo Informe Clínico</h2>
-              <p className="text-xs text-gray-400">Complete los datos para generar el PDF protocolizado</p>
+            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] rounded-xl border border-main">
+              <Settings size={16} className="text-gray-400" />
+              <label className="text-[10px] font-bold uppercase cursor-pointer select-none flex items-center gap-2">
+                <input 
+                  type="checkbox" 
+                  checked={reportData.includeTitle}
+                  onChange={e => setReportData({...reportData, includeTitle: e.target.checked})}
+                  className="w-4 h-4 rounded border-main text-blue-600 outline-none"
+                />
+                Incluir título "Informe de..."
+              </label>
             </div>
           </div>
-          <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] rounded-xl border border-main">
-            <Settings2 size={16} className="text-gray-400" />
-            <label className="text-[10px] font-bold uppercase cursor-pointer select-none flex items-center gap-2">
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-1 md:col-span-2">
+              <label className="text-xs font-bold uppercase opacity-60">Paciente *</label>
               <input 
-                type="checkbox" 
-                checked={reportData.includeTitle}
-                onChange={e => setReportData({...reportData, includeTitle: e.target.checked})}
-                className="w-4 h-4 rounded border-main text-blue-600 focus:ring-blue-500"
+                type="text" 
+                className="input-field" 
+                placeholder="Nombre y Apellido completo"
+                value={reportData.patient}
+                onChange={e => setReportData({...reportData, patient: e.target.value})}
               />
-              Incluir título "Informe de..."
-            </label>
-          </div>
-        </div>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">Fecha *</label>
+              <input 
+                type="date" 
+                className="input-field"
+                value={reportData.date}
+                onChange={e => setReportData({...reportData, date: e.target.value})}
+              />
+            </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="space-y-1 md:col-span-2">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <UserIcon size={12} /> Paciente *
-            </label>
-            <input 
-              type="text" 
-              className="input-field" 
-              placeholder="Nombre y Apellido completo"
-              value={reportData.patient}
-              onChange={e => setReportData({...reportData, patient: e.target.value})}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <Calendar size={12} /> Fecha *
-            </label>
-            <input 
-              type="date" 
-              className="input-field"
-              value={reportData.date}
-              onChange={e => setReportData({...reportData, date: e.target.value})}
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <CreditCard size={12} /> Obra Social *
-            </label>
-            <input 
-              type="text" 
-              className="input-field"
-              placeholder="Ej: OSDE, PAMI..."
-              value={reportData.socialWork}
-              onChange={setReportData && (e => setReportData({...reportData, socialWork: e.target.value}))}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <UserIcon size={12} /> DNI (Opcional)
-            </label>
-            <input 
-              type="text" 
-              className="input-field"
-              placeholder="Sin puntos"
-              value={reportData.dni}
-              onChange={e => setReportData({...reportData, dni: e.target.value})}
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <UserPlus size={12} /> Solicitante (Opcional)
-            </label>
-            <input 
-              type="text" 
-              className="input-field"
-              placeholder="Médico que solicita..."
-              value={reportData.requester}
-              onChange={e => setReportData({...reportData, requester: e.target.value})}
-            />
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">Obra Social *</label>
+              <input 
+                type="text" 
+                className="input-field"
+                placeholder="Ej: OSDE, PAMI..."
+                value={reportData.socialWork}
+                onChange={e => setReportData({...reportData, socialWork: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">DNI (Opcional)</label>
+              <input 
+                type="text" 
+                className="input-field"
+                placeholder="Sin puntos"
+                value={reportData.dni}
+                onChange={e => setReportData({...reportData, dni: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">Solicitante (Opc)</label>
+              <input 
+                type="text" 
+                className="input-field"
+                placeholder="Médico que solicita..."
+                value={reportData.requester}
+                onChange={e => setReportData({...reportData, requester: e.target.value})}
+              />
+            </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <Send size={12} /> Email del Paciente (Opcional)
-            </label>
-            <input 
-              type="email" 
-              className="input-field"
-              placeholder="envio.paciente@ejemplo.com"
-              value={reportData.patientEmail}
-              onChange={e => setReportData({...reportData, patientEmail: e.target.value})}
-            />
-          </div>
-          
-          <div className="space-y-1 md:col-span-3">
-            <label className="text-xs font-bold uppercase opacity-60 flex items-center gap-2">
-              <Settings2 size={12} /> Motivo de Consulta (Opcional)
-            </label>
-            <input 
-              type="text" 
-              className="input-field"
-              placeholder="Causa o síntoma principal..."
-              value={reportData.reason}
-              onChange={e => setReportData({...reportData, reason: e.target.value})}
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-xs font-bold uppercase opacity-60 text-blue-600">Práctica Realizada</label>
-          <select 
-            className="input-field appearance-none cursor-pointer font-bold text-lg"
-            value={selectedPractice}
-            onChange={e => handlePracticeChange(e.target.value)}
-          >
-            <option value="">Seleccione una práctica...</option>
-            {dbPractices.length > 0 ? (
-              dbPractices.map(p => <option key={p.id} value={p.n}>{p.n}</option>)
-            ) : (
-              ['Otomicroscopia', 'Extracción de cuerpo extraño', 'Escision de lesion local de conducto auditivo externo', 'Rinofaringolaringofibroscopia'].map(p => (
-                <option key={p} value={p}>{p}</option>
-              ))
-            )}
-          </select>
-        </div>
-
-        <div className="md:col-span-3 space-y-2">
-          <div className="flex items-center justify-between ml-1 text-sm font-semibold text-[var(--text-main)]">
-            <span>RESULTADOS / OBSERVACIONES</span>
-            <span className="text-[10px] text-gray-400 font-normal">Soporta formato básico (Negrita, Itálica)</span>
-          </div>
-          <div className="bg-[var(--bg-page)] rounded-2xl overflow-hidden border border-main min-h-[300px]">
-            <ReactQuill 
-              theme="snow"
-              value={content}
-              onChange={setContent}
-              modules={{
-                toolbar: [
-                  [{ 'header': [1, 2, 3, false] }],
-                  [{ 'size': ['small', false, 'large', 'huge'] }],
-                  ['bold', 'italic', 'underline', 'strike'],
-                  [{'list': 'ordered'}, {'list': 'bullet'}],
-                  ['clean']
-                ],
-              }}
-              className="quill-editor-custom"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-main">
-            <button 
-              className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-blue-500/50 hover:bg-blue-50/50 dark:hover:bg-blue-900/10 transition-all active:scale-95"
-              onClick={() => generatePDF('print')}
+            <label className="text-xs font-bold uppercase opacity-60 text-blue-600">Práctica Realizada</label>
+            <select 
+              className="input-field appearance-none cursor-pointer font-bold text-lg text-[var(--text-main)] bg-[var(--bg-secondary)]"
+              value={selectedPractice}
+              onChange={e => handlePracticeChange(e.target.value)}
             >
-              <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <Printer size={28} />
-              </div>
-              <div className="text-center">
-                <span className="block font-bold text-[var(--text-main)]">Imprimir</span>
-                <span className="text-[10px] text-[var(--text-sub)]">Vista previa y PDF</span>
-              </div>
-            </button>
+              <option value="" className="bg-[var(--bg-card)]">Seleccione una práctica...</option>
+              {dbPractices.map(p => <option key={p.id} value={p.n} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.n}</option>)}
+            </select>
+          </div>
 
-            <button 
-              className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/10 transition-all active:scale-95"
-              onClick={() => generatePDF('save')}
-            >
-              <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
-                <CheckCircle size={28} />
-              </div>
-              <div className="text-center">
-                <span className="block font-bold text-[var(--text-main)]">Guardar</span>
-                <span className="text-[10px] text-[var(--text-sub)]">Descargar archivo</span>
-              </div>
-            </button>
-          
-          <button 
-            onClick={handleSendReport}
-            className="btn-primary flex items-center justify-center gap-2 px-10 py-4 shadow-lg shadow-blue-500/30 flex-1 md:flex-none"
-            disabled={isGenerating || isSending || !reportData.patient || !reportData.socialWork || !selectedPractice}
-          >
-            {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-            {isSending ? 'Enviando...' : 'Enviar Informe'}
-          </button>
-        </div>
-      </section>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between ml-1 text-sm font-semibold">
+              <span>RESULTADOS / OBSERVACIONES</span>
+              <span className="text-[10px] text-gray-400 font-normal">Formato enriquecido activo</span>
+            </div>
+            <div className="bg-[var(--bg-page)] rounded-2xl overflow-hidden border border-main min-h-[300px]">
+              <ReactQuill 
+                theme="snow"
+                value={content}
+                onChange={setContent}
+                className="quill-editor-custom"
+              />
+            </div>
+          </div>
 
-      {/* HISTORIAL SLIDE-OVER */}
-      <AnimatePresence>
-        {isHistoryOpen && (
-          <>
-            <motion.div 
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsHistoryOpen(false)}
-              className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[100]"
-            />
-              <motion.div 
-                initial={{ x: '100%' }}
-                animate={{ x: 0 }}
-                exit={{ x: '100%' }}
-                transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                className="fixed right-0 top-0 bottom-0 w-full max-w-lg bg-[var(--bg-card)] z-[101] shadow-2xl flex flex-col border-l border-main"
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-main">
+              <button 
+                className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-blue-500/50 hover:bg-blue-50 transition-all active:scale-95"
+                onClick={() => generatePDF('print')}
               >
-                <div className="p-6 border-b border-main flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
-                      <History size={20} />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg text-[var(--text-main)]">Historial Reciente</h3>
-                      <p className="text-[10px] text-[var(--text-sub)] uppercase font-bold">Últimos 50 informes generados</p>
-                    </div>
-                  </div>
-                  <button onClick={() => setIsHistoryOpen(false)} className="p-2 hover:bg-[var(--hover-main)] rounded-full transition-colors text-[var(--text-main)]">
-                    <CloseIcon size={24} />
-                  </button>
+                <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <Printer size={28} />
                 </div>
-
-                <div className="p-4 bg-[var(--bg-secondary)] border-b border-main">
-                  <div className="relative">
-                    <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-sub)]" size={18} />
-                    <input 
-                      type="text"
-                      placeholder="Buscar por paciente o práctica..."
-                      className="w-full pl-10 pr-4 py-3 bg-[var(--bg-card)] rounded-xl border border-main text-sm focus:ring-2 focus:ring-blue-500/50 text-[var(--text-main)] placeholder:text-gray-400"
-                      value={historySearch}
-                      onChange={e => setHistorySearch(e.target.value)}
-                    />
-                  </div>
+                <div className="text-center">
+                  <span className="block font-bold">Imprimir</span>
+                  <span className="text-[10px] text-gray-400">Vista previa y PDF</span>
                 </div>
+              </button>
 
-              <div className="flex-1 overflow-auto p-4 space-y-3">
-                {isLoadingHistory ? (
-                  <div className="flex justify-center p-20 opacity-30 animate-pulse">Cargando historial...</div>
-                ) : filteredHistory.length === 0 ? (
-                  <div className="text-center p-20 opacity-30">No se encontraron informes.</div>
-                ) : (
-                  filteredHistory.map(item => (
-                    <div key={item.id} className="p-4 bg-[var(--bg-secondary)] border border-main rounded-2xl group hover:border-blue-500/50 transition-all cursor-pointer"
-                         onClick={() => {
-                           setReportData({
-                             ...reportData,
-                             patient: item.patient,
-                             socialWork: item.socialWork,
-                             date: item.date,
-                           });
-                           handlePracticeChange(item.practice);
-                           //setContent(item.content); // We can't set full content as we only saved prefix, but we set the metadata
-                           setIsHistoryOpen(false);
-                         }}
-                    >
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-[10px] font-bold bg-blue-100 dark:bg-blue-900/30 text-blue-600 px-2 py-0.5 rounded-full self-start">
-                            {new Date(item.date).toLocaleDateString('es-AR')}
-                          </span>
-                          {(professional?.role === 'admin' || professional?.role === 'administrador' || professional?.role === 'secretaría') && (
-                            <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-tight">
-                              Prof: {item.profName || 'Desconocido'}
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] text-gray-400 font-mono">{item.id.substring(0,6)}</span>
-                      </div>
-                      <h4 className="font-bold text-sm uppercase group-hover:text-blue-600 transition-colors">{item.patient}</h4>
-                      <p className="text-xs text-gray-500 line-clamp-1">{item.practice}</p>
-                      <p className="text-[10px] text-gray-400 mt-2 font-medium italic">OS: {item.socialWork}</p>
-                    </div>
-                  ))
-                )}
+              <button 
+                className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-emerald-500/50 hover:bg-emerald-50 transition-all active:scale-95"
+                onClick={() => generatePDF('save')}
+              >
+                <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <CheckCircle size={28} />
+                </div>
+                <div className="text-center">
+                  <span className="block font-bold">{isEditing ? 'Actualizar' : 'Guardar'}</span>
+                  <span className="text-[10px] text-gray-400">{isEditing ? 'Guardar cambios' : 'Descargar archivo'}</span>
+                </div>
+              </button>
+            
+            <button 
+              onClick={handleSendReport}
+              className="btn-primary flex items-center justify-center gap-2 px-10 py-4 shadow-lg shadow-blue-500/30 flex-1 md:flex-none"
+              disabled={isGenerating || isSending || !reportData.patient || !selectedPractice}
+            >
+              {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+              {isSending ? 'Enviando...' : 'Enviar Informe'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Toast Notification Container */}
+      <AnimatePresence>
+        {toast.show && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9, x: '-50%' }}
+            animate={{ opacity: 1, y: 0, scale: 1, x: '-50%' }}
+            exit={{ opacity: 0, scale: 0.9, y: 20, x: '-50%' }}
+            className="fixed bottom-10 left-1/2 z-[9999]"
+          >
+            <div className={`
+              px-6 py-4 rounded-2xl shadow-2xl border flex items-center gap-4 min-w-[320px] backdrop-blur-md
+              ${toast.type === 'success' ? 'bg-emerald-500/90 border-emerald-400 text-white' : 
+                toast.type === 'error' ? 'bg-red-500/90 border-red-400 text-white' : 
+                'bg-blue-600/90 border-blue-400 text-white'}
+            `}>
+              <div className="w-8 h-8 rounded-full bg-white/20 flex items-center justify-center shrink-0">
+                {toast.type === 'success' ? <CheckCircle size={20} /> : <ClipboardList size={20} />}
               </div>
-              
-                <div className="p-6 bg-[var(--bg-secondary)] border-t border-main">
-                  <p className="text-[10px] text-center text-[var(--text-sub)] leading-relaxed">
-                    El historial solo almacena metadatos básicos y los primeros 500 caracteres del informe para optimizar espacio.
-                  </p>
-                </div>
-              </motion.div>
-          </>
+              <div className="flex-1">
+                <p className="font-bold text-sm leading-tight">{toast.message}</p>
+              </div>
+              <button 
+                onClick={() => setToast(prev => ({ ...prev, show: false }))}
+                className="hover:bg-white/10 p-1 rounded-lg transition-colors"
+              >
+                <Loader2 size={16} className={toast.type === 'error' ? 'text-white' : 'hidden'} />
+              </button>
+            </div>
+          </motion.div>
         )}
       </AnimatePresence>
     </div>

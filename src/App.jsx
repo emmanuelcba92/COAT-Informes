@@ -9,7 +9,8 @@ import {
   Moon, 
   LogOut,
   ChevronRight,
-  Menu
+  Menu,
+  ClipboardList
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -21,6 +22,7 @@ import ReportsPage from './pages/ReportsPage';
 import ProfilePage from './pages/ProfilePage';
 import PracticesPage from './pages/PracticesPage';
 import AdminPage from './pages/AdminPage';
+import MyReportsPage from './pages/MyReportsPage';
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -39,11 +41,45 @@ function App() {
       document.documentElement.classList.remove('dark');
       localStorage.setItem('theme', 'light');
     }
+    // Forzar título de pestaña corregido
+    document.title = "Informes COAT - Centro Otoaudiológico de Alta Tecnología";
   }, [isDarkMode]);
 
   const toggleTheme = () => setIsDarkMode(!isDarkMode);
 
   const [userProfile, setUserProfile] = useState(null);
+
+  useEffect(() => {
+    let timeoutId;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      // 2 hours = 7200,000 ms
+      timeoutId = setTimeout(() => {
+        if (auth.currentUser) {
+          handleLogout();
+          alert("Tu sesión ha expirado por inactividad (2 hs).");
+        }
+      }, 7200000);
+    };
+
+    if (currentUser) {
+      // Listen for activity
+      window.addEventListener('mousemove', resetTimer);
+      window.addEventListener('keydown', resetTimer);
+      window.addEventListener('click', resetTimer);
+      window.addEventListener('scroll', resetTimer);
+      resetTimer(); // Start timer
+    }
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      window.removeEventListener('mousemove', resetTimer);
+      window.removeEventListener('keydown', resetTimer);
+      window.removeEventListener('click', resetTimer);
+      window.removeEventListener('scroll', resetTimer);
+    };
+  }, [currentUser]);
 
   useEffect(() => {
     const unsubscribe = auth.onAuthStateChanged(async (user) => {
@@ -65,24 +101,19 @@ function App() {
     return () => unsubscribe();
   }, []);
 
-  const role = (userProfile?.role || '').toLowerCase();
-  const isAdmin = role === 'administrador' || 
-                  role === 'admin' ||
+
+  const isSecretaria = userProfile?.role?.toLowerCase().includes('secre');
+  const isAdmin = userProfile?.role?.toLowerCase().includes('admin') || 
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
                   currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
 
-  const isSecretaria = role === 'secretaría';
-
   const navItems = [
-    { id: 'reports', label: 'Informes', icon: <FileText size={24} />, path: '/' },
-    { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile' },
-    { id: 'practices', label: 'Mis Prácticas', icon: <Activity size={24} />, path: '/practices', hideForSecretaria: true },
-    { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', adminOnly: true },
-  ].filter(item => {
-    if (item.adminOnly && !isAdmin) return false;
-    if (item.hideForSecretaria && isSecretaria) return false;
-    return true;
-  });
+    { id: 'reports', label: 'Informes', icon: <FileText size={24} />, path: '/', show: true },
+    { id: 'history', label: isSecretaria ? 'Ver Informes' : 'Mis Informes', icon: <ClipboardList size={24} />, path: '/history', show: true },
+    { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile', show: true },
+    { id: 'practices', label: 'Mis Prácticas', icon: <Activity size={24} />, path: '/practices', show: !isSecretaria },
+    { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', show: isAdmin },
+  ].filter(item => item.show);
 
   const handleLogout = async () => {
     try {
@@ -145,9 +176,16 @@ function App() {
             <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center text-white font-bold shadow-lg group-hover:shadow-blue-500/40 transition-all text-xs border-2 border-transparent group-hover:border-white/20">
               {userInitials}
             </div>
-            <span className="text-[9px] font-bold text-blue-500 truncate max-w-[60px] text-center">
-              {(userProfile?.nombre || '').split(' ')[0] || currentUser.email?.split('@')[0]}
-            </span>
+            <div className="flex flex-col items-center gap-0.5">
+              {(userProfile?.nombre || currentUser.email?.split('@')[0] || '')
+                .split(' ')
+                .filter(part => part.length > 0)
+                .map((part, idx) => (
+                  <span key={idx} className="text-[9px] font-black text-blue-500 uppercase leading-tight tracking-tighter text-center max-w-[70px] break-words">
+                    {part}
+                  </span>
+              ))}
+            </div>
           </div>
 
           <button 
@@ -164,6 +202,8 @@ function App() {
           >
             <LogOut size={20} />
           </button>
+          
+          <span className="text-[9px] text-gray-400 font-mono mt-2">v1.3.4</span>
         </div>
       </aside>
 
@@ -188,12 +228,10 @@ function App() {
           >
             <Routes>
               <Route path="/" element={<ReportsPage />} />
+              <Route path="/history" element={<MyReportsPage user={currentUser} userProfile={userProfile} />} />
               <Route path="/profile" element={<ProfilePage />} />
               <Route path="/practices" element={<PracticesPage />} />
-              <Route 
-                path="/admin" 
-                element={isAdmin ? <AdminPage /> : <ReportsPage />} 
-              />
+              <Route path="/admin" element={<AdminPage />} />
             </Routes>
           </motion.div>
         </AnimatePresence>

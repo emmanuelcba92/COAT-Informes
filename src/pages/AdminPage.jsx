@@ -63,7 +63,7 @@ const AdminPage = () => {
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [pasteData, setPasteData] = useState('');
-  const [manualUserForm, setManualUserForm] = useState({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '' });
+  const [manualUserForm, setManualUserForm] = useState({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '', role: 'médico' });
   const [loading, setLoading] = useState(true);
   
   // State for Users
@@ -164,7 +164,7 @@ const AdminPage = () => {
   // Helper to get standardized user data
   const getStandardUser = (u) => {
     return {
-      nombre: u.nombre || u.n || 'Sin nombre',
+      nombre: (u.nombre || u.n || u.u || 'Sin nombre').toUpperCase().trim(),
       email: (u.email || u.e || u.u || '').toLowerCase().trim(),
       especialidad: u.especialidad || u.esp || 'Otorrinolaringólogo',
       mp: u.mp || u.m || '-',
@@ -313,12 +313,12 @@ const AdminPage = () => {
         mp: '-',
         me: '-',
         isOfficial: true,
-        role: 'médico'
+        role: manualUserForm.role || 'médico'
       }, { merge: true });
 
       await signOut(secondaryAuth);
       setIsManualModalOpen(false);
-      setManualUserForm({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '' });
+      setManualUserForm({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '', role: 'médico' });
       alert('Usuario creado con éxito');
     } catch (err) {
       alert('Error: ' + err.message);
@@ -634,31 +634,29 @@ const AdminPage = () => {
       {/* MODAL: MANAGE PROFESSIONAL PROFILE */}
       <AnimatePresence>
         {isManageProfessionalModalOpen && targetProf && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-hidden">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[var(--bg-card)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
+               initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
+               className="bg-[var(--bg-card)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
             >
               <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-card)]">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center">
+                  <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justify-center">
                     <UserCog size={24} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg">Configurar Perfil: {targetProf.nombre}</h3>
+                    <h3 className="font-bold text-lg text-[var(--text-main)]">Configurar Perfil: {targetProf.nombre}</h3>
                     <p className="text-xs text-gray-500">Ajuste de membretes y datos oficiales</p>
                   </div>
                 </div>
                 <div className="flex gap-2">
                   <button 
                     onClick={() => setIsPreviewOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-slate-100 dark:bg-slate-800 text-[var(--text-main)] rounded-xl font-bold text-xs hover:bg-slate-200 transition-colors"
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                   >
-                    <FileText size={16} /> Vista Previa
+                    <FileText size={16} /> Ver Vista Previa
                   </button>
-                  <button onClick={() => setIsManageProfessionalModalOpen(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full text-gray-500">
+                  <button onClick={() => setIsManageProfessionalModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
                     <X size={20} />
                   </button>
                 </div>
@@ -715,16 +713,16 @@ const AdminPage = () => {
                       </button>
                    </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-card)] p-6 rounded-3xl border border-main">
+                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-secondary)] p-6 rounded-3xl border border-main">
                       {Array(8).fill(0).map((_, i) => (
                         <div key={i} className="space-y-1">
-                          <label className="text-[9px] font-bold text-gray-400 ml-1">Línea {i+1} {i === 0 ? '(Principal)' : (i < 3 ? '(Secundaria)' : '(Pie)')}</label>
+                          <label className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tight">Línea {i+1} {i === 0 ? '(Principal)' : (i < 3 ? '(Secundaria)' : '(Pie)')}</label>
                           <input 
                             type="text" 
                             className="input-field text-sm" 
-                            value={previewType === 'general' ? targetProf.headerGeneral[i] : targetProf.headerFibro[i]}
+                            value={previewType === 'general' ? (targetProf.headerGeneral?.[i] || '') : (targetProf.headerFibro?.[i] || '')}
                             onChange={(e) => updateTargetHeader(previewType, i, e.target.value)}
-                            placeholder={`Línea ${i+1}...`}
+                            placeholder={`Texto línea ${i+1}...`}
                           />
                         </div>
                       ))}
@@ -750,50 +748,59 @@ const AdminPage = () => {
       {/* MODAL: PREVIEW (SINCRO WITH PDF) */}
       <AnimatePresence>
         {isPreviewOpen && targetProf && (
-          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+          <div className="fixed inset-0 z-[400] flex items-center justify-center p-12 bg-slate-900/90 backdrop-blur-md">
             <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-white w-[210mm] h-[60mm] shadow-2xl overflow-hidden relative border border-gray-200 rounded-lg flex"
+              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-white w-[210mm] min-h-[80mm] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden relative border border-gray-400 flex flex-col p-[15mm]"
             >
-              {/* Logo Area (Approx PDF coords 10,8) */}
-              <div className="w-[45mm] h-full flex items-center justify-center p-4 relative">
-                 {targetProf.logoBase64 ? (
-                   <img src={targetProf.logoBase64} className="max-w-full max-h-full object-contain" alt="logo" />
-                 ) : (
-                   <div className="w-full h-full border-2 border-dashed border-gray-200 flex items-center justify-center text-gray-300 font-bold">LOGO</div>
-                 )}
+              <div className="flex border-b-2 border-slate-200 pb-[5mm] mb-[5mm]">
+                {/* Logo Area */}
+                <div className="w-[45mm] flex items-center justify-center pr-10 border-r border-slate-100">
+                   {targetProf.logoBase64 ? (
+                     <img src={targetProf.logoBase64} className="max-w-full max-h-full object-contain" alt="logo" />
+                   ) : (
+                     <div className="text-slate-200 text-[10pt] font-sans font-bold uppercase tracking-tighter text-center">Espacio para Logo</div>
+                   )}
+                </div>
+
+                {/* Header Text Area */}
+                <div className="flex-1 flex flex-col justify-center">
+                    {(previewType === 'general' ? (targetProf.headerGeneral || []) : (targetProf.headerFibro || [])).map((line, i) => {
+                      if (!line) return null;
+                      
+                      let fontSize = '9pt';
+                      let fontWeight = '400';
+                      let marginBottom = '1mm';
+                      if (i === 0) { fontSize = '16pt'; fontWeight = '700'; marginBottom = '3mm'; }
+                      else if (i < 3) { fontSize = '11pt'; fontWeight = '600'; }
+
+                      return (
+                        <p key={i} style={{ 
+                          fontSize, 
+                          fontWeight, 
+                          textAlign: 'center', 
+                          margin: 0,
+                          marginBottom,
+                          color: '#000000',
+                          fontFamily: 'sans-serif'
+                        }}>
+                          {line}
+                        </p>
+                      );
+                    })}
+                </div>
               </div>
 
-              {/* Text Area (Aligned with PDF logic) */}
-              <div className="flex-1 p-6 flex flex-col justify-start">
-                  {(previewType === 'general' ? targetProf.headerGeneral : targetProf.headerFibro).map((line, i) => {
-                    if (!line) return <div key={i} style={{ height: (i < 3 ? '1.2rem' : '0.9rem') }}></div>;
-                    
-                    let fontSize = '7.5pt';
-                    let fontWeight = 'normal';
-                    if (i === 0) { fontSize = '11pt'; fontWeight = 'bold'; }
-                    else if (i < 3) { fontSize = '10pt'; }
-
-                    return (
-                      <p key={i} style={{ 
-                        fontSize, 
-                        fontWeight, 
-                        textAlign: 'center', 
-                        lineHeight: '1.2',
-                        margin: 0,
-                        color: '#000'
-                      }}>
-                        {line}
-                      </p>
-                    );
-                  })}
+              <div className="flex-1 flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-100 rounded-3xl">
+                <p className="text-slate-200 uppercase tracking-[0.5rem] font-bold text-sm">Contenido editable del informe</p>
               </div>
 
+              {/* Close Button UI */}
               <button 
                 onClick={() => setIsPreviewOpen(false)}
-                className="absolute top-4 right-4 p-2 bg-red-500 text-white rounded-full shadow-lg hover:bg-red-600 transition-colors"
+                className="absolute top-6 right-6 w-12 h-12 bg-red-500 text-white rounded-full shadow-2xl hover:bg-red-600 transition-all flex items-center justify-center active:scale-90"
               >
-                <X size={20} />
+                <X size={28} />
               </button>
             </motion.div>
           </div>
@@ -826,8 +833,21 @@ const AdminPage = () => {
                       <label className="text-xs font-bold uppercase opacity-40 ml-1">Contraseña</label>
                       <input type="password" value={manualUserForm.password} onChange={e => setManualUserForm({...manualUserForm, password: e.target.value})} className="input-field" placeholder="******" />
                    </div>
+                   <div className="col-span-2 space-y-1">
+                      <label className="text-xs font-bold uppercase opacity-40 ml-1">Rol de Acceso</label>
+                      <select 
+                        value={manualUserForm.role} 
+                        onChange={e => setManualUserForm({...manualUserForm, role: e.target.value})}
+                        className="input-field appearance-none cursor-pointer"
+                      >
+                        <option value="médico">Médico (Solo sus informes)</option>
+                        <option value="fonoaudiología">Fonoaudiología (Solo sus informes)</option>
+                        <option value="secretaría">Secretaría (Solo lectura)</option>
+                        <option value="admin">Administrador (Control Total)</option>
+                      </select>
+                   </div>
                 </div>
-                <button onClick={handleManualUserCreate} className="btn-primary w-full py-4 mt-4 font-black">CREAR CUENTA</button>
+                <button onClick={handleManualUserCreate} className="btn-primary w-full py-4 mt-4 font-black">CREAR CUENTA PROFESIONAL</button>
               </div>
             </motion.div>
           </div>

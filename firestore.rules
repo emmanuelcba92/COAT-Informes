@@ -3,59 +3,47 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Función para verificar si es administrador
-    function isAdmin() {
+    // Función simple de rol
+    function hasRole(roleName) {
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
       return request.auth != null && (
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'admin' || 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'administrador') ||
-        request.auth.token.email.lower() == 'egomez@coat.com.ar' ||
-        request.auth.token.email.lower() == 'aparedes@coat.com.ar'
+        (userData.role != null && userData.role.lower() == roleName.lower()) ||
+        (userData.r != null && userData.r.lower() == roleName.lower()) ||
+        (userData.role != null && userData.role.lower() == 'admin') ||
+        (userData.r != null && userData.r.lower() == 'admin')
       );
     }
 
-    // Función para verificar si es secretaría
-    function isSecretaria() {
-      return request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'secretaría';
+    function isAdmin() {
+      let email = request.auth.token.email.lower();
+      let userData = get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      return request.auth != null && (
+        (userData.role != null && userData.role.lower() == 'admin') ||
+        (userData.r != null && userData.r.lower() == 'admin') ||
+        (userData.role != null && userData.role.lower() == 'administrador') ||
+        email == 'egomez@coat.com.ar' ||
+        email == 'aparedes@coat.com.ar'
+      );
     }
 
     // Usuarios
     match /users/{userId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null && (
-        isAdmin() || 
-        (request.auth.uid == userId && request.resource.data.get('role', 'médico').lower() != 'admin')
-      );
-      allow update: if request.auth != null && (
-        isAdmin() || 
-        (request.auth.uid == userId && request.resource.data.get('role', 'médico') == resource.data.get('role', 'médico'))
-      );
-      allow delete: if request.auth != null && isAdmin();
-    }
-
-    // Historial de Informes
-    match /reports_history/{reportId} {
-      allow read: if request.auth != null && (
-        isAdmin() || 
-        isSecretaria() || 
-        resource.data.userId == request.auth.uid
-      );
-      allow create: if request.auth != null && (
-        request.resource.data.userId == request.auth.uid &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() != 'secretaría'
-      );
-      allow update, delete: if request.auth != null && (
-        isAdmin() || 
-        resource.data.userId == request.auth.uid
-      );
+      allow write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
     }
 
     // Prácticas
     match /practices/{practiceId} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
+    }
+
+    // INFORMES
+    match /reports/{reportId} {
+      allow read, delete: if isAdmin() || hasRole('secretaría') || hasRole('secretaria');
+      allow read, delete: if request.auth != null && resource.data.profesionalId == request.auth.uid;
+      allow create: if request.auth != null;
+      allow update: if isAdmin() || (request.auth != null && resource.data.profesionalId == request.auth.uid);
     }
 
     // Configuración

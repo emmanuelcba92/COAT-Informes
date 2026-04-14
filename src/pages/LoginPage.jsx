@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, User, Lock, AlertCircle, Sun, Moon } from 'lucide-react';
 import { auth } from '../services/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from 'firebase/auth';
 
 const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
   const [username, setUsername] = useState('');
@@ -22,6 +22,7 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
 
     try {
       const fullEmail = `${username.trim()}@coat.com.ar`;
+      await setPersistence(auth, browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, fullEmail, password);
       onLogin(userCredential.user);
     } catch (err) {
