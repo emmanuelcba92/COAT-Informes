@@ -9,7 +9,7 @@ import {
   Trash2, 
   Filter,
   RefreshCw,
-  Eye,
+  Printer,
   ChevronRight,
   ChevronDown,
   ArrowRight,
@@ -31,10 +31,12 @@ import {
   query, 
   where, 
   orderBy, 
+  getDoc,
   getDocs, 
   deleteDoc, 
   doc, 
   limit,
+  startAfter,
   addDoc 
 } from 'firebase/firestore';
 import { createClient } from '@supabase/supabase-js';
@@ -51,12 +53,21 @@ const MyReportsPage = ({ user, userProfile }) => {
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [professionals, setProfessionals] = useState([]);
-  const [selectedProfId, setSelectedProfId] = useState(null);
+
+  const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
+  const isSecretaria = userProfile?.role?.toLowerCase().includes('secre');
+  const canSelectProfessional = isAdmin || isSecretaria;
+
+  const [selectedProfId, setSelectedProfId] = useState(canSelectProfessional ? 'all' : user.uid);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+  const [lastVisible, setLastVisible] = useState(null);
+  const [hasMore, setHasMore] = useState(false);
+  const PAGE_SIZE = 20;
 
   // Sistema de Notificaciones Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+  const [deleteModal, setDeleteModal] = useState({ show: false, report: null });
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
@@ -69,13 +80,14 @@ const MyReportsPage = ({ user, userProfile }) => {
     file: null,
     patientName: '',
     patientDni: '',
-    profId: '',
+    socialWork: '',
+    requester: '',
+    reason: '',
+    patientEmail: '',
+    profId: canSelectProfessional ? '' : user.uid,
     date: new Date().toISOString().split('T')[0]
   });
-
-  const isSecretaria = userProfile?.role?.toLowerCase().includes('secre');
-  const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
-  const canSelectProfessional = isSecretaria || isAdmin;
+  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
 
   useEffect(() => {
     const fetchProfs = async () => {
@@ -137,33 +149,76 @@ const MyReportsPage = ({ user, userProfile }) => {
         if (!canSelectProfessional) {
           setSelectedProfId(user.uid);
           setUploadData(prev => ({ ...prev, profId: user.uid }));
+        } else if (selectedProfId === null || selectedProfId === user.uid) {
+          // Si es admin y está en su propio ID o null, forzar 'all' al inicio
+          setSelectedProfId('all');
         }
       } catch (err) {
         console.error("Error fetching professionals:", err);
       }
     };
     fetchProfs();
+
+    const fetchConfig = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'config', 'settings'));
+        if (snap.exists()) setConfig(snap.data());
+      } catch (err) { console.error("Config fetch error:", err); }
+    };
+    fetchConfig();
   }, [canSelectProfessional, user.uid]);
 
   useEffect(() => {
-    if (selectedProfId) {
-      setReports([]); // Limpiar lista al cambiar de profesional para evitar "fantasmas"
-      fetchReports(selectedProfId);
-    }
-  }, [selectedProfId]);
+    // Si es médico solo puede cargar los suyos (uid ya seteado en selectedProfId por default)
+    // Si es admin/secre puede cargar todos si no hay selection
+    fetchReports(selectedProfId, true);
+  }, [selectedProfId, canSelectProfessional]);
 
-  const fetchReports = async (profId) => {
+  const fetchReports = async (profId, reset = false) => {
     setLoading(true);
+    if (reset) {
+        setReports([]);
+        setLastVisible(null);
+    }
+    
     try {
-      const q = query(
-        collection(db, 'reports'),
-        where('profesionalId', '==', profId),
+      let q;
+      const constraints = [
         orderBy('fechaCreatedAt', 'desc'),
-        limit(100)
-      );
+        limit(PAGE_SIZE)
+      ];
+
+      if (reset === false && lastVisible) {
+        constraints.splice(1, 0, startAfter(lastVisible));
+      }
+
+      if (profId && profId !== 'all') {
+        q = query(
+          collection(db, 'reports'),
+          where('profesionalId', '==', profId),
+          ...constraints
+        );
+      } else if (canSelectProfessional) {
+        q = query(
+          collection(db, 'reports'),
+          ...constraints
+        );
+      } else {
+        setLoading(false);
+        return;
+      }
+
       const snap = await getDocs(q);
       const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setReports(list);
+      
+      if (reset) {
+        setReports(list);
+      } else {
+        setReports(prev => [...prev, ...list]);
+      }
+      
+      setLastVisible(snap.docs[snap.docs.length - 1]);
+      setHasMore(list.length === PAGE_SIZE);
     } catch (err) {
       console.error("Error fetching reports:", err);
       showToast("Error al cargar informes técnicos.", "error");
@@ -174,8 +229,13 @@ const MyReportsPage = ({ user, userProfile }) => {
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!uploadData.file || !uploadData.patientName || !uploadData.profId) {
-      alert('Por favor complete los campos obligatorios y seleccione un archivo.');
+    if (!uploadData.file || !uploadData.patientName || !uploadData.patientDni || !uploadData.profId) {
+      showToast('Por favor complete los campos obligatorios: Paciente, DNI y Archivo.', 'error');
+      return;
+    }
+
+    if (uploadData.patientEmail && (!uploadData.patientEmail.includes('@') || !uploadData.patientEmail.includes('.'))) {
+      showToast('Por favor ingrese un email válido o deje el campo en blanco.', 'error');
       return;
     }
 
@@ -214,41 +274,84 @@ const MyReportsPage = ({ user, userProfile }) => {
       // 2. Get Professional Name
       const selectedProf = professionals.find(p => p.id === uploadData.profId);
 
-      // 3. Save to Firestore (Guardamos la ruta para borrarla fácil después)
-      await addDoc(collection(db, 'reports'), {
+      // 3. Save to Firestore
+      const reportSaveData = {
         profesionalId: uploadData.profId,
         profesionalNombre: selectedProf?.nombre || 'Externo',
         pacienteNombre: uploadData.patientName.toUpperCase(),
         pacienteDni: uploadData.patientDni || '',
+        obraSocial: uploadData.socialWork.toUpperCase(),
         fecha: uploadData.date,
         fechaCreatedAt: new Date().toISOString(),
         pdfUrl: downloadURL,
         storagePath: filePath,
         tipoReporte: 'externo',
-        practicaNombre: 'INFORME EXTERNO / PDF SUBIDO (SUPABASE)'
-      });
+        practicaNombre: uploadData.reason.toUpperCase() || 'INFORME EXTERNO',
+        requester: uploadData.requester || '',
+        reason: uploadData.reason || '',
+        patientEmail: uploadData.patientEmail || ''
+      };
 
-      showToast('¡Archivo subido con éxito!');
+      await addDoc(collection(db, 'reports'), reportSaveData);
+
+      // 4. Send Email if configured
+      if (config.appsScriptUrl && config.token) {
+        try {
+          // Convert file to base64 for Apps Script
+          const base64data = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(uploadData.file);
+            reader.onload = () => resolve(reader.result.split(',')[1]);
+            reader.onerror = error => reject(error);
+          });
+
+          const recipientEmails = [config.adminEmail];
+          if (uploadData.patientEmail) recipientEmails.push(uploadData.patientEmail);
+
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64: base64data,
+              recipientEmails,
+              subject: `COAT Informes - ${uploadData.reason.toUpperCase()}: ${uploadData.patientName}`,
+              message: `
+                <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+                  <h2 style="color: #2563eb;">${uploadData.reason.toUpperCase()} - COAT</h2>
+                  <p>Estimado/a,</p>
+                  <p>Se ha subido un nuevo informe técnico al historial.</p>
+                  <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+                  <ul style="list-style: none; padding: 0;">
+                    <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
+                    <li><strong>Establecimiento/Motivo:</strong> ${uploadData.reason || 'Externo'}</li>
+                    <li><strong>Fecha Doc:</strong> ${uploadData.date}</li>
+                    <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
+                  </ul>
+                </div>
+              `,
+              fileName: `${uploadData.patientName.replace(/\s/g, '_')}.pdf`
+            })
+          });
+        } catch (mailErr) {
+          console.error("Error sending upload notification:", mailErr);
+        }
+      }
+
+      showToast('PDF subido y guardado con éxito');
       setIsUploadModalOpen(false);
+      setUploadData({
+        file: null, patientName: '', patientDni: '', socialWork: '', 
+        requester: '', reason: '', patientEmail: '', profId: '',
+        date: new Date().toISOString().split('T')[0]
+      });
+      fetchReports(selectedProfId, true);
       
       // Sincronizar el selector de la página con el profesional al que le subimos el informe
       if (canSelectProfessional) {
         setSelectedProfId(uploadData.profId);
       }
-
-      setUploadData({ 
-        file: null, 
-        patientName: '', 
-        patientDni: '', 
-        profId: canSelectProfessional ? '' : user.uid, 
-        date: new Date().toISOString().split('T')[0] 
-      });
-      
-      // IMPORTANTE: Le damos un respiro a Firebase para que indexe el nuevo documento
-      // Si consultamos INSTANTÁNEAMENTE, a veces devuelve 0 resultados.
-      setTimeout(() => {
-        fetchReports(uploadData.profId);
-      }, 1500);
 
     } catch (err) {
       console.error("Error en handleUpload:", err);
@@ -259,8 +362,15 @@ const MyReportsPage = ({ user, userProfile }) => {
   };
 
   const handleDeleteReport = async (report) => {
-    if (!window.confirm('¿Estás seguro de que deseas eliminar este informe?')) return;
+    setDeleteModal({ show: true, report });
+  };
+
+  const confirmDelete = async () => {
+    const report = deleteModal.report;
+    if (!report) return;
     
+    setLoading(true);
+    setDeleteModal({ show: false, report: null });
     try {
       // 1. Intentar borrar en Supabase SOLO si tiene pdfUrl y storagePath
       const hasSupabaseFile = report.pdfUrl && (report.storagePath || report.pdfUrl.includes('/informescoat/'));
@@ -283,10 +393,12 @@ const MyReportsPage = ({ user, userProfile }) => {
       await deleteDoc(doc(db, 'reports', report.id));
       
       showToast('Informe eliminado de la lista.');
-      fetchReports(selectedProfId || user.uid);
+      fetchReports(selectedProfId || 'all', true);
     } catch (err) {
       console.error("Error en handleDeleteReport:", err);
       showToast('Error al intentar borrar el registro.', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -295,8 +407,8 @@ const MyReportsPage = ({ user, userProfile }) => {
     if (report.pdfUrl) {
       window.open(report.pdfUrl, '_blank');
     } else {
-      // Si no tiene PDF (es informe interno), vamos a editarlo
-      navigate(`/?edit=${report.id}`);
+      // Si no tiene PDF (es informe interno), vamos a la vista previa
+      navigate(`/?edit=${report.id}&preview=true`);
     }
   };
 
@@ -345,11 +457,11 @@ const MyReportsPage = ({ user, userProfile }) => {
                 <User size={18} />
                 </div>
                 <select 
-                className="flex-1 bg-transparent border-none outline-none font-bold text-xs pr-10 appearance-none cursor-pointer text-[var(--text-main)]"
-                value={selectedProfId || ''}
+                className="flex-1 bg-transparent border-none outline-none font-bold text-[10px] pr-10 appearance-none cursor-pointer text-[var(--text-main)] uppercase"
+                value={selectedProfId || 'all'}
                 onChange={(e) => setSelectedProfId(e.target.value)}
                 >
-                <option value="" disabled className="bg-[var(--bg-card)]">Seleccionar profesional...</option>
+                <option value="all" className="bg-[var(--bg-card)]">👤 VER TODOS LOS PROFESIONALES</option>
                 {professionals.map(p => (
                     <option key={p.id} value={p.id} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.nombre}</option>
                 ))}
@@ -362,7 +474,7 @@ const MyReportsPage = ({ user, userProfile }) => {
       {/* Stats & Search */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-blue-600 p-6 rounded-[2.5rem] text-white shadow-xl shadow-blue-500/20">
-          <p className="text-xs font-black uppercase tracking-widest opacity-60">Total Informes</p>
+          <p className="text-xs font-black uppercase tracking-widest opacity-60">Informes Mostrados</p>
           <h2 className="text-4xl font-black mt-2">{reports.length}</h2>
           <div className="mt-4 flex items-center text-xs opacity-80 gap-1">
             <Database size={14} /> Sincronizado con Firebase
@@ -381,17 +493,17 @@ const MyReportsPage = ({ user, userProfile }) => {
             />
           </div>
           <button 
-            onClick={() => fetchReports(selectedProfId)}
-            className="p-4 bg-[var(--bg-secondary)] hover:bg-gray-100 rounded-2xl text-gray-400 transition-all active:scale-95"
+            onClick={() => fetchReports(selectedProfId, true)}
+            className="p-4 bg-[var(--bg-secondary)] hover:brightness-110 text-[var(--text-main)] rounded-2xl transition-all active:scale-95 border border-white/5 shadow-sm"
           >
-            <RefreshCw size={24} className={loading ? 'animate-spin text-blue-600' : ''} />
+            <RefreshCw size={24} className={loading ? 'animate-spin text-blue-600' : 'opacity-60 group-hover:opacity-100'} />
           </button>
         </div>
       </div>
 
       {/* Table Section */}
       <div className="bg-[var(--bg-card)] rounded-[3rem] border border-main overflow-hidden shadow-sm">
-        <div className="p-8 border-b border-main bg-gray-50/50 flex items-center justify-between">
+        <div className="p-8 border-b border-main bg-[var(--bg-secondary)]/30 flex items-center justify-between">
             <h3 className="font-bold flex items-center gap-2">
               <ClipboardList size={20} className="text-blue-600" />
               Resultados ({filteredReports.length})
@@ -402,7 +514,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                     key={type}
                     onClick={() => setFilterType(type)}
                     className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-tight transition-all ${
-                        filterType === type ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-gray-100'
+                        filterType === type ? 'bg-blue-600 text-white shadow-md' : 'text-gray-400 hover:bg-[var(--bg-secondary)]'
                     }`}
                  >
                     {type === 'all' ? 'Todos' : type === 'clinico' ? 'Clínicos' : type === 'fibro' ? 'Fibro' : 'PDFs'}
@@ -419,7 +531,7 @@ const MyReportsPage = ({ user, userProfile }) => {
             </div>
           ) : filteredReports.length === 0 ? (
             <div className="py-20 flex flex-col items-center justify-center gap-6 text-center">
-              <div className="w-20 h-20 bg-gray-100 rounded-full flex items-center justify-center text-gray-300">
+              <div className="w-20 h-20 bg-[var(--bg-secondary)] rounded-full flex items-center justify-center text-gray-300">
                 <FileText size={40} />
               </div>
               <div>
@@ -430,8 +542,9 @@ const MyReportsPage = ({ user, userProfile }) => {
           ) : (
             <table className="w-full text-left border-collapse">
               <thead>
-                <tr className="bg-gray-50/50 text-[10px] uppercase font-black tracking-[0.1em] text-gray-400">
+                <tr className="bg-[var(--bg-secondary)]/50 text-[10px] uppercase font-black tracking-[0.1em] text-gray-400">
                   <th className="px-8 py-4">Fecha</th>
+                  <th className="px-8 py-4">Profesional</th>
                   <th className="px-8 py-4">Paciente</th>
                   <th className="px-8 py-4">Práctica / Origen</th>
                   <th className="px-8 py-4 text-center">Acciones</th>
@@ -439,12 +552,15 @@ const MyReportsPage = ({ user, userProfile }) => {
               </thead>
               <tbody className="divide-y border-main">
                 {filteredReports.map((report) => (
-                  <tr key={report.id} className="hover:bg-gray-50/50 transition-colors group">
+                  <tr key={report.id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors group">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="font-bold text-sm">{report.fecha}</span>
                         <span className="text-[10px] text-gray-400">ID: {report.id.substring(0,8)}</span>
                       </div>
+                    </td>
+                    <td className="px-8 py-6">
+                       <p className="font-bold text-[10px] text-blue-600 uppercase tracking-tighter max-w-[120px] truncate">{report.profesionalNombre}</p>
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">
@@ -460,13 +576,30 @@ const MyReportsPage = ({ user, userProfile }) => {
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                       <span className={`px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${
-                         report.tipoReporte === 'fibro' ? 'bg-amber-100 text-amber-700' : 
-                         report.tipoReporte === 'externo' ? 'bg-emerald-100 text-emerald-700' :
-                         'bg-indigo-100 text-indigo-700'
-                       }`}>
-                         {report.practicaNombre || report.tipoReporte}
-                       </span>
+                      <div className="flex flex-col gap-2">
+                        <span className={`w-fit px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-tighter ${
+                          report.tipoReporte === 'fibro' ? 'bg-amber-100 text-amber-700' : 
+                          report.tipoReporte === 'externo' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-indigo-100 text-indigo-700'
+                        }`}>
+                          {report.practicaNombre || report.tipoReporte}
+                        </span>
+                        {isAdmin && (
+                          <div className="flex items-center gap-1.5 ml-1">
+                            {report.tipoReporte === 'externo' ? (
+                              <div className="flex items-center gap-1 text-[9px] font-bold text-emerald-600/60 uppercase tracking-widest">
+                                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                Supabase (PDF)
+                              </div>
+                            ) : (
+                              <div className="flex items-center gap-1 text-[9px] font-bold text-indigo-600/60 uppercase tracking-widest">
+                                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                                Firestore (Texto)
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                       <td className="px-8 py-6">
                         <div className="flex items-center justify-center gap-2">
@@ -475,7 +608,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                             className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 transition-all border border-amber-100 shadow-sm"
                             title="Ver / Imprimir"
                           >
-                            <Eye className="w-5 h-5" />
+                            <Printer className="w-5 h-5" />
                           </button>
 
                           <button 
@@ -503,7 +636,71 @@ const MyReportsPage = ({ user, userProfile }) => {
             </table>
           )}
         </div>
+
+        {hasMore && (
+          <div className="p-8 border-t border-main bg-[var(--bg-secondary)]/30 flex justify-center">
+            <button 
+              onClick={() => fetchReports(selectedProfId, false)}
+              disabled={loading}
+              className="px-8 py-3 bg-[var(--bg-card)] border border-main rounded-2xl font-bold text-xs uppercase tracking-widest hover:bg-[var(--bg-secondary)] transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 text-[var(--text-main)]"
+            >
+              {loading ? <RefreshCw className="w-4 h-4 animate-spin text-blue-600" /> : <ChevronDown className="w-4 h-4" />}
+              Cargar más informes
+            </button>
+          </div>
+        )}
+
+        {!hasMore && reports.length > 0 && (
+          <div className="p-8 border-t border-main bg-[var(--bg-secondary)]/30 text-center">
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-main)] opacity-40">
+              No hay más informes para mostrar
+            </p>
+          </div>
+        )}
       </div>
+
+      {/* MODAL: DELETE CONFIRMATION */}
+      <AnimatePresence>
+        {deleteModal.show && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setDeleteModal({ show: false, report: null })}
+              className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-[var(--bg-card)] rounded-3xl p-8 max-w-md w-full shadow-2xl relative z-10 border border-white/10"
+            >
+              <div className="w-16 h-16 bg-red-500/10 text-red-500 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-red-500/20">
+                <Trash2 size={32} />
+              </div>
+              <h3 className="text-xl font-bold text-center text-[var(--text-main)] mb-2 text-white">¿Eliminar Informe?</h3>
+              <p className="text-[var(--text-main)] opacity-60 text-center mb-8 text-sm">
+                Estás a punto de eliminar el informe de <span className="font-bold text-[var(--text-main)] opacity-100">{deleteModal.report?.pacienteNombre}</span>. Esta acción no se puede deshacer.
+              </p>
+              <div className="flex gap-3">
+                <button 
+                  onClick={() => setDeleteModal({ show: false, report: null })}
+                  className="flex-1 py-3 px-4 bg-[var(--bg-secondary)] text-[var(--text-main)] rounded-xl font-bold hover:bg-[var(--bg-card)] transition-colors border border-white/5"
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={confirmDelete}
+                  className="flex-1 py-3 px-4 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 shadow-lg shadow-red-500/20 transition-all"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* Upload Modal */}
       <AnimatePresence>
@@ -515,7 +712,7 @@ const MyReportsPage = ({ user, userProfile }) => {
               exit={{ opacity: 0, scale: 0.95, y: 20 }}
               className="bg-[var(--bg-card)] w-full max-w-lg rounded-[3rem] border border-main shadow-2xl overflow-hidden"
             >
-              <div className="p-8 border-b border-main flex items-center justify-between bg-gray-50/50">
+              <div className="p-8 border-b border-main flex items-center justify-between bg-[var(--bg-secondary)]/30 text-[var(--text-main)]">
                 <div className="flex items-center gap-3">
                   <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/20">
                     <FileUp size={24} />
@@ -547,26 +744,75 @@ const MyReportsPage = ({ user, userProfile }) => {
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">DNI</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">DNI *</label>
                     <input 
+                      required
                       type="text" 
-                      placeholder="DNI del paciente"
+                      inputMode="numeric"
+                      placeholder="Solo números"
                       className="input-field"
                       value={uploadData.patientDni}
-                      onChange={e => setUploadData({...uploadData, patientDni: e.target.value})}
+                      onChange={e => setUploadData({...uploadData, patientDni: e.target.value.replace(/\D/g, '')})}
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Fecha de informe</label>
-                  <input 
-                    type="date" 
-                    className="input-field"
-                    value={uploadData.date}
-                    onChange={e => setUploadData({...uploadData, date: e.target.value})}
-                  />
-                </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Obra Social (Opc)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Ej: OSDE..."
+                        className="input-field"
+                        value={uploadData.socialWork}
+                        onChange={e => setUploadData({...uploadData, socialWork: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Fecha de informe</label>
+                      <input 
+                        type="date" 
+                        className="input-field"
+                        value={uploadData.date}
+                        onChange={e => setUploadData({...uploadData, date: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Solicitante (Opc)</label>
+                      <input 
+                        type="text" 
+                        placeholder="Médico..."
+                        className="input-field"
+                        value={uploadData.requester}
+                        onChange={e => setUploadData({...uploadData, requester: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Email Paciente (Opc)</label>
+                      <input 
+                        type="email" 
+                        placeholder="Para envío por mail"
+                        className={`input-field ${uploadData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(uploadData.patientEmail)) ? 'input-error' : ''}`}
+                        value={uploadData.patientEmail}
+                        onChange={e => setUploadData({...uploadData, patientEmail: e.target.value})}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Motivo / Descripción *</label>
+                    <input 
+                      required
+                      type="text" 
+                      placeholder="Ej: Fibro de control..."
+                      className="input-field"
+                      value={uploadData.reason}
+                      onChange={e => setUploadData({...uploadData, reason: e.target.value})}
+                    />
+                  </div>
 
                 <div className="space-y-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Profesional Asociado *</label>
@@ -596,13 +842,13 @@ const MyReportsPage = ({ user, userProfile }) => {
                         />
                         <label 
                             htmlFor="pdf-upload"
-                            className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-main rounded-[2rem] bg-gray-50 hover:bg-white hover:border-blue-500 transition-all cursor-pointer group"
+                            className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-blue-500/30 rounded-[2rem] bg-[var(--bg-secondary)] hover:bg-[var(--bg-card)] hover:border-blue-500 transition-all cursor-pointer group"
                         >
-                            <Upload className="text-gray-300 group-hover:text-blue-500 mb-2" size={32} />
-                            <span className="text-sm font-bold text-gray-500 group-hover:text-blue-600">
+                            <Upload className="text-gray-400 group-hover:text-blue-500 mb-2" size={32} />
+                            <span className="text-sm font-bold text-[var(--text-main)] opacity-70 group-hover:opacity-100 group-hover:text-blue-500">
                                 {uploadData.file ? uploadData.file.name : 'Click para seleccionar archivo'}
                             </span>
-                            <span className="text-[10px] text-gray-400 mt-1">Solo se permiten archivos .pdf</span>
+                            <span className="text-[10px] text-gray-500 mt-1">Solo se permiten archivos .pdf</span>
                         </label>
                     </div>
                 </div>
@@ -611,7 +857,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                   <button 
                     type="button"
                     onClick={() => setIsUploadModalOpen(false)}
-                    className="flex-1 py-4 bg-gray-100 hover:bg-gray-200 rounded-2xl font-bold transition-all text-sm"
+                    className="flex-1 py-4 bg-[var(--bg-secondary)] hover:bg-[var(--bg-card)] text-[var(--text-main)] border border-white/5 rounded-2xl font-bold transition-all text-sm"
                   >
                     Cancelar
                   </button>

@@ -3,6 +3,7 @@ import { jsPDF } from 'jspdf';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import { 
+  FileText,
   FilePlus, 
   Printer, 
   Send, 
@@ -15,7 +16,9 @@ import {
   CheckCircle,
   ClipboardList,
   ArrowRight,
-  Settings
+  Settings,
+  Download,
+  X
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, collection, getDocs, addDoc } from 'firebase/firestore';
@@ -31,7 +34,8 @@ const ReportsPage = () => {
     requester: '',
     reason: '',
     patientEmail: '',
-    includeTitle: true
+    includeTitle: true,
+    customTitle: ''
   });
   
   const [selectedPractice, setSelectedPractice] = useState('');
@@ -41,9 +45,12 @@ const ReportsPage = () => {
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
   const [professional, setProfessional] = useState(null);
   const [dbPractices, setDbPractices] = useState([]);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get('edit');
+  const printFlag = new URLSearchParams(location.search).get('print');
+  const previewFlag = new URLSearchParams(location.search).get('preview');
   const [isEditing, setIsEditing] = useState(false);
   
   // Sistema de Notificaciones Toast
@@ -157,10 +164,17 @@ const ReportsPage = () => {
               requester: data.requester || '',
               reason: data.reason || '',
               patientEmail: data.patientEmail || '',
-              includeTitle: data.includeTitle !== undefined ? data.includeTitle : true
+              includeTitle: data.includeTitle !== undefined ? data.includeTitle : true,
+              customTitle: data.customTitle || ''
             });
             setSelectedPractice(data.practicaNombre || '');
-            setContent(data.contenidoTexto || ''); // Cargamos el texto enriquecido guardado
+            setContent(data.contenidoTexto || '');
+
+            // Si viene con flag de preview o print, generamos el preview
+            if (previewFlag === 'true' || printFlag === 'true') {
+              // Necesitamos esperar a que el estado se asiente y profesional esté cargado
+              // El useEffect de profesional se encargará de esto o lo hacemos aquí con un delay si ya está
+            }
           }
         } catch (err) {
           console.error("Error cargando informe para editar:", err);
@@ -170,10 +184,36 @@ const ReportsPage = () => {
     loadReportToEdit();
   }, [editId]);
 
+  // AUTO-PRINT / PREVIEW Logic
+  useEffect(() => {
+    // Si ya tenemos previewUrl no hacemos nada
+    if (previewUrl) return;
+
+    if ((printFlag === 'true' || previewFlag === 'true') && isEditing) {
+      // Damos un pequeño respiro para asegurar que los estados se hayan seteado
+      const timer = setTimeout(() => {
+        // Generamos aunque falten cosas, la función generatePDF ya tiene fallbacks
+        const blob = generatePDF('blob');
+        if (blob) {
+          const url = URL.createObjectURL(blob);
+          setPreviewUrl(url);
+        }
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [printFlag, previewFlag, isEditing, professional, selectedPractice, content, previewUrl]);
+
   const handlePracticeChange = (practiceName) => {
     setSelectedPractice(practiceName);
     const p = dbPractices.find(item => item.n === practiceName);
     if (p) {
+      // Configuramos el título basado en la práctica
+      setReportData(prev => ({
+        ...prev,
+        includeTitle: p.st !== undefined ? p.st : true,
+        customTitle: ''
+      }));
+
       const personal = (professional?.personalPractices || {})[p.id];
       let bodyText = "";
       
@@ -192,13 +232,23 @@ const ReportsPage = () => {
   };
 
   const generatePDF = (mode = 'print') => {
-    if (!reportData.patient || !reportData.socialWork || !reportData.date) {
-      showToast('Complete los campos obligatorios: Paciente, Obra Social y Fecha.', 'error');
+    if (!reportData.patient || !reportData.date) {
+      showToast('Complete los campos obligatorios: Paciente y Fecha.', 'error');
       return null;
     }
 
-    setIsGenerating(true);
+    // 0. Preparation
     const doc = new jsPDF();
+    
+    // Helper to clean HTML for PDF
+    const cleanHtmlForPDF = (html) => {
+      if (!html) return "";
+      let text = html.replace(/<br\s*\/?>/gi, '\n');
+      text = text.replace(/<\/p>/gi, '\n');
+      text = text.replace(/<p>/gi, '');
+      const tempDoc = new DOMParser().parseFromString(text, 'text/html');
+      return tempDoc.body.textContent || "";
+    };
     const prof = professional || {};
     const pageWidth = doc.internal.pageSize.width;
     
@@ -209,7 +259,7 @@ const ReportsPage = () => {
     // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 30, 20);
+      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16);
     } catch (e) {
       console.error("Logo error:", e);
     }
@@ -232,7 +282,7 @@ const ReportsPage = () => {
       }
     });
 
-    let currentY = Math.max(headerY + 5, 55); 
+    let currentY = Math.max(headerY + 5, 45); 
     doc.setDrawColor(200);
     doc.line(10, currentY - 5, 200, currentY - 5);
 
@@ -240,82 +290,80 @@ const ReportsPage = () => {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     
-    const pInfo = [];
-    if (reportData.patient) pInfo.push(`PACIENTE: ${reportData.patient.toUpperCase()}`);
-    if (reportData.socialWork) pInfo.push(`OBRA SOCIAL: ${reportData.socialWork.toUpperCase()}`);
-    if (reportData.dni) pInfo.push(`DNI: ${reportData.dni}`);
-    doc.text(pInfo.join('  |  '), 10, currentY);
-    currentY += 6;
+    // Line 1: Paciente  Obra Social  DNI
+    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 10, currentY);
+    doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 80, currentY);
+    doc.text(`DNI: ${reportData.dni || "-"}`, 150, currentY);
+    
+    currentY += 7; // Slightly tighter spacing
 
-    const cInfo = [];
-    cInfo.push(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`);
-    if (reportData.requester && reportData.requester.trim()) cInfo.push(`SOLICITANTE: ${reportData.requester.toUpperCase()}`);
-    if (reportData.reason && reportData.reason.trim()) cInfo.push(`MOTIVO: ${reportData.reason.toUpperCase()}`);
-    doc.text(cInfo.join('  |  '), 10, currentY);
-    currentY += 6;
+    // Line 2: Fecha  Solicitante  Motivo
+    doc.text(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`, 10, currentY);
+    doc.text(`SOLICITANTE: ${(reportData.requester || "-").toUpperCase()}`, 80, currentY);
+    doc.text(`MOTIVO: ${(reportData.reason || "-").toUpperCase()}`, 150, currentY);
+    
+    currentY += 7;
 
     doc.line(10, currentY, 200, currentY);
-    currentY += 10;
+    currentY += 8;
 
     // Report Title
+    let titleToPrint = "";
     if (reportData.includeTitle && selectedPractice) {
+      titleToPrint = `INFORME DE ${selectedPractice.toUpperCase()}`;
+    } else if (reportData.customTitle) {
+      titleToPrint = reportData.customTitle.toUpperCase();
+    }
+
+    if (titleToPrint) {
       doc.setFont("helvetica", "bold");
       doc.setFontSize(10);
-      const title = `INFORME DE ${selectedPractice.toUpperCase()}`;
-      const titleWidth = doc.getTextWidth(title);
+      const titleWidth = doc.getTextWidth(titleToPrint);
       const centerX = (pageWidth - titleWidth) / 2;
       
-      doc.text(title, centerX, currentY);
+      doc.text(titleToPrint, centerX, currentY);
       doc.line(centerX, currentY + 1, centerX + titleWidth, currentY + 1);
-      currentY += 12;
+      currentY += 10;
     }
 
     // Main Content
     doc.setFont("helvetica", "normal");
     doc.setFontSize(10);
     
-    const cleanContent = (content || "Sin observaciones registradas.")
-      .replace(/<\/p>/g, '\n')
-      .replace(/<\/div>/g, '\n')
-      .replace(/<br\s*\/?>/g, '\n')
-      .replace(/<li>/g, '\n• ')
-      .replace(/<[^>]*>/g, '');
-    
-    const lines = cleanContent.split('\n');
-    let yPos = currentY;
+    const plainResult = cleanHtmlForPDF(reportData.result || content);
+    const contentLines = doc.splitTextToSize(plainResult, 185);
     const pageHeight = doc.internal.pageSize.height;
 
-    lines.forEach(line => {
-      if (!line.trim()) {
-        yPos += 1.5;
-        return;
-      }
-      const isHeader = line.includes(':') && line.indexOf(':') < 20;
-      doc.setFont("helvetica", isHeader ? "bold" : "normal");
-      const splitLines = doc.splitTextToSize(line.trim(), 180);
-      if (yPos + (splitLines.length * 4.5) > pageHeight - 60) {
+    contentLines.forEach(line => {
+      // Check for page break (leaving space for signature/footer)
+      if (currentY > pageHeight - 50) {
         doc.addPage();
-        yPos = 20;
+        currentY = 20;
       }
-      doc.text(splitLines, 10, yPos);
-      yPos += (splitLines.length * 4.5);
+      doc.text(line, 10, currentY);
+      currentY += 4.8;
     });
-
+    
     // Signature Area
-    currentY = yPos + 15;
+    currentY += 10;
+    if (currentY > pageHeight - 35) {
+       doc.addPage();
+       currentY = 20;
+    }
+
     if (prof.signatureBase64) {
       try {
-        doc.addImage(prof.signatureBase64, 'PNG', 140, currentY, 40, 15);
-        currentY += 18;
+        doc.addImage(prof.signatureBase64, 'PNG', 140, currentY, 35, 12);
+        currentY += 15;
       } catch (e) {
         console.error("Error signature:", e);
       }
     } else {
-        currentY += 10;
+        currentY += 5;
     }
     
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9);
+    doc.setFontSize(8);
     
     const footerLines = [
       prof.nombre || 'Profesional',
@@ -326,10 +374,11 @@ const ReportsPage = () => {
     footerLines.forEach((text, i) => {
       if (i === 1) {
         doc.setFont("helvetica", "normal");
-        doc.setFontSize(8);
+      } else if (i === 2) {
+        doc.setFont("helvetica", "bold");
       }
       doc.text(text, 160, currentY, { align: 'center' });
-      currentY += (i === 0 ? 4 : 3.5);
+      currentY += (i === 0 ? 3.5 : 3);
     });
 
     if (mode === 'print') {
@@ -339,6 +388,9 @@ const ReportsPage = () => {
     } else if (mode === 'save') {
       doc.save(`Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`);
       saveToHistory();
+    } else if (mode === 'blob') {
+      setIsGenerating(false);
+      return doc.output('blob');
     }
     
     setIsGenerating(false);
@@ -353,6 +405,11 @@ const ReportsPage = () => {
     
     if (!reportData.patient || !selectedPractice) {
       showToast('Complete al menos Paciente y Práctica para enviar.', 'error');
+      return;
+    }
+    
+    if (reportData.patientEmail && (!reportData.patientEmail.includes('@') || !reportData.patientEmail.includes('.'))) {
+      showToast('Por favor ingrese un email de paciente válido o déjelo en blanco.', 'error');
       return;
     }
 
@@ -370,7 +427,11 @@ const ReportsPage = () => {
         recipientEmails.push(reportData.patientEmail);
       }
 
-      const subject = `COAT Informes - Paciente: ${reportData.patient} - ${selectedPractice}`;
+      const displayTitle = reportData.includeTitle 
+        ? `INFORME DE ${selectedPractice}`.toUpperCase() 
+        : (reportData.customTitle || selectedPractice).toUpperCase();
+
+      const subject = `COAT Informes - Paciente: ${reportData.patient} - ${displayTitle}`;
       const bodyText = `
         <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
           <h2 style="color: #2563eb;">Nuevo Informe Clínico - COAT</h2>
@@ -379,7 +440,7 @@ const ReportsPage = () => {
           <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
           <ul style="list-style: none; padding: 0;">
             <li><strong>Paciente:</strong> ${reportData.patient}</li>
-            <li><strong>Estudio:</strong> ${selectedPractice}</li>
+            <li><strong>Estudio:</strong> ${displayTitle}</li>
             <li><strong>Fecha:</strong> ${reportData.date}</li>
             <li><strong>Profesional:</strong> ${professional?.nombre || 'Dr/a.'}</li>
           </ul>
@@ -399,7 +460,7 @@ const ReportsPage = () => {
           recipientEmails,
           subject,
           message: bodyText,
-          fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
+          fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
         })
       });
       saveToHistory();
@@ -411,6 +472,148 @@ const ReportsPage = () => {
       setIsSending(false);
     }
   };
+
+  const handleResendToPatient = async () => {
+    if (!reportData.patientEmail) {
+      showToast('El informe no cuenta con un email de paciente registrado.', 'error');
+      return;
+    }
+
+    if (!config.appsScriptUrl) {
+      showToast('Falta configurar el Webhook de Google Apps Script.', 'error');
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const pdfDoc = generatePDF('instance');
+      if (!pdfDoc) {
+        setIsSending(false);
+        return;
+      }
+      const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
+      const recipientEmails = [reportData.patientEmail];
+
+      const displayTitle = reportData.includeTitle 
+        ? `INFORME DE ${selectedPractice}`.toUpperCase() 
+        : (reportData.customTitle || selectedPractice).toUpperCase();
+
+      const subject = `REENVÍO: COAT Informes - Paciente: ${reportData.patient} - ${displayTitle}`;
+      const bodyText = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+          <h2 style="color: #2563eb;">Reenvío de Informe Clínico - COAT</h2>
+          <p>Estimado/a,</p>
+          <p>Se adjunta nuevamente el informe correspondiente al estudio realizado.</p>
+          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+          <ul style="list-style: none; padding: 0;">
+            <li><strong>Paciente:</strong> ${reportData.patient}</li>
+            <li><strong>Estudio:</strong> ${displayTitle}</li>
+            <li><strong>Fecha:</strong> ${reportData.date}</li>
+          </ul>
+        </div>
+      `;
+
+      const response = await fetch(config.appsScriptUrl, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: config.token,
+          pdfBase64,
+          recipientEmails,
+          subject,
+          message: bodyText,
+          fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
+        })
+      });
+
+      showToast('Informe reenviado exitosamente al paciente.');
+    } catch (err) {
+      console.error("Error al reenviar informe:", err);
+      showToast('Error al reenviar el informe.', 'error');
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  if (previewFlag === 'true') {
+    if (!previewUrl) {
+      return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-900 text-white gap-6">
+           <div className="relative">
+              <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 animate-pulse"></div>
+              <Loader2 className="animate-spin text-blue-500 relative" size={48} />
+           </div>
+           <div className="text-center">
+              <h2 className="text-2xl font-black uppercase tracking-widest">Generando Vista Previa</h2>
+              <p className="text-slate-400 mt-2 font-medium">Buscando datos históricos y renderizando PDF...</p>
+           </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="fixed inset-0 z-[9999] bg-slate-900 flex flex-col">
+        {/* Header de la Vista Previa exclusiva */}
+        <div className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm shrink-0">
+          <div className="flex items-center gap-4">
+            <h2 className="text-lg font-black tracking-tight text-slate-800">Vista Previa</h2>
+            <div className="h-6 w-[1px] bg-slate-200"></div>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{reportData.patient}</p>
+          </div>
+          
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => generatePDF('save')}
+              className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+            >
+              <Download size={16} />
+              Descargar
+            </button>
+            {reportData.patientEmail && (
+              <button 
+                disabled={isSending}
+                onClick={handleResendToPatient}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+              >
+                {isSending ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                Reenviar al Paciente
+              </button>
+            )}
+            <button 
+              onClick={() => generatePDF('print')}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+            >
+              <Printer size={16} />
+              Imprimir
+            </button>
+            <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+            <button 
+              onClick={() => {
+                URL.revokeObjectURL(previewUrl);
+                setPreviewUrl(null);
+                navigate('/history');
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95"
+            >
+              <X size={16} />
+              Cerrar
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-slate-800">
+          <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden">
+            <iframe 
+              src={previewUrl}
+              className="w-full h-full border-none"
+              title="PDF Preview"
+            />
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
@@ -450,18 +653,6 @@ const ReportsPage = () => {
                 <p className="text-xs text-gray-400">{isEditing ? 'Modificando informe guardado' : 'Complete los datos para generar el PDF protocolizado'}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] rounded-xl border border-main">
-              <Settings size={16} className="text-gray-400" />
-              <label className="text-[10px] font-bold uppercase cursor-pointer select-none flex items-center gap-2">
-                <input 
-                  type="checkbox" 
-                  checked={reportData.includeTitle}
-                  onChange={e => setReportData({...reportData, includeTitle: e.target.checked})}
-                  className="w-4 h-4 rounded border-main text-blue-600 outline-none"
-                />
-                Incluir título "Informe de..."
-              </label>
-            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -499,10 +690,11 @@ const ReportsPage = () => {
               <label className="text-xs font-bold uppercase opacity-60">DNI (Opcional)</label>
               <input 
                 type="text" 
+                inputMode="numeric"
                 className="input-field"
-                placeholder="Sin puntos"
+                placeholder="Solo números"
                 value={reportData.dni}
-                onChange={e => setReportData({...reportData, dni: e.target.value})}
+                onChange={e => setReportData({...reportData, dni: e.target.value.replace(/\D/g, '')})}
               />
             </div>
             <div className="space-y-1">
@@ -513,6 +705,29 @@ const ReportsPage = () => {
                 placeholder="Médico que solicita..."
                 value={reportData.requester}
                 onChange={e => setReportData({...reportData, requester: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">Motivo / Descripción (Opc)</label>
+              <input 
+                type="text" 
+                className="input-field"
+                placeholder="Ej: Control, Derivación..."
+                value={reportData.reason}
+                onChange={e => setReportData({...reportData, reason: e.target.value})}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">Email Paciente (Opc)</label>
+              <input 
+                type="email" 
+                className={`input-field ${reportData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reportData.patientEmail)) ? 'input-error' : ''}`}
+                placeholder="Para envío de copia por mail"
+                value={reportData.patientEmail}
+                onChange={e => setReportData({...reportData, patientEmail: e.target.value})}
               />
             </div>
           </div>
@@ -528,6 +743,23 @@ const ReportsPage = () => {
               {dbPractices.map(p => <option key={p.id} value={p.n} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.n}</option>)}
             </select>
           </div>
+
+          {!reportData.includeTitle && selectedPractice && (
+            <motion.div 
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="space-y-1"
+            >
+              <label className="text-xs font-bold uppercase opacity-60 text-amber-600">Título Personalizado del Informe</label>
+              <input 
+                type="text" 
+                className="input-field border-amber-200 focus:border-amber-400 bg-amber-50/20"
+                placeholder="Ej: INFORME DE..."
+                value={reportData.customTitle}
+                onChange={e => setReportData({...reportData, customTitle: e.target.value})}
+              />
+            </motion.div>
+          )}
 
           <div className="space-y-2">
             <div className="flex items-center justify-between ml-1 text-sm font-semibold">
@@ -571,17 +803,93 @@ const ReportsPage = () => {
                 </div>
               </button>
             
-            <button 
-              onClick={handleSendReport}
-              className="btn-primary flex items-center justify-center gap-2 px-10 py-4 shadow-lg shadow-blue-500/30 flex-1 md:flex-none"
-              disabled={isGenerating || isSending || !reportData.patient || !selectedPractice}
-            >
-              {isSending ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
-              {isSending ? 'Enviando...' : 'Enviar Informe'}
-            </button>
+              <button 
+                className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-blue-600 border border-blue-500 shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95 text-white disabled:opacity-50 disabled:scale-100"
+                onClick={handleSendReport}
+                disabled={isGenerating || isSending || !reportData.patient || !selectedPractice}
+              >
+                <div className="w-14 h-14 rounded-2xl bg-white/20 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                  {isSending ? <Loader2 size={28} className="animate-spin" /> : <Send size={28} />}
+                </div>
+                <div className="text-center">
+                  <span className="block font-bold">{isSending ? 'Enviando...' : 'Enviar Informe'}</span>
+                  <span className="text-[10px] text-white/60">Por email (Clínica + Copia)</span>
+                </div>
+              </button>
           </div>
         </div>
       )}
+
+      {/* Preview Overlay */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-900/95 flex flex-col"
+          >
+            {/* Overlay Header */}
+            <div className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm shrink-0">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-black tracking-tight text-slate-800">Vista Previa</h2>
+                <div className="h-6 w-[1px] bg-slate-200"></div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{reportData.patient}</p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={() => generatePDF('save')}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                >
+                  <Download size={16} />
+                  Descargar
+                </button>
+                {reportData.patientEmail && (
+                  <button 
+                    disabled={isSending}
+                    onClick={handleResendToPatient}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                  >
+                    {isSending ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                    Reenviar al Paciente
+                  </button>
+                )}
+                <button 
+                  onClick={() => generatePDF('print')}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                >
+                  <Printer size={16} />
+                  Imprimir
+                </button>
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <button 
+                  onClick={() => {
+                    URL.revokeObjectURL(previewUrl);
+                    setPreviewUrl(null);
+                    if (previewFlag || printFlag) navigate('/history');
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95"
+                >
+                  <X size={16} />
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-slate-800/50">
+              <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+                <iframe 
+                  src={previewUrl}
+                  className="w-full h-full border-none"
+                  title="PDF Preview"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Toast Notification Container */}
       <AnimatePresence>

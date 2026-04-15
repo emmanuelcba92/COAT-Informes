@@ -73,7 +73,7 @@ const AdminPage = () => {
   // State for Practices
   const [practices, setPractices] = useState([]);
   const [practiceSearch, setPracticeSearch] = useState('');
-  const [practiceForm, setPracticeForm] = useState({ c: '', n: '', b: '' });
+  const [practiceForm, setPracticeForm] = useState({ c: '', n: '', b: '', st: true });
   const [selectedPractice, setSelectedPractice] = useState(null);
 
   // State for Managing Professional Profile
@@ -238,7 +238,7 @@ const AdminPage = () => {
       } else {
         await addDoc(collection(db, 'practices'), practiceForm);
       }
-      setPracticeForm({ c: '', n: '', b: '' });
+      setPracticeForm({ c: '', n: '', b: '', st: true });
     } catch (err) {
       alert(err.message);
     }
@@ -246,7 +246,7 @@ const AdminPage = () => {
 
   const handleEditPractice = (p) => {
     setSelectedPractice(p);
-    setPracticeForm({ c: p.c, n: p.n, b: p.b });
+    setPracticeForm({ c: p.c, n: p.n, b: p.b, st: p.st !== undefined ? p.st : true });
   };
 
   const handleDeletePractice = async (id) => {
@@ -327,11 +327,20 @@ const AdminPage = () => {
     }
   };
 
-  const updateTargetHeader = (type, index, value) => {
-    const key = type === 'general' ? 'headerGeneral' : 'headerFibro';
+  const updateHeader = (key, i, value) => {
     const newHeader = [...targetProf[key]];
-    newHeader[index] = value;
+    newHeader[i] = value;
     setTargetProf({ ...targetProf, [key]: newHeader });
+  };
+
+  const handleSignatureUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      setTargetProf({ ...targetProf, signatureBase64: event.target.result });
+    };
+    reader.readAsDataURL(file);
   };
 
   const filteredUsers = users
@@ -467,9 +476,6 @@ const AdminPage = () => {
           </div>
         )}
 
-        {/* Similar cleanup for other tabs (practices, settings, maintenance) ... */}
-        {/* Keeping current functionality intact in the background while updating UI */}
-        
         {activeTab === 'practices' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">
@@ -491,6 +497,19 @@ const AdminPage = () => {
                     <label className="text-xs font-bold uppercase text-gray-400 ml-1">Informe Base (Template)</label>
                     <textarea rows="8" value={practiceForm.b} onChange={e => setPracticeForm({...practiceForm, b: e.target.value})} className="input-field p-4 resize-none" placeholder="Texto que aparecerá por defecto..." />
                   </div>
+
+                  <label className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 cursor-pointer group">
+                    <input 
+                      type="checkbox" 
+                      checked={practiceForm.st}
+                      onChange={e => setPracticeForm({...practiceForm, st: e.target.checked})}
+                      className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-bold text-blue-900">Incluir título "INFORME DE..."</span>
+                      <span className="text-[10px] text-blue-700/70">Si se desactiva, se podrá poner un título manual.</span>
+                    </div>
+                  </label>
                   <button onClick={handleSavePractice} className="btn-primary w-full py-4 mt-2 font-black uppercase tracking-widest text-xs">
                     {selectedPractice ? 'Actualizar Práctica' : 'Guardar Nueva Práctica'}
                   </button>
@@ -684,16 +703,42 @@ const AdminPage = () => {
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-black text-blue-500">Rol de Acceso</label>
                     <select 
+                      className="input-field" 
                       value={targetProf.role || 'médico'} 
                       onChange={e => setTargetProf({...targetProf, role: e.target.value})}
-                      className="input-field appearance-none cursor-pointer"
                     >
                       <option value="médico">Médico (Solo sus informes)</option>
-                      <option value="fonoaudiología">Fonoaudiología (Solo sus informes)</option>
-                      <option value="secretaría">Secretaría (Ve todo, no crea/edita)</option>
-                      <option value="admin">Administrador (Control Total)</option>
+                      <option value="médico_admin">Médico Admin (Acceso total)</option>
+                      <option value="secre">Secretaría (Carga datos)</option>
                     </select>
                   </div>
+                </div>
+
+                {/* Signature Section in Admin */}
+                <div className="space-y-4 pt-4 border-t border-main">
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Firma Digital (PNG)</label>
+                  <div className="flex items-center gap-6">
+                    <div className="w-40 h-24 bg-white rounded-xl border-2 border-dashed border-main flex items-center justify-center relative overflow-hidden group">
+                      {targetProf.signatureBase64 ? (
+                        <img src={targetProf.signatureBase64} alt="firma" className="max-w-full max-h-full object-contain" />
+                      ) : (
+                        <div className="text-gray-300 flex flex-col items-center">
+                          <Upload size={20} />
+                          <span className="text-[8px] font-bold">Subir PNG</span>
+                        </div>
+                      )}
+                      <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                    </div>
+                    {targetProf.signatureBase64 && (
+                      <button 
+                        onClick={() => setTargetProf({...targetProf, signatureBase64: null})}
+                        className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-red-100 transition-colors"
+                      >
+                        Eliminar Firma
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-gray-400 italic">Esta firma se utilizará para generar los reportes en PDF del profesional.</p>
                 </div>
 
                 {/* Headers */}
