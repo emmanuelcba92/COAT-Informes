@@ -530,6 +530,16 @@ const ReportsPage = () => {
       setIsSending(false);
     }
   };
+  const handleResendToPatient = async () => {
+    if (!reportData.patientEmail) {
+      showToast('El informe no cuenta con un email de paciente registrado.', 'error');
+      return;
+    }
+
+    if (!config.appsScriptUrl) {
+      showToast('Webhook de envío no configurado.', 'error');
+      return;
+    }
 
     const emailFooter = `
       <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
