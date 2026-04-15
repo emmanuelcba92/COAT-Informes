@@ -53,8 +53,13 @@
   }
 
   .glass {
-    @apply backdrop-blur-md border border-white/20;
     background-color: var(--bg-card);
+    @supports ((-webkit-backdrop-filter: blur(12px)) or (backdrop-filter: blur(12px))) {
+      -webkit-backdrop-filter: blur(12px);
+      backdrop-filter: blur(12px);
+      background-color: rgba(255, 255, 255, 0.7);
+    }
+    border: 1px solid var(--border-main);
   }
 
   .border-main {
@@ -87,9 +92,11 @@
 }
 
 .header {
-  @apply h-16 flex items-center justify-between px-8 border-b sticky top-0 z-40 backdrop-blur-md;
+  @apply h-16 flex items-center justify-between px-8 border-b sticky top-0 z-40;
   background-color: var(--bg-card);
   border-color: var(--border-main);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 .border-main {
