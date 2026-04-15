@@ -54,11 +54,6 @@
 
   .glass {
     background-color: var(--bg-card);
-    @supports ((-webkit-backdrop-filter: blur(12px)) or (backdrop-filter: blur(12px))) {
-      -webkit-backdrop-filter: blur(12px);
-      backdrop-filter: blur(12px);
-      background-color: rgba(255, 255, 255, 0.7);
-    }
     border: 1px solid var(--border-main);
   }
 
@@ -67,19 +62,19 @@
   }
 }
 
-/* Custom animations for the "WOW" effect */
+/* Simplified animations for better performance on old hardware */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .animate-fade-in {
-  animation: fadeIn 0.5s ease-out forwards;
+  animation: fadeIn 0.3s ease-out forwards;
 }
 
 /* Material Design 3 Navigation Rail custom styling */
 .nav-rail-item {
-  @apply flex flex-col items-center justify-center gap-1 p-3 cursor-pointer transition-all duration-300 rounded-2xl mx-2;
+  @apply flex flex-col items-center justify-center gap-1 p-3 cursor-pointer transition-colors duration-200 rounded-2xl mx-2;
 }
 
 .nav-rail-item.active {
@@ -95,8 +90,6 @@
   @apply h-16 flex items-center justify-between px-8 border-b sticky top-0 z-40;
   background-color: var(--bg-card);
   border-color: var(--border-main);
-  -webkit-backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
 }
 
 .border-main {

@@ -17,12 +17,19 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
 
-import LoginPage from './pages/LoginPage';
-import ReportsPage from './pages/ReportsPage';
-import ProfilePage from './pages/ProfilePage';
-import PracticesPage from './pages/PracticesPage';
-import AdminPage from './pages/AdminPage';
-import MyReportsPage from './pages/MyReportsPage';
+const LoginPage = React.lazy(() => import('./pages/LoginPage'));
+const ReportsPage = React.lazy(() => import('./pages/ReportsPage'));
+const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
+const PracticesPage = React.lazy(() => import('./pages/PracticesPage'));
+const AdminPage = React.lazy(() => import('./pages/AdminPage'));
+const MyReportsPage = React.lazy(() => import('./pages/MyReportsPage'));
+
+const PageLoader = () => (
+  <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
+    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+    <p className="text-sm font-bold opacity-40 uppercase tracking-widest">Cargando...</p>
+  </div>
+);
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
@@ -131,14 +138,16 @@ function App() {
   if (!currentUser) {
     return (
       <div className={`min-h-screen transition-all duration-500 ${isDarkMode ? 'dark bg-slate-950' : 'bg-blue-50'}`}>
-        <LoginPage 
-          onLogin={(user) => {
-            setCurrentUser(user);
-            navigate('/');
-          }} 
-          isDarkMode={isDarkMode} 
-          toggleTheme={toggleTheme} 
-        />
+        <React.Suspense fallback={<PageLoader />}>
+          <LoginPage 
+            onLogin={(user) => {
+              setCurrentUser(user);
+              navigate('/');
+            }} 
+            isDarkMode={isDarkMode} 
+            toggleTheme={toggleTheme} 
+          />
+        </React.Suspense>
       </div>
     );
   }
@@ -217,24 +226,26 @@ function App() {
           </div>
         </header>
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={location.pathname}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.3 }}
-            className="p-6 md:p-10"
-          >
-            <Routes>
-              <Route path="/" element={<ReportsPage />} />
-              <Route path="/history" element={<MyReportsPage user={currentUser} userProfile={userProfile} />} />
-              <Route path="/profile" element={<ProfilePage />} />
-              <Route path="/practices" element={<PracticesPage />} />
-              <Route path="/admin" element={<AdminPage />} />
-            </Routes>
-          </motion.div>
-        </AnimatePresence>
+        <React.Suspense fallback={<PageLoader />}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="p-6 md:p-10"
+            >
+              <Routes>
+                <Route path="/" element={<ReportsPage />} />
+                <Route path="/history" element={<MyReportsPage user={currentUser} userProfile={userProfile} />} />
+                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/practices" element={<PracticesPage />} />
+                <Route path="/admin" element={<AdminPage />} />
+              </Routes>
+            </motion.div>
+          </AnimatePresence>
+        </React.Suspense>
       </main>
     </div>
   );
