@@ -163,14 +163,16 @@ const AdminPage = () => {
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
+    const role = u.role || 'médico';
+    const isStaff = role === 'admin' || role === 'secre';
     return {
       nombre: (u.nombre || u.n || u.u || 'Sin nombre').toUpperCase().trim(),
       email: (u.email || u.e || u.u || '').toLowerCase().trim(),
-      especialidad: u.especialidad || u.esp || 'Otorrinolaringólogo',
-      mp: u.mp || u.m || '-',
-      me: u.me || '-',
+      especialidad: isStaff ? '' : (u.especialidad || u.esp || 'Otorrinolaringólogo'),
+      mp: isStaff ? '' : (u.mp || u.m || '-'),
+      me: isStaff ? '' : (u.me || '-'),
       id: u.id,
-      role: u.role || 'médico',
+      role: role,
       isOfficial: u.id.length === 28
     };
   };
@@ -438,8 +440,8 @@ const AdminPage = () => {
                         <td className="px-6 py-4">
                           <span className="text-xs font-medium text-[var(--text-sub)]">{user._std.especialidad}</span>
                           <div className="flex gap-2 mt-1">
-                            <span className="text-[9px] font-mono text-gray-400">MP: {user._std.mp}</span>
-                            <span className="text-[9px] font-mono text-gray-400">ME: {user._std.me}</span>
+                            {user._std.mp && <span className="text-[9px] font-mono text-gray-400">MP: {user._std.mp}</span>}
+                            {user._std.me && <span className="text-[9px] font-mono text-gray-400">ME: {user._std.me}</span>}
                           </div>
                         </td>
                         <td className="px-6 py-4">

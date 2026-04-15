@@ -365,11 +365,12 @@ const ReportsPage = () => {
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     
+    const isStaff = prof.role === 'admin' || prof.role === 'secre';
     const footerLines = [
-      prof.nombre || 'Profesional',
-      prof.especialidad || 'Especialista',
-      `MP: ${prof.mp || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
-    ];
+      prof.nombre || (isStaff ? 'Administración' : 'Profesional'),
+      isStaff ? '' : (prof.especialidad || 'Especialista'),
+      isStaff ? '' : `MP: ${prof.mp || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
+    ].filter(line => line !== '');
 
     footerLines.forEach((text, i) => {
       // Usamos bold para simular el efecto de sello "Arial Black"
