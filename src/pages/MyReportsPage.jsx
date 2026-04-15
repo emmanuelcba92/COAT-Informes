@@ -305,35 +305,96 @@ const MyReportsPage = ({ user, userProfile }) => {
             reader.onerror = error => reject(error);
           });
 
-          const recipientEmails = [config.adminEmail];
-          if (uploadData.patientEmail) recipientEmails.push(uploadData.patientEmail);
+          const displayTitle = (uploadData.reason || 'Informe Técnico').toUpperCase();
+          const subjectPaciente = `COAT Informes - Nuevo estudio disponible: ${uploadData.patientName.toUpperCase()}`;
+          
+          const emailFooter = `
+            <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+              <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+                <tr>
+                  <td style="vertical-align: top; width: 100px;">
+                    <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+                  </td>
+                  <td style="vertical-align: top; padding-left: 15px;">
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
+                    <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+                    <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+                    <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+                    <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+                  </td>
+                </tr>
+              </table>
+            </div>
+          `;
 
+          const bodyPaciente = `
+            <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+              <p>Estimado/a <strong>${uploadData.patientName.toUpperCase()}</strong>,</p>
+              <p>Esperamos que se encuentre bien.</p>
+              <p>Le informamos que ya está disponible el nuevo informe correspondiente a su reciente consulta en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+              
+              <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
+                <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+                  <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
+                  <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
+                  <li><strong>Fecha:</strong> ${uploadData.date}</li>
+                  <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
+                </ul>
+              </div>
+
+              <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros o consultarlo en su próxima visita.</p>
+              <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+              ${emailFooter}
+              <p style="font-size: 11px; color: #999; margin-top: 30px;">
+                Este es un mensaje automático, por favor no responda a esta dirección de correo.
+              </p>
+            </div>
+          `;
+
+          const bodyAdmin = `
+            <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+              <h2 style="color: #d32f2f;">Carga de Informe externo - COAT</h2>
+              <p>Se ha subido un nuevo archivo al historial.</p>
+              <hr/>
+              <ul>
+                <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
+                <li><strong>DNI:</strong> ${uploadData.patientDni || 'No informado'}</li>
+                <li><strong>Motivo/Estudio:</strong> ${displayTitle}</li>
+                <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
+              </ul>
+            </div>
+          `;
+
+          // Envío a Administración
           await fetch(config.appsScriptUrl, {
             method: 'POST',
             mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               token: config.token,
               pdfBase64: base64data,
-              recipientEmails,
-              subject: `COAT Informes - ${uploadData.reason.toUpperCase()}: ${uploadData.patientName}`,
-              message: `
-                <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-                  <h2 style="color: #2563eb;">${uploadData.reason.toUpperCase()} - COAT</h2>
-                  <p>Estimado/a,</p>
-                  <p>Se ha subido un nuevo informe técnico al historial.</p>
-                  <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-                  <ul style="list-style: none; padding: 0;">
-                    <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
-                    <li><strong>Establecimiento/Motivo:</strong> ${uploadData.reason || 'Externo'}</li>
-                    <li><strong>Fecha Doc:</strong> ${uploadData.date}</li>
-                    <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
-                  </ul>
-                </div>
-              `,
-              fileName: `${uploadData.patientName.replace(/\s/g, '_')}.pdf`
+              recipientEmails: [config.adminEmail],
+              subject: `[ADMIN SUBIDA] ${uploadData.patientName.toUpperCase()}`,
+              message: bodyAdmin,
+              fileName: `ADMIN_${uploadData.patientName.replace(/\s/g, '_')}.pdf`
             })
           });
+
+          // Envío al Paciente (si tiene email)
+          if (uploadData.patientEmail) {
+            await fetch(config.appsScriptUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              body: JSON.stringify({
+                token: config.token,
+                pdfBase64: base64data,
+                recipientEmails: [uploadData.patientEmail],
+                subject: subjectPaciente,
+                message: bodyPaciente,
+                fileName: `${uploadData.patientName.replace(/\s/g, '_')}.pdf`
+              })
+            });
+          }
         } catch (mailErr) {
           console.error("Error sending upload notification:", mailErr);
         }

@@ -425,42 +425,102 @@ const ReportsPage = () => {
         recipientEmails.push(reportData.patientEmail);
       }
 
-      const displayTitle = reportData.includeTitle 
-        ? `INFORME DE ${selectedPractice}`.toUpperCase() 
-        : (reportData.customTitle || selectedPractice).toUpperCase();
+      const displayTitle = (reportData.includeTitle 
+        ? `INFORME DE ${selectedPractice}` 
+        : (reportData.customTitle || selectedPractice)).toUpperCase();
 
-      const subject = `COAT Informes - Paciente: ${reportData.patient} - ${displayTitle}`;
-      const bodyText = `
-        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: #2563eb;">Nuevo Informe Clínico - COAT</h2>
-          <p>Estimado/a,</p>
-          <p>Se adjunta el informe correspondiente al estudio realizado en nuestro centro.</p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-          <ul style="list-style: none; padding: 0;">
-            <li><strong>Paciente:</strong> ${reportData.patient}</li>
-            <li><strong>Estudio:</strong> ${displayTitle}</li>
-            <li><strong>Fecha:</strong> ${reportData.date}</li>
-            <li><strong>Profesional:</strong> ${professional?.nombre || 'Dr/a.'}</li>
-          </ul>
-          <p style="font-size: 12px; color: #666; margin-top: 30px;">
-            Este es un envío automático desde el sistema de Informes COAT. Por favor, no responda a este correo.
+      const subjectPaciente = `COAT Informes - Nuevo estudio disponible: ${reportData.patient}`;
+      
+      const emailFooter = `
+        <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+            <tr>
+              <td style="vertical-align: top; width: 100px;">
+                <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+              </td>
+              <td style="vertical-align: top; padding-left: 15px;">
+                <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      const bodyPaciente = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+          <p>Estimado/a <strong>${reportData.patient}</strong>,</p>
+          <p>Esperamos que se encuentre bien.</p>
+          <p>Le informamos que ya está disponible el nuevo informe correspondiente a su reciente consulta en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+              <li><strong>Paciente:</strong> ${reportData.patient}</li>
+              <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
+              <li><strong>Fecha:</strong> ${reportData.date}</li>
+              <li><strong>Profesional Responsable:</strong> ${professional?.nombre || 'Dr/a.'}</li>
+            </ul>
+          </div>
+
+          <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros o consultarlo en su próxima visita.</p>
+          
+          <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+          
+          ${emailFooter}
+          
+          <p style="font-size: 11px; color: #999; margin-top: 30px;">
+            Este es un mensaje automático, por favor no responda a esta dirección de correo.
           </p>
         </div>
       `;
 
+      const bodyAdmin = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
+          <h2 style="color: #d32f2f;">Copia de Informe - Sistema COAT</h2>
+          <p>Se ha generado un nuevo informe técnico.</p>
+          <hr/>
+          <ul>
+            <li><strong>Paciente:</strong> ${reportData.patient}</li>
+            <li><strong>DNI:</strong> ${reportData.patientDni || 'No informado'}</li>
+            <li><strong>Estudio:</strong> ${displayTitle}</li>
+            <li><strong>Profesional:</strong> ${professional?.nombre || 'Dr/a.'}</li>
+          </ul>
+        </div>
+      `;
+
+      // Envío a Administración
       await fetch(config.appsScriptUrl, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: config.token,
           pdfBase64,
-          recipientEmails,
-          subject,
-          message: bodyText,
-          fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+          recipientEmails: [config.adminEmail],
+          subject: `[ADMIN] ${reportData.patient} - ${displayTitle}`,
+          message: bodyAdmin,
+          fileName: `ADMIN_${reportData.patient.replace(/\s/g, '_')}.pdf`
         })
       });
+
+      // Envío al Paciente (si tiene email)
+      if (reportData.patientEmail) {
+        await fetch(config.appsScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: JSON.stringify({
+            token: config.token,
+            pdfBase64,
+            recipientEmails: [reportData.patientEmail],
+            subject: subjectPaciente,
+            message: bodyPaciente,
+            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+          })
+        });
+      }
       saveToHistory();
       showToast('¡Informe enviado con éxito!');
     } catch (err) {
@@ -471,16 +531,37 @@ const ReportsPage = () => {
     }
   };
 
-  const handleResendToPatient = async () => {
-    if (!reportData.patientEmail) {
-      showToast('El informe no cuenta con un email de paciente registrado.', 'error');
-      return;
-    }
+    const emailFooter = `
+      <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+          <tr>
+            <td style="vertical-align: top; width: 100px;">
+              <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+            </td>
+            <td style="vertical-align: top; padding-left: 15px;">
+              <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
+              <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+              <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+              <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+              <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+            </td>
+          </tr>
+        </table>
+      </div>
+    `;
 
-    if (!config.appsScriptUrl) {
-      showToast('Falta configurar el Webhook de Google Apps Script.', 'error');
-      return;
-    }
+    const bodyPaciente = `
+      <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+        <p>Estimado/a <strong>${reportData.patient}</strong>,</p>
+        <p>Esperamos que se encuentre bien.</p>
+        <p>Le informamos que ya está disponible el reenvío del informe correspondiente a su consulta en COAT. Adjunto encontrará el documento PDF.</p>
+        <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+        ${emailFooter}
+        <p style="font-size: 11px; color: #999; margin-top: 30px;">
+          Este es un mensaje automático, por favor no responda a esta dirección de correo.
+        </p>
+      </div>
+    `;
 
     setIsSending(true);
     try {
@@ -490,37 +571,16 @@ const ReportsPage = () => {
         return;
       }
       const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
-      const recipientEmails = [reportData.patientEmail];
 
-      const displayTitle = reportData.includeTitle 
-        ? `INFORME DE ${selectedPractice}`.toUpperCase() 
-        : (reportData.customTitle || selectedPractice).toUpperCase();
-
-      const subject = `REENVÍO: COAT Informes - Paciente: ${reportData.patient} - ${displayTitle}`;
-      const bodyText = `
-        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: #2563eb;">Reenvío de Informe Clínico - COAT</h2>
-          <p>Estimado/a,</p>
-          <p>Se adjunta nuevamente el informe correspondiente al estudio realizado.</p>
-          <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-          <ul style="list-style: none; padding: 0;">
-            <li><strong>Paciente:</strong> ${reportData.patient}</li>
-            <li><strong>Estudio:</strong> ${displayTitle}</li>
-            <li><strong>Fecha:</strong> ${reportData.date}</li>
-          </ul>
-        </div>
-      `;
-
-      const response = await fetch(config.appsScriptUrl, {
+      await fetch(config.appsScriptUrl, {
         method: 'POST',
         mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           token: config.token,
           pdfBase64,
-          recipientEmails,
-          subject,
-          message: bodyText,
+          recipientEmails: [reportData.patientEmail],
+          subject: `COAT Informes - REENVÍO: ${reportData.patient}`,
+          message: bodyPaciente,
           fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
         })
       });
