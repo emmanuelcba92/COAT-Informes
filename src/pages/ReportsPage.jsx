@@ -372,11 +372,8 @@ const ReportsPage = () => {
     ];
 
     footerLines.forEach((text, i) => {
-      if (i === 1) {
-        doc.setFont("helvetica", "normal");
-      } else if (i === 2) {
-        doc.setFont("helvetica", "bold");
-      }
+      // Usamos bold para simular el efecto de sello "Arial Black"
+      doc.setFont("helvetica", "bold");
       doc.text(text, 160, currentY, { align: 'center' });
       currentY += (i === 0 ? 3.5 : 3);
     });

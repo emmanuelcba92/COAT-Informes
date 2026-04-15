@@ -211,8 +211,6 @@ function App() {
           >
             <LogOut size={20} />
           </button>
-          
-          <span className="text-[9px] text-gray-400 font-mono mt-2">v1.3.4</span>
         </div>
       </aside>
 
