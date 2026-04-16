@@ -24,7 +24,10 @@ import {
   FileText,
   BookOpen,
   User as UserIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  Database,
+  RefreshCw,
+  CheckCircle2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
@@ -793,15 +796,15 @@ const AdminPage = () => {
             </div>
 
             {/* Herramienta de Limpieza por Lotes */}
-            <div className="card p-10 bg-gradient-to-br from-slate-900 to-slate-950 border-slate-800 space-y-8">
+            <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-2xl font-black text-white">Limpieza Manual por Fecha</h3>
-                  <p className="text-slate-400 text-sm">Libere espacio eliminando informes o archivos antiguos.</p>
+                  <h3 className="text-2xl font-black">Limpieza Manual por Fecha</h3>
+                  <p className="text-gray-400 text-sm">Libere espacio eliminando informes o archivos antiguos.</p>
                 </div>
                 <button 
                   onClick={fetchStorageStats} 
-                  className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors"
+                  className="p-3 bg-blue-500/5 hover:bg-blue-500/10 rounded-full text-blue-500 transition-colors"
                   title="Recargar estadísticas"
                 >
                   <RefreshCw size={20} className={storageStats.loading ? 'animate-spin' : ''} />
@@ -813,49 +816,49 @@ const AdminPage = () => {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Fecha Inicio</label>
+                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Fecha Inicio</label>
                       <input 
                         type="date" 
                         value={cleanRange.start} 
                         onChange={e => setCleanRange({...cleanRange, start: e.target.value})}
-                        className="w-full bg-slate-800 border-slate-700 text-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                        className="input-field" 
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Fecha Fin</label>
+                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Fecha Fin</label>
                       <input 
                         type="date" 
                         value={cleanRange.end} 
                         onChange={e => setCleanRange({...cleanRange, end: e.target.value})}
-                        className="w-full bg-slate-800 border-slate-700 text-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                        className="input-field" 
                       />
                     </div>
                   </div>
 
                   <div className="space-y-4">
-                    <label className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+                    <label className="flex items-center gap-3 p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 cursor-pointer hover:bg-blue-500/10 transition-colors">
                       <input 
                         type="checkbox" 
                         checked={cleanOptions.pdfs} 
                         onChange={e => setCleanOptions({...cleanOptions, pdfs: e.target.checked})}
-                        className="w-5 h-5 rounded border-slate-600 text-blue-600"
+                        className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
                       />
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-white uppercase">Eliminar Archivos PDFs</span>
-                        <span className="text-[10px] text-slate-400">Libera espacio en Supabase pero mantiene el registro.</span>
+                        <span className="text-xs font-bold uppercase">Eliminar Archivos PDFs</span>
+                        <span className="text-[10px] text-gray-400">Libera espacio en Supabase pero mantiene el registro.</span>
                       </div>
                     </label>
 
-                    <label className="flex items-center gap-3 p-4 bg-red-500/5 rounded-2xl border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-colors">
+                    <label className="flex items-center gap-3 p-4 bg-red-500/5 rounded-2xl border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-colors group">
                       <input 
                         type="checkbox" 
                         checked={cleanOptions.records} 
                         onChange={e => setCleanOptions({...cleanOptions, records: e.target.checked})}
-                        className="w-5 h-5 rounded border-red-900/50 text-red-600"
+                        className="w-5 h-5 rounded border-red-200 text-red-600 focus:ring-red-500"
                       />
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-red-400 uppercase">Eliminar Registros de Base de Datos</span>
-                        <span className="text-[10px] text-red-500/70">CUIDADO: Borra el informe definitivamente del historial.</span>
+                        <span className="text-xs font-bold text-red-600 uppercase">Eliminar Registros de Base de Datos</span>
+                        <span className="text-[10px] text-red-400">CUIDADO: Borra el informe definitivamente del historial.</span>
                       </div>
                     </label>
                   </div>
@@ -863,36 +866,36 @@ const AdminPage = () => {
                   <button 
                     onClick={handleAnalyzeCleanup}
                     disabled={isCleaning}
-                    className="btn-primary w-full py-5 flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20"
+                    className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
                   >
-                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={22} />}
-                    <span className="font-black uppercase tracking-widest">Analizar Rango Seleccionado</span>
+                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={20} />}
+                    Analizar Rango Seleccionado
                   </button>
                 </div>
 
                 {/* Resultado de Simulación */}
-                <div className="bg-black/40 rounded-3xl border border-white/5 p-8 flex flex-col justify-center min-h-[300px]">
+                <div className="bg-slate-500/5 rounded-3xl border border-main p-8 flex flex-col justify-center min-h-[300px]">
                   {cleanSummary ? (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                       <div className="text-center">
                         <CheckCircle2 className="mx-auto text-green-500 mb-4" size={48} />
-                        <h4 className="text-xl font-bold text-white">Análisis Completo</h4>
+                        <h4 className="text-xl font-bold">Análisis Completo</h4>
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
-                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center">
-                          <p className="text-[10px] font-black text-slate-500 uppercase">Informes Totales</p>
-                          <p className="text-2xl font-black text-white">{cleanSummary.total}</p>
+                        <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main text-center">
+                          <p className="text-[10px] font-black text-gray-500 uppercase">Informes Totales</p>
+                          <p className="text-2xl font-black">{cleanSummary.total}</p>
                         </div>
-                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center font-bold">
-                          <p className="text-[10px] font-black text-slate-500 uppercase">Con Archivo Adjunto</p>
-                          <p className="text-2xl font-black text-blue-400">{cleanSummary.withFiles}</p>
+                        <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main text-center font-bold">
+                          <p className="text-[10px] font-black text-gray-500 uppercase">Con Archivo Adjunto</p>
+                          <p className="text-2xl font-black text-blue-500">{cleanSummary.withFiles}</p>
                         </div>
                       </div>
 
                       <div className="p-5 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-center">
-                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">Espacio a recuperar estimado</p>
-                        <p className="text-3xl font-black text-white">~ {cleanSummary.estimatedSize} MB</p>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">Espacio a recuperar estimado</p>
+                        <p className="text-3xl font-black text-blue-600">~ {cleanSummary.estimatedSize} MB</p>
                       </div>
 
                       <button 
@@ -906,7 +909,7 @@ const AdminPage = () => {
                       <p className="text-[10px] text-center text-red-500/50 uppercase font-black">Esta acción es permanente e irreversible</p>
                     </div>
                   ) : (
-                    <div className="text-center space-y-4 opacity-30">
+                    <div className="text-center space-y-4 opacity-30 text-gray-400">
                       <Search size={64} className="mx-auto" />
                       <div>
                         <p className="font-bold text-lg">Sin análisis activo</p>
