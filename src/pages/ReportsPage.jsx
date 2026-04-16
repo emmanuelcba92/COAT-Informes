@@ -307,39 +307,21 @@ const ReportsPage = () => {
     doc.setDrawColor(200);
     doc.line(10, currentY - 5, 200, currentY - 5);
 
-    // Patients Data
-    doc.setFontSize(10);
+    // Patients Data (Fixed 2-Line Header)
+    doc.setFontSize(9); // Correct size for readability and fit
     doc.setFont("helvetica", "normal");
     
-    // Logic to handle long patient names
-    const patientLabel = "PACIENTE: ";
-    const patientName = reportData.patient.toUpperCase();
-    const fullPatientText = patientLabel + patientName;
-    const patientWidth = doc.getTextWidth(fullPatientText);
+    // Line 1: PACIENTE and OBRA SOCIAL
+    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 10, currentY);
+    doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 115, currentY);
     
-    // We check if the name is too long for the first column (approx 65mm safe limit)
-    if (patientWidth > 60) {
-      // Split and wrap
-      const splitPatient = doc.splitTextToSize(fullPatientText, 180);
-      doc.text(splitPatient, 10, currentY);
-      currentY += (splitPatient.length * 5); // Move down based on wrapping
-      
-      // OBRA SOCIAL and DNI go on their own line
-      doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 10, currentY);
-      doc.text(`DNI: ${reportData.dni || "-"}`, 120, currentY);
-      currentY += 8; // Extra gap before next section
-    } else {
-      // Standard layout
-      doc.text(fullPatientText, 10, currentY);
-      doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 80, currentY);
-      doc.text(`DNI: ${reportData.dni || "-"}`, 150, currentY);
-      currentY += 8; 
-    }
+    currentY += 5.5; // Optimized line spacing
 
-    // Line 2: Fecha  Solicitante  Motivo
-    doc.text(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`, 10, currentY);
-    doc.text(`SOLICITANTE: ${(reportData.requester || "-").toUpperCase()}`, 80, currentY);
-    doc.text(`MOTIVO: ${(reportData.reason || "-").toUpperCase()}`, 150, currentY);
+    // Line 2: DNI, FECHA, SOLICITANTE, MOTIVO
+    doc.text(`DNI: ${reportData.dni || "-"}`, 10, currentY);
+    doc.text(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`, 45, currentY);
+    doc.text(`SOLICITANTE: ${(reportData.requester || "-").toUpperCase()}`, 90, currentY);
+    doc.text(`MOTIVO: ${(reportData.reason || "-").toUpperCase()}`, 165, currentY);
     
     currentY += 7;
 
