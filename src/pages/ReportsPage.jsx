@@ -299,7 +299,7 @@ const ReportsPage = () => {
         
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        doc.text(line.toUpperCase(), 115, headerY, { align: 'center' });
+        doc.text(line.toUpperCase(), 108, headerY, { align: 'center' });
         headerY += (fontSize / 2.8) + 0.8;
       } else {
         headerY += 4.5;
