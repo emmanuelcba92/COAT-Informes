@@ -287,6 +287,41 @@ const AdminPage = () => {
     }
   };
 
+  const handleCleanOrphans = async () => {
+    if (!window.confirm('¿Desea eliminar los archivos de Supabase que NO tienen un informe asociado en Firebase? (Archivos huérfanos)')) return;
+    setIsCleaning(true);
+    try {
+      // 1. Obtener todos los archivos de Supabase
+      const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
+      if (!files || files.length === 0) {
+        alert("No hay archivos en Supabase.");
+        return;
+      }
+
+      // 2. Obtener todos los storagePaths de Firebase
+      const fbSnap = await getDocs(collection(db, 'reports'));
+      const activePaths = new Set(fbSnap.docs.map(doc => doc.data().storagePath).filter(Boolean));
+
+      // 3. Identificar cuáles no están en Firebase
+      const orphanedPaths = files
+        .map(f => f.name)
+        .filter(name => !activePaths.has(name) && name !== '.emptyFolderPlaceholder');
+
+      if (orphanedPaths.length === 0) {
+        alert("No se encontraron archivos huérfanos.");
+      } else {
+        const { error } = await supabase.storage.from('informescoat').remove(orphanedPaths);
+        if (error) throw error;
+        alert(`Se eliminaron ${orphanedPaths.length} archivos huérfanos.`);
+      }
+      fetchStorageStats();
+    } catch (err) {
+      alert("Error limpiando huérfanos: " + err.message);
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const tabs = [
     { id: 'users', label: 'Gestión de Usuarios', icon: <Users size={20} /> },
     { id: 'practices', label: 'Gestión de Prácticas', icon: <Stethoscope size={20} /> },
@@ -921,18 +956,32 @@ const AdminPage = () => {
               </div>
             </div>
 
-            {/* Otras Acciones (Existing) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+            {/* Otras Acciones */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
               <div className="p-8 bg-blue-500/5 rounded-[2.5rem] border border-blue-500/20 space-y-4">
                 <ShieldCheck size={40} className="text-blue-500" />
-                <h4 className="text-lg font-bold text-white">Migración de IDs</h4>
+                <h4 className="text-lg font-bold">Migración de IDs</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">Convierte perfiles temporales basados en slugs de email a IDs definitivos de Firebase Auth.</p>
                 <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-blue-600/20">Ejecutar Migración</button>
+              </div>
+
+              <div className="p-8 bg-purple-500/5 rounded-[2.5rem] border border-purple-500/20 space-y-4">
+                <FileUp size={40} className="text-purple-500" />
+                <h4 className="text-lg font-bold">Limpiar Archivos Huérfanos</h4>
+                <p className="text-xs text-slate-400 leading-relaxed italic">Elimina archivos en Supabase que no tienen un informe asociado en la base de datos.</p>
+                <button 
+                  onClick={handleCleanOrphans}
+                  disabled={isCleaning}
+                  className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2"
+                >
+                  {isCleaning ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+                  Limpiar Almacenamiento
+                </button>
               </div>
               
               <div className="p-8 bg-red-500/5 rounded-[2.5rem] border border-red-500/20 space-y-4">
                 <Trash2 size={40} className="text-red-500" />
-                <h4 className="text-lg font-bold text-white">Nivela Base de Datos</h4>
+                <h4 className="text-lg font-bold">Nivela Base de Datos</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">Elimina todos los perfiles excepto el administrador. Útil para re-importaciones masivas.</p>
                 <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-red-600/20">Wipe All (Except Admin)</button>
               </div>
