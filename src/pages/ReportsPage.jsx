@@ -389,31 +389,32 @@ const ReportsPage = () => {
       try {
         let imageData = prof.signatureBase64;
         
-        // Si no es Base64 (es una URL de Supabase), tenemos que descargarla y REDIMENSIONARLA
-        if (imageData.startsWith('http')) {
-          try {
-            const response = await fetch(imageData);
-            const blob = await response.blob();
-            imageData = await new Promise((resolve) => {
-              const img = new Image();
-              img.crossOrigin = "Anonymous";
-              img.onload = () => {
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                // Redimensionar a un tamaño profesional razonable (max 600px de ancho)
-                const maxWidth = 600;
-                const scale = Math.min(1, maxWidth / img.width);
-                canvas.width = img.width * scale;
-                canvas.height = img.height * scale;
-                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                resolve(canvas.toDataURL('image/png', 0.8)); // 0.8 quality
-              };
-              img.src = URL.createObjectURL(blob);
-            });
-          } catch (err) {
-            console.error("Error downloading/resizing signature:", err);
-            // Fallback to original URL if possible, or skip
-          }
+        // Procesar imagen (sea URL o Base64 antigua) para asegurar que esté redimensionada y optimizada
+        try {
+          imageData = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = () => {
+              const canvas = document.createElement('canvas');
+              const ctx = canvas.getContext('2d');
+              // Redimensionar a un tamaño profesional razonable (max 600px de ancho)
+              const maxWidth = 600;
+              const scale = Math.min(1, maxWidth / img.width);
+              canvas.width = img.width * scale;
+              canvas.height = img.height * scale;
+              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+              resolve(canvas.toDataURL('image/png', 0.8));
+            };
+            img.onerror = () => reject(new Error("Error al cargar imagen para redimensionar"));
+            
+            // Si es una URL de Supabase, la descargamos primero para evitar problemas de CORS/Blobs
+            // Pero Image() con crossOrigin suele manejar URLs directas si el bucket tiene CORS configurado.
+            // Para mayor seguridad con el flujo de jsPDF, usamos la URL o el Base64 directamente.
+            img.src = imageData;
+          });
+        } catch (err) {
+          console.error("Error optimizing signature image:", err);
+          // Si falla el redimensionamiento, intentamos usar la original como fallback
         }
 
         doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'FAST');
