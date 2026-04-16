@@ -283,7 +283,7 @@ const ReportsPage = () => {
     // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'FAST');
+      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'NONE');
     } catch (e) {
       console.error("Logo error:", e);
     }
@@ -390,7 +390,7 @@ const ReportsPage = () => {
           });
         }
 
-        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'FAST');
+        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'NONE');
         currentY += 15;
       } catch (e) {
         console.error("Error signature:", e);
