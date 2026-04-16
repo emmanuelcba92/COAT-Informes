@@ -61,7 +61,7 @@ const ReportsPage = () => {
   };
 
   // Guardar en el historial corregido para manejar EDICIÓN
-  const saveToHistory = async (pdfUrl = null) => {
+  const saveToHistory = async (pdfUrl = null, shouldNavigate = false) => {
     if (!auth.currentUser || !reportData.patient) return;
     try {
       const data = {
@@ -86,10 +86,12 @@ const ReportsPage = () => {
         data.fechaCreatedAt = new Date().toISOString();
         await addDoc(collection(db, 'reports'), data);
       } else {
-        const { setDoc, doc } = await import('firebase/firestore');
-        await setDoc(doc(db, 'reports', editId), data, { merge: true });
-        showToast("¡Informe actualizado correctamente!");
-        setTimeout(() => navigate('/history'), 1500);
+        const { setDoc, doc: fireDoc } = await import('firebase/firestore');
+        await setDoc(fireDoc(db, 'reports', editId), data, { merge: true });
+        if (shouldNavigate) {
+          showToast("¡Informe actualizado correctamente!");
+          setTimeout(() => navigate('/history'), 1500);
+        }
       }
     } catch (err) {
       console.error("Error saving history:", err);
@@ -258,6 +260,7 @@ const ReportsPage = () => {
       return null;
     }
 
+    setIsGenerating(true);
     // 0. Preparation
     const doc = new jsPDF();
     
@@ -403,10 +406,10 @@ const ReportsPage = () => {
     if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
       window.open(pdfUrl, '_blank');
-      saveToHistory();
+      saveToHistory(null, false);
     } else if (mode === 'save') {
       doc.save(`Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`);
-      saveToHistory();
+      saveToHistory(null, true);
     } else if (mode === 'blob') {
       setIsGenerating(false);
       return doc.output('blob');
@@ -519,42 +522,55 @@ const ReportsPage = () => {
         </div>
       `;
 
-      // Envío a Administración
-      await fetch(config.appsScriptUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({
-          token: config.token,
-          pdfBase64,
-          recipientEmails: [config.adminEmail],
-          subject: `[ADMIN] ${reportData.patient} - ${displayTitle}`,
-          message: bodyAdmin,
-          fileName: `ADMIN_${reportData.patient.replace(/\s/g, '_')}.pdf`
-        })
-      });
+      // Preparar ejecuciones en paralelo para no bloquear el UI
+      const emailPromises = [];
 
-      // Envío al Paciente (si tiene email)
-      if (reportData.patientEmail) {
-        await fetch(config.appsScriptUrl, {
+      // Envío a Administración
+      emailPromises.push(
+        fetch(config.appsScriptUrl, {
           method: 'POST',
           mode: 'no-cors',
           body: JSON.stringify({
             token: config.token,
             pdfBase64,
-            recipientEmails: [reportData.patientEmail],
-            subject: subjectPaciente,
-            message: bodyPaciente,
-            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+            recipientEmails: [config.adminEmail],
+            subject: `[ADMIN] ${reportData.patient} - ${displayTitle}`,
+            message: bodyAdmin,
+            fileName: `ADMIN_${reportData.patient.replace(/\s/g, '_')}.pdf`
           })
-        });
+        })
+      );
+
+      // Envío al Paciente (si tiene email)
+      if (reportData.patientEmail) {
+        emailPromises.push(
+          fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              recipientEmails: [reportData.patientEmail],
+              subject: subjectPaciente,
+              message: bodyPaciente,
+              fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+            })
+          })
+        );
       }
-      saveToHistory();
+
+      await Promise.all(emailPromises);
+      
+      // Guardamos en el historial (sin navegar fuera si estamos enviando)
+      await saveToHistory(null, false);
+      
       showToast('¡Informe enviado con éxito!');
     } catch (err) {
-      console.error(err);
-      showToast('Error al enviar el informe técnico.', 'error');
+      console.error("Error en handleSendReport:", err);
+      showToast('Error al procesar el envío.', 'error');
     } finally {
       setIsSending(false);
+      setIsGenerating(false);
     }
   };
   const handleResendToPatient = async () => {
