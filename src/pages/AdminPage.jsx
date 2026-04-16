@@ -44,8 +44,17 @@ import {
   getDoc,
   getDocs,
   where,
-  limit
+  limit,
+  getCountFromServer,
+  writeBatch
 } from 'firebase/firestore';
+import { createClient } from '@supabase/supabase-js';
+
+// Inicializar Supabase para gestión de archivos
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -106,10 +115,8 @@ const AdminPage = () => {
     const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       
-      // Deduplicate by email/user to avoid double entries during migration
       const uniqueUsers = {};
       list.forEach(u => {
-        // Try to find a common identifier (email or username)
         const email = (u.email || u.e || (typeof u.id === 'string' && u.id.includes('@') ? u.id : '')).toLowerCase().trim();
         const username = (u.u || '').toLowerCase().trim();
         const key = email || username || u.id;
@@ -123,19 +130,19 @@ const AdminPage = () => {
           const currentHasName = !!(u.nombre || u.n);
           const existingHasName = !!(existing.nombre || existing.n);
           
-          // Prioritize record with name
           if (currentHasName && !existingHasName) {
             uniqueUsers[key] = u;
           } 
-          // If both have name or both don't, prioritize Official (UID length 28)
-          else if (currentHasName === existingHasName && u.id.length === 28) {
+          if (u.id.length === 28 && existing.id.length !== 28) {
             uniqueUsers[key] = u;
           }
         }
       });
-      setUsers(Object.values(uniqueUsers).filter(u => u.nombre || u.n || u.email || u.e || u.u));
+      setUsers(Object.values(uniqueUsers));
       setLoading(false);
     });
+
+    fetchStorageStats();
 
     // Sync Settings
     const unsubscribeSettings = onSnapshot(doc(db, 'config', 'settings'), (docSnap) => {
@@ -153,6 +160,129 @@ const AdminPage = () => {
       unsubscribeSettings();
     };
   }, []);
+
+  // ESTADOS PARA MANTENIMIENTO Y ALMACENAMIENTO
+  const [storageStats, setStorageStats] = useState({ 
+    fbCount: 0, 
+    sbCount: 0, 
+    sbSize: 0, 
+    loading: true 
+  });
+  const [cleanRange, setCleanRange] = useState({ start: '', end: '' });
+  const [cleanOptions, setCleanOptions] = useState({ pdfs: true, records: false });
+  const [isCleaning, setIsCleaning] = useState(false);
+  const [cleanSummary, setCleanSummary] = useState(null);
+
+  const fetchStorageStats = async () => {
+    setStorageStats(prev => ({ ...prev, loading: true }));
+    try {
+      const fbSnap = await getCountFromServer(collection(db, 'reports'));
+      const fbCount = fbSnap.data().count;
+
+      const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
+      
+      let sbSize = 0;
+      let sbCount = 0;
+      if (files) {
+        sbCount = files.length;
+        sbSize = files.reduce((acc, file) => acc + (file.metadata?.size || 0), 0);
+      }
+
+      setStorageStats({
+        fbCount,
+        sbCount,
+        sbSize: (sbSize / (1024 * 1024)).toFixed(2), 
+        loading: false
+      });
+    } catch (err) {
+      console.error("Error fetching stats:", err);
+      setStorageStats(prev => ({ ...prev, loading: false }));
+    }
+  };
+
+  const handleAnalyzeCleanup = async () => {
+    if (!cleanRange.start || !cleanRange.end) {
+      alert("Por favor seleccione un rango de fechas válido.");
+      return;
+    }
+    setIsCleaning(true);
+    setCleanSummary(null);
+
+    try {
+      const q = query(
+        collection(db, 'reports'),
+        where('fecha', '>=', cleanRange.start),
+        where('fecha', '<=', cleanRange.end)
+      );
+
+      const snap = await getDocs(q);
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const withFiles = docs.filter(d => d.storagePath || d.pdfUrl?.includes('supabase'));
+      
+      setCleanSummary({
+        total: docs.length,
+        withFiles: withFiles.length,
+        estimatedSize: (withFiles.length * 0.5).toFixed(1),
+        docs: docs
+      });
+    } catch (err) {
+      console.error("Error analyzing:", err);
+      alert("Error al analizar los datos.");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
+  const handleExecuteCleanup = async () => {
+    if (!cleanSummary) return;
+    if (!window.confirm(`¿ESTÁ SEGURO? Esta acción es irreversible.\nSe eliminarán ${cleanOptions.records ? 'REGISTROS Y ARCHIVOS' : 'SOLO ARCHIVOS'} de ${cleanSummary.total} informes.`)) return;
+
+    setIsCleaning(true);
+    try {
+      let filesDeleted = 0;
+      let recordsDeleted = 0;
+
+      if (cleanOptions.pdfs) {
+        for (const docData of cleanSummary.docs) {
+          const path = docData.storagePath;
+          if (path) {
+            const { error } = await supabase.storage.from('informescoat').remove([path]);
+            if (!error) filesDeleted++;
+          }
+        }
+      }
+
+      if (cleanOptions.records) {
+        const batch = writeBatch(db);
+        cleanSummary.docs.forEach(d => {
+          batch.delete(doc(db, 'reports', d.id));
+          recordsDeleted++;
+        });
+        await batch.commit();
+      } else if (cleanOptions.pdfs) {
+        const batch = writeBatch(db);
+        cleanSummary.docs.forEach(d => {
+          if (d.storagePath) {
+            batch.update(doc(db, 'reports', d.id), { 
+              pdfUrl: null, 
+              storagePath: null,
+              notaMantenimiento: `Archivo eliminado por limpieza el ${new Date().toLocaleDateString()}` 
+            });
+          }
+        });
+        await batch.commit();
+      }
+
+      alert(`Limpieza completada:\n- Archivos borrados: ${filesDeleted}\n- Registros borrados: ${recordsDeleted}`);
+      setCleanSummary(null);
+      fetchStorageStats();
+    } catch (err) {
+      console.error("Error in cleanup:", err);
+      alert("Ocurrió un error parcial durante la limpieza.");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   const tabs = [
     { id: 'users', label: 'Gestión de Usuarios', icon: <Users size={20} /> },
@@ -627,21 +757,177 @@ const AdminPage = () => {
         )}
 
         {activeTab === 'maintenance' && (
-          <div className="card p-10 space-y-8 max-w-4xl mx-auto bg-gradient-to-br from-slate-900 to-slate-950 border-slate-800">
-            <div className="text-center space-y-2">
-              <h3 className="text-2xl font-black text-white">Herramientas de Mantenimiento</h3>
-              <p className="text-slate-400">Acciones críticas de base de datos y migración</p>
+          <div className="space-y-8 max-w-5xl mx-auto">
+            {/* Monitor de Almacenamiento */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
+                <Database className="text-blue-500 mb-2" size={32} />
+                <h4 className="text-[10px] font-black uppercase text-gray-400">Firebase (Base de Datos)</h4>
+                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                  <>
+                    <span className="text-3xl font-black">{storageStats.fbCount}</span>
+                    <span className="text-[10px] text-gray-500 italic">Documentos de texto registrados</span>
+                  </>
+                )}
+              </div>
+              <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
+                <FileUp className="text-purple-500 mb-2" size={32} />
+                <h4 className="text-[10px] font-black uppercase text-gray-400">Supabase (Archivos)</h4>
+                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                  <>
+                    <span className="text-3xl font-black">{storageStats.sbCount}</span>
+                    <span className="text-[10px] text-gray-500 italic">Archivos almacenados (PDFs externos)</span>
+                  </>
+                )}
+              </div>
+              <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
+                <Trash2 className="text-orange-500 mb-2" size={32} />
+                <h4 className="text-[10px] font-black uppercase text-gray-400">Espacio Ocupado (Files)</h4>
+                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                  <>
+                    <span className="text-3xl font-black text-orange-500">{storageStats.sbSize} MB</span>
+                    <span className="text-[10px] text-gray-500 italic">De 1024 MB disponibles (Tier Free)</span>
+                  </>
+                )}
+              </div>
             </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="p-8 bg-blue-500/5 rounded-[2rem] border border-blue-500/20 space-y-4">
+
+            {/* Herramienta de Limpieza por Lotes */}
+            <div className="card p-10 bg-gradient-to-br from-slate-900 to-slate-950 border-slate-800 space-y-8">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black text-white">Limpieza Manual por Fecha</h3>
+                  <p className="text-slate-400 text-sm">Libere espacio eliminando informes o archivos antiguos.</p>
+                </div>
+                <button 
+                  onClick={fetchStorageStats} 
+                  className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-white transition-colors"
+                  title="Recargar estadísticas"
+                >
+                  <RefreshCw size={20} className={storageStats.loading ? 'animate-spin' : ''} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+                {/* Selector de Rango */}
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Fecha Inicio</label>
+                      <input 
+                        type="date" 
+                        value={cleanRange.start} 
+                        onChange={e => setCleanRange({...cleanRange, start: e.target.value})}
+                        className="w-full bg-slate-800 border-slate-700 text-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase text-slate-500 ml-1">Fecha Fin</label>
+                      <input 
+                        type="date" 
+                        value={cleanRange.end} 
+                        onChange={e => setCleanRange({...cleanRange, end: e.target.value})}
+                        className="w-full bg-slate-800 border-slate-700 text-white rounded-xl p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <label className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={cleanOptions.pdfs} 
+                        onChange={e => setCleanOptions({...cleanOptions, pdfs: e.target.checked})}
+                        className="w-5 h-5 rounded border-slate-600 text-blue-600"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-white uppercase">Eliminar Archivos PDFs</span>
+                        <span className="text-[10px] text-slate-400">Libera espacio en Supabase pero mantiene el registro.</span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-4 bg-red-500/5 rounded-2xl border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-colors">
+                      <input 
+                        type="checkbox" 
+                        checked={cleanOptions.records} 
+                        onChange={e => setCleanOptions({...cleanOptions, records: e.target.checked})}
+                        className="w-5 h-5 rounded border-red-900/50 text-red-600"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-xs font-bold text-red-400 uppercase">Eliminar Registros de Base de Datos</span>
+                        <span className="text-[10px] text-red-500/70">CUIDADO: Borra el informe definitivamente del historial.</span>
+                      </div>
+                    </label>
+                  </div>
+
+                  <button 
+                    onClick={handleAnalyzeCleanup}
+                    disabled={isCleaning}
+                    className="btn-primary w-full py-5 flex items-center justify-center gap-3 shadow-xl shadow-blue-500/20"
+                  >
+                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={22} />}
+                    <span className="font-black uppercase tracking-widest">Analizar Rango Seleccionado</span>
+                  </button>
+                </div>
+
+                {/* Resultado de Simulación */}
+                <div className="bg-black/40 rounded-3xl border border-white/5 p-8 flex flex-col justify-center min-h-[300px]">
+                  {cleanSummary ? (
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
+                      <div className="text-center">
+                        <CheckCircle2 className="mx-auto text-green-500 mb-4" size={48} />
+                        <h4 className="text-xl font-bold text-white">Análisis Completo</h4>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center">
+                          <p className="text-[10px] font-black text-slate-500 uppercase">Informes Totales</p>
+                          <p className="text-2xl font-black text-white">{cleanSummary.total}</p>
+                        </div>
+                        <div className="p-4 bg-white/5 rounded-2xl border border-white/10 text-center font-bold">
+                          <p className="text-[10px] font-black text-slate-500 uppercase">Con Archivo Adjunto</p>
+                          <p className="text-2xl font-black text-blue-400">{cleanSummary.withFiles}</p>
+                        </div>
+                      </div>
+
+                      <div className="p-5 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-center">
+                        <p className="text-[10px] font-black text-blue-400 uppercase tracking-tighter">Espacio a recuperar estimado</p>
+                        <p className="text-3xl font-black text-white">~ {cleanSummary.estimatedSize} MB</p>
+                      </div>
+
+                      <button 
+                        onClick={handleExecuteCleanup}
+                        disabled={isCleaning}
+                        className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black rounded-[1.5rem] transition-all shadow-xl shadow-red-600/30 flex items-center justify-center gap-3 uppercase tracking-widest"
+                      >
+                        {isCleaning ? <Loader2 className="animate-spin" size={20} /> : <Trash2 size={20} />}
+                        Confirmar y Ejecutar Limpieza
+                      </button>
+                      <p className="text-[10px] text-center text-red-500/50 uppercase font-black">Esta acción es permanente e irreversible</p>
+                    </div>
+                  ) : (
+                    <div className="text-center space-y-4 opacity-30">
+                      <Search size={64} className="mx-auto" />
+                      <div>
+                        <p className="font-bold text-lg">Sin análisis activo</p>
+                        <p className="text-xs">Seleccione un rango y presione "Analizar" para ver qué se liberará.</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Otras Acciones (Existing) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+              <div className="p-8 bg-blue-500/5 rounded-[2.5rem] border border-blue-500/20 space-y-4">
                 <ShieldCheck size={40} className="text-blue-500" />
                 <h4 className="text-lg font-bold text-white">Migración de IDs</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">Convierte perfiles temporales basados en slugs de email a IDs definitivos de Firebase Auth.</p>
                 <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-blue-600/20">Ejecutar Migración</button>
               </div>
               
-              <div className="p-8 bg-red-500/5 rounded-[2rem] border border-red-500/20 space-y-4">
+              <div className="p-8 bg-red-500/5 rounded-[2.5rem] border border-red-500/20 space-y-4">
                 <Trash2 size={40} className="text-red-500" />
                 <h4 className="text-lg font-bold text-white">Nivela Base de Datos</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">Elimina todos los perfiles excepto el administrador. Útil para re-importaciones masivas.</p>
