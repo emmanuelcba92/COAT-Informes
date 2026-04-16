@@ -94,6 +94,7 @@ const AdminPage = () => {
   const [isProfSaving, setIsProfSaving] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState('general'); // 'general' or 'fibro'
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false);
   
   // State for Managing Professional MODELS (Personal Practices)
   const [isModelsModalOpen, setIsModelsModalOpen] = useState(false);
@@ -520,12 +521,41 @@ const AdminPage = () => {
 
   const handleSignatureUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setTargetProf({ ...targetProf, signatureBase64: event.target.result });
-    };
-    reader.readAsDataURL(file);
+    if (!file || !targetProf) return;
+
+    if (!file.type.startsWith('image/')) {
+        alert('Por favor, selecciona una imagen válida.');
+        return;
+    }
+
+    setIsUploadingSignature(true);
+    try {
+      const uid = targetProf.id || targetProf.uid; // targetProf has id or uid
+      if (!uid) throw new Error("ID de profesional no encontrado");
+      
+      const fileExt = file.name.split('.').pop();
+      const fileName = `firmas/${uid}_${Date.now()}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('informescoat')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (error) throw error;
+
+      const { data: { publicUrl } } = supabase.storage
+        .from('informescoat')
+        .getPublicUrl(fileName);
+
+      setTargetProf({ ...targetProf, signatureBase64: publicUrl });
+    } catch (err) {
+      console.error('Error uploading signature (admin):', err);
+      alert('Error cargando firma: ' + err.message);
+    } finally {
+      setIsUploadingSignature(false);
+    }
   };
 
   const filteredUsers = users
@@ -1074,7 +1104,12 @@ const AdminPage = () => {
                   <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Firma Digital (PNG)</label>
                   <div className="flex items-center gap-6">
                     <div className="w-40 h-24 bg-white rounded-xl border-2 border-dashed border-main flex items-center justify-center relative overflow-hidden group">
-                      {targetProf.signatureBase64 ? (
+                      {isUploadingSignature ? (
+                        <div className="flex flex-col items-center gap-1 text-blue-500">
+                           <Loader2 size={24} className="animate-spin" />
+                           <span className="text-[8px] font-bold uppercase">Subiendo</span>
+                        </div>
+                      ) : targetProf.signatureBase64 ? (
                         <img src={targetProf.signatureBase64} alt="firma" className="max-w-full max-h-full object-contain" />
                       ) : (
                         <div className="text-gray-300 flex flex-col items-center">
@@ -1082,7 +1117,9 @@ const AdminPage = () => {
                           <span className="text-[8px] font-bold">Subir PNG</span>
                         </div>
                       )}
-                      <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                      {!isUploadingSignature && (
+                        <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                      )}
                     </div>
                     {targetProf.signatureBase64 && (
                       <button 

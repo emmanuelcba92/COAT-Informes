@@ -388,9 +388,9 @@ const MyReportsPage = ({ user, userProfile }) => {
               token: config.token,
               pdfBase64: base64data,
               recipientEmails: [config.adminEmail],
-              subject: `[ADMIN SUBIDA] ${uploadData.patientName.toUpperCase()}`,
+              subject: `${uploadData.patientName.toUpperCase()}`,
               message: bodyAdmin,
-              fileName: `ADMIN_${uploadData.patientName.replace(/\s/g, '_')}.pdf`
+              fileName: `${uploadData.patientName.replace(/\s/g, '_')}.pdf`
             })
           });
 

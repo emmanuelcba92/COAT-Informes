@@ -214,9 +214,9 @@ const ReportsPage = () => {
 
     if ((printFlag === 'true' || previewFlag === 'true') && isEditing) {
       // Damos un pequeño respiro para asegurar que los estados se hayan seteado
-      const timer = setTimeout(() => {
+      const timer = setTimeout(async () => {
         // Generamos aunque falten cosas, la función generatePDF ya tiene fallbacks
-        const blob = generatePDF('blob');
+        const blob = await generatePDF('blob');
         if (blob) {
           const url = URL.createObjectURL(blob);
           setPreviewUrl(url);
@@ -254,7 +254,7 @@ const ReportsPage = () => {
     }
   };
 
-  const generatePDF = (mode = 'print') => {
+  const generatePDF = async (mode = 'print') => {
     if (!reportData.patient || !reportData.date) {
       showToast('Complete los campos obligatorios: Paciente y Fecha.', 'error');
       return null;
@@ -262,7 +262,7 @@ const ReportsPage = () => {
 
     setIsGenerating(true);
     // 0. Preparation
-    const doc = new jsPDF();
+    const doc = new jsPDF({ compress: true });
     
     // Helper to clean HTML for PDF
     const cleanHtmlForPDF = (html) => {
@@ -283,7 +283,7 @@ const ReportsPage = () => {
     // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16);
+      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'FAST');
     } catch (e) {
       console.error("Logo error:", e);
     }
@@ -377,7 +377,20 @@ const ReportsPage = () => {
 
     if (prof.signatureBase64) {
       try {
-        doc.addImage(prof.signatureBase64, 'PNG', 140, currentY, 35, 12);
+        let imageData = prof.signatureBase64;
+        
+        // Si no es Base64 (es una URL de Supabase), tenemos que descargarla
+        if (imageData.startsWith('http')) {
+          const response = await fetch(imageData);
+          const blob = await response.blob();
+          imageData = await new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.readAsDataURL(blob);
+          });
+        }
+
+        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'FAST');
         currentY += 15;
       } catch (e) {
         console.error("Error signature:", e);
@@ -437,7 +450,7 @@ const ReportsPage = () => {
 
     setIsSending(true);
     try {
-      const pdfDoc = generatePDF('instance');
+      const pdfDoc = await generatePDF('instance');
       if (!pdfDoc) {
         setIsSending(false);
         return;
@@ -542,9 +555,9 @@ const ReportsPage = () => {
             token: config.token,
             pdfBase64,
             recipientEmails: [config.adminEmail],
-            subject: `[ADMIN] ${reportData.patient} - ${displayTitle}`,
+            subject: `${reportData.patient} - ${displayTitle}`,
             message: bodyAdmin,
-            fileName: `ADMIN_${reportData.patient.replace(/\s/g, '_')}.pdf`
+            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
           })
         })
       );
@@ -920,7 +933,7 @@ const ReportsPage = () => {
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-main">
               <button 
                 className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-blue-500/50 hover:bg-blue-50 transition-all active:scale-95"
-                onClick={() => generatePDF('print')}
+                onClick={async () => await generatePDF('print')}
               >
                 <div className="w-14 h-14 rounded-2xl bg-amber-500/10 text-amber-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <Printer size={28} />
@@ -933,7 +946,7 @@ const ReportsPage = () => {
 
               <button 
                 className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-emerald-500/50 hover:bg-emerald-50 transition-all active:scale-95"
-                onClick={() => generatePDF('save')}
+                onClick={async () => await generatePDF('save')}
               >
                 <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 flex items-center justify-center group-hover:scale-110 transition-transform">
                   <CheckCircle size={28} />
@@ -980,7 +993,7 @@ const ReportsPage = () => {
               
               <div className="flex items-center gap-3">
                 <button 
-                  onClick={() => generatePDF('save')}
+                  onClick={async () => await generatePDF('save')}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
                 >
                   <Download size={16} />
@@ -997,7 +1010,7 @@ const ReportsPage = () => {
                   </button>
                 )}
                 <button 
-                  onClick={() => generatePDF('print')}
+                  onClick={async () => await generatePDF('print')}
                   className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-blue-500/20"
                 >
                   <Printer size={16} />

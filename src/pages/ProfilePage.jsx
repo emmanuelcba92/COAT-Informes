@@ -22,9 +22,16 @@ import {
   Loader2,
   Search
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, limit, deleteDoc } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
+
+// Inicializar Supabase
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
@@ -41,6 +48,7 @@ const ProfilePage = () => {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewType, setPreviewType] = useState('general'); 
   const [isSaving, setIsSaving] = useState(false);
+  const [isUploadingSignature, setIsUploadingSignature] = useState(false);
   
   // Password Change State
   const [showPassModal, setShowPassModal] = useState(false);
@@ -59,6 +67,10 @@ const ProfilePage = () => {
         return;
       }
       
+      const timeout = setTimeout(() => {
+        setIsLoading(false);
+      }, 5000);
+
       try {
         const uid = user.uid;
         const email = (user.email || '').toLowerCase().trim();
@@ -125,11 +137,12 @@ const ProfilePage = () => {
       } catch (err) {
         console.error("Fetch profile error:", err);
       } finally {
+        clearTimeout(timeout);
         setIsLoading(false);
       }
     };
     fetchProfile();
-  }, []);
+  }, [auth.currentUser]);
 
   const handleChangePassword = async (e) => {
     e.preventDefault();
@@ -161,12 +174,42 @@ const ProfilePage = () => {
 
   const handleSignatureUpload = async (e) => {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !auth.currentUser) return;
+
+    // Validar tipo de archivo
+    if (!file.type.startsWith('image/')) {
+        alert('Por favor, selecciona una imagen válida.');
+        return;
+    }
+
+    setIsUploadingSignature(true);
     try {
-      const base64 = await fileToBase64(file);
-      setProfile({ ...profile, signatureBase64: base64 });
+      const uid = auth.currentUser.uid;
+      const fileExt = file.name.split('.').pop();
+      const fileName = `firmas/${uid}_${Date.now()}.${fileExt}`;
+
+      // 1. Subir a Supabase
+      const { data, error } = await supabase.storage
+        .from('informescoat')
+        .upload(fileName, file, {
+          cacheControl: '3600',
+          upsert: true
+        });
+
+      if (error) throw error;
+
+      // 2. Obtener URL pública
+      const { data: { publicUrl } } = supabase.storage
+        .from('informescoat')
+        .getPublicUrl(fileName);
+
+      setProfile({ ...profile, signatureBase64: publicUrl });
+      
     } catch (err) {
-      alert('Error cargando firma');
+      console.error('Error uploading signature:', err);
+      alert('Error cargando firma a Supabase: ' + err.message);
+    } finally {
+      setIsUploadingSignature(false);
     }
   };
 
@@ -311,7 +354,12 @@ const ProfilePage = () => {
             </h3>
             {/* Signature box: Forced white background for a "paper" feel, regardless of theme */}
             <div className="w-full aspect-[4/3] bg-white rounded-2xl border-2 border-dashed border-blue-100 flex items-center justify-center p-6 relative group overflow-hidden transition-all shadow-inner">
-              {profile.signatureBase64 ? (
+              {isUploadingSignature ? (
+                <div className="flex flex-col items-center gap-2">
+                   <Loader2 size={32} className="text-blue-500 animate-spin" />
+                   <p className="text-[10px] font-bold text-blue-500 uppercase">Subiendo...</p>
+                </div>
+              ) : profile.signatureBase64 ? (
                 <img src={profile.signatureBase64} alt="Firma" className="max-h-full w-auto object-contain transition-transform group-hover:scale-110" />
               ) : (
                 <div className="text-center space-y-2 text-slate-300">
@@ -319,7 +367,9 @@ const ProfilePage = () => {
                   <p className="text-[10px] font-bold">Subir Firma PNG</p>
                 </div>
               )}
-              <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+              {!isUploadingSignature && (
+                <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+              )}
             </div>
             {profile.signatureBase64 && (
               <button 
@@ -329,9 +379,6 @@ const ProfilePage = () => {
                 Eliminar Firma
               </button>
             )}
-            <p className="mt-4 text-[9px] text-gray-400 text-center italic">
-              Nota: La firma digitalizada es aceptable para informes internos, pero puede no ser válida para trámites como el CUD sin validación adicional.
-            </p>
           </section>
 
           <section className="card p-8 space-y-6">
