@@ -283,7 +283,7 @@ const ReportsPage = () => {
     // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'FAST');
+      doc.addImage(logoUrl, 'PNG', 8, 8, 35, 16, undefined, 'FAST');
     } catch (e) {
       console.error("Logo error:", e);
     }
@@ -299,7 +299,7 @@ const ReportsPage = () => {
         
         doc.setFontSize(fontSize);
         doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        doc.text(line.toUpperCase(), 125, headerY, { align: 'center' });
+        doc.text(line.toUpperCase(), 115, headerY, { align: 'center' });
         headerY += (fontSize / 2.8) + 0.8;
       } else {
         headerY += 4.5;
