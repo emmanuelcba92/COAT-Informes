@@ -322,11 +322,19 @@ const MyReportsPage = ({ user, userProfile }) => {
                     <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
                   </td>
                   <td style="vertical-align: top; padding-left: 15px;">
-                    <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
+                    <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">COAT</h3>
                     <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
                     <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
                     <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
                     <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+                    <div style="margin-top: 10px;">
+                      <a href="https://www.facebook.com/coatcordoba" style="text-decoration: none; display: inline-block; margin-right: 15px;">
+                        <img src="https://img.icons8.com/color/24/facebook-new.png" width="24" height="24" alt="Facebook" style="vertical-align: middle; border: 0;">
+                      </a>
+                      <a href="https://www.instagram.com/coatcordoba/" style="text-decoration: none; display: inline-block;">
+                        <img src="https://img.icons8.com/color/24/instagram-new.png" width="24" height="24" alt="Instagram" style="vertical-align: middle; border: 0;">
+                      </a>
+                    </div>
                   </td>
                 </tr>
               </table>
