@@ -314,17 +314,27 @@ const ReportsPage = () => {
     doc.setFontSize(9); // Correct size for readability and fit
     doc.setFont("helvetica", "normal");
     
-    // Line 1: PACIENTE and OBRA SOCIAL
-    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 10, currentY);
-    doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 115, currentY);
+    // Line 1: PACIENTE (Centered)
+    doc.setFont("helvetica", "bold");
+    const patientText = `PACIENTE: ${reportData.patient.toUpperCase()}`;
+    const pWidth = doc.getTextWidth(patientText);
+    doc.text(patientText, (pageWidth - pWidth) / 2, currentY);
     
-    currentY += 5.5; // Optimized line spacing
+    currentY += 5;
 
-    // Line 2: DNI, FECHA, SOLICITANTE, MOTIVO
-    doc.text(`DNI: ${reportData.dni || "-"}`, 10, currentY);
-    doc.text(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`, 45, currentY);
-    doc.text(`SOLICITANTE: ${(reportData.requester || "-").toUpperCase()}`, 90, currentY);
-    doc.text(`MOTIVO: ${(reportData.reason || "-").toUpperCase()}`, 165, currentY);
+    // Line 2: Other info centered and reflowing (hiding empty fields)
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8); // Slightly smaller for the secondary info line
+    const infoParts = [];
+    if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork.toUpperCase()}`);
+    if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
+    infoParts.push(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`);
+    if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester.toUpperCase()}`);
+    if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason.toUpperCase()}`);
+
+    const secondaryInfo = infoParts.join("  |  ");
+    const sWidth = doc.getTextWidth(secondaryInfo);
+    doc.text(secondaryInfo, (pageWidth - sWidth) / 2, currentY);
     
     currentY += 7;
 
