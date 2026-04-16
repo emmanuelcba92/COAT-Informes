@@ -167,6 +167,7 @@ const AdminPage = () => {
   // ESTADOS PARA MANTENIMIENTO Y ALMACENAMIENTO
   const [storageStats, setStorageStats] = useState({ 
     fbCount: 0, 
+    fbSize: 0, 
     sbCount: 0, 
     sbSize: 0, 
     loading: true 
@@ -179,20 +180,29 @@ const AdminPage = () => {
   const fetchStorageStats = async () => {
     setStorageStats(prev => ({ ...prev, loading: true }));
     try {
-      const fbSnap = await getCountFromServer(collection(db, 'reports'));
-      const fbCount = fbSnap.data().count;
+      // 1. Firebase (Database)
+      const reportsSnap = await getDocs(collection(db, 'reports'));
+      const fbCount = reportsSnap.size;
+      
+      let totalBytes = 0;
+      reportsSnap.forEach(doc => {
+        totalBytes += JSON.stringify(doc.data()).length;
+      });
 
+      // 2. Supabase (Files)
       const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
       
       let sbSize = 0;
       let sbCount = 0;
       if (files) {
-        sbCount = files.length;
-        sbSize = files.reduce((acc, file) => acc + (file.metadata?.size || 0), 0);
+        const realFiles = files.filter(f => f.name !== '.emptyFolderPlaceholder');
+        sbCount = realFiles.length;
+        sbSize = realFiles.reduce((acc, file) => acc + (file.metadata?.size || 0), 0);
       }
 
       setStorageStats({
         fbCount,
+        fbSize: (totalBytes / 1024).toFixed(2), 
         sbCount,
         sbSize: (sbSize / (1024 * 1024)).toFixed(2), 
         loading: false
@@ -311,12 +321,17 @@ const AdminPage = () => {
         alert("No se encontraron archivos huérfanos.");
       } else {
         const { error } = await supabase.storage.from('informescoat').remove(orphanedPaths);
-        if (error) throw error;
-        alert(`Se eliminaron ${orphanedPaths.length} archivos huérfanos.`);
+        if (error) {
+          alert("Error de Supabase: " + error.message);
+        } else {
+          alert(`Limpieza profunda finalizada. Se enviaron a borrar ${orphanedPaths.length} archivos.`);
+        }
       }
-      fetchStorageStats();
+      
+      // Esperar un segundo pequeño antes de refrescar para que Supabase procese
+      setTimeout(() => fetchStorageStats(), 1500);
     } catch (err) {
-      alert("Error limpiando huérfanos: " + err.message);
+      alert("Error crítico limpiando huérfanos: " + err.message);
     } finally {
       setIsCleaning(false);
     }
@@ -804,7 +819,7 @@ const AdminPage = () => {
                 {storageStats.loading ? <Loader2 className="animate-spin" /> : (
                   <>
                     <span className="text-3xl font-black">{storageStats.fbCount}</span>
-                    <span className="text-[10px] text-gray-500 italic">Documentos de texto registrados</span>
+                    <span className="text-[10px] text-gray-500 italic">Registros ({storageStats.fbSize} KB aprox)</span>
                   </>
                 )}
               </div>
@@ -814,7 +829,7 @@ const AdminPage = () => {
                 {storageStats.loading ? <Loader2 className="animate-spin" /> : (
                   <>
                     <span className="text-3xl font-black">{storageStats.sbCount}</span>
-                    <span className="text-[10px] text-gray-500 italic">Archivos almacenados (PDFs externos)</span>
+                    <span className="text-[10px] text-gray-500 italic">Archivos (.pdf) en almacenamiento</span>
                   </>
                 )}
               </div>
