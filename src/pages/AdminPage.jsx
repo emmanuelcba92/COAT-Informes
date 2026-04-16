@@ -299,37 +299,53 @@ const AdminPage = () => {
   };
 
   const handleCleanOrphans = async () => {
-    if (!window.confirm('¿Desea eliminar los archivos de Supabase que NO tienen un informe asociado en Firebase? (Archivos huérfanos)')) return;
+    if (!window.confirm('¿Desea eliminar los archivos de ALMACENAMIENTO que NO tienen un informe asociado? (Esto NO borrará firmas)')) return;
     setIsCleaning(true);
     try {
-      // 1. Obtener todos los archivos de Supabase
+      // 1. Obtener todos los archivos de Supabase (Raíz)
       const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
       if (!files || files.length === 0) {
-        alert("No hay archivos en Supabase.");
+        alert("No hay archivos en la raíz de Supabase.");
         return;
       }
 
-      // 2. Obtener todos los storagePaths de Firebase
+      // 2. Obtener todos los storagePaths de Firebase (Informes)
       const fbSnap = await getDocs(collection(db, 'reports'));
       const activePaths = new Set(fbSnap.docs.map(doc => doc.data().storagePath).filter(Boolean));
 
-      // 3. Identificar cuáles no están en Firebase
+      // 3. Obtener todas las firmas activas de Usuarios (Para protegerlas)
+      const usersSnap = await getDocs(collection(db, 'users'));
+      const signatureUrls = usersSnap.docs.map(doc => doc.data().signatureBase64).filter(Boolean);
+      
+      // 4. Identificar huérfanos con PROTECCIÓN
       const orphanedPaths = files
-        .map(f => f.name)
-        .filter(name => !activePaths.has(name) && name !== '.emptyFolderPlaceholder');
+        .filter(f => {
+          const name = f.name;
+          // PROTECCIÓN 1: No borrar carpetas (metadata null en list suele ser carpeta)
+          if (!f.metadata) return false;
+          // PROTECCIÓN 2: No borrar la carpeta de firmas ni archivos dentro de ella (aunque list root no debería traerlos)
+          if (name === 'firmas' || name === '.emptyFolderPlaceholder') return false;
+          // PROTECCIÓN 3: Si es un reporte activo, ignorar
+          if (activePaths.has(name)) return false;
+          // PROTECCIÓN 4: Si por alguna razón la URL de una firma coincide con el nombre del archivo, proteger
+          const isASignature = signatureUrls.some(url => url.includes(name));
+          if (isASignature) return false;
+
+          return true; // Es un huérfano real en la raíz
+        })
+        .map(f => f.name);
 
       if (orphanedPaths.length === 0) {
-        alert("No se encontraron archivos huérfanos.");
+        alert("No se encontraron archivos huérfanos en la raíz.");
       } else {
         const { error } = await supabase.storage.from('informescoat').remove(orphanedPaths);
         if (error) {
           alert("Error de Supabase: " + error.message);
         } else {
-          alert(`Limpieza profunda finalizada. Se enviaron a borrar ${orphanedPaths.length} archivos.`);
+          alert(`Limpieza protegida finalizada. Se borraron ${orphanedPaths.length} archivos huérfanos.`);
         }
       }
       
-      // Esperar un segundo pequeño antes de refrescar para que Supabase procese
       setTimeout(() => fetchStorageStats(), 1500);
     } catch (err) {
       alert("Error crítico limpiando huérfanos: " + err.message);
