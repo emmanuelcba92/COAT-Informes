@@ -170,6 +170,27 @@ const ReportsPage = () => {
             setSelectedPractice(data.practicaNombre || '');
             setContent(data.contenidoTexto || '');
 
+            // Si el informe fue hecho por otro profesional, cargamos sus datos para la firma/membrete
+            if (data.profesionalId) {
+              try {
+                const profRef = doc(db, 'users', data.profesionalId);
+                const profSnap = await getDoc(profRef);
+                if (profSnap.exists()) {
+                  const profData = profSnap.data();
+                  setProfessional({
+                    ...profData,
+                    nombre: profData.nombre || profData.n || 'Médico',
+                    especialidad: profData.especialidad || profData.esp || '',
+                    mp: profData.mp || profData.m || '',
+                    headerGeneral: profData.headerGeneral || Array(8).fill(''),
+                    headerFibro: profData.headerFibro || Array(8).fill(''),
+                  });
+                }
+              } catch (profErr) {
+                console.error("Error cargando profesional autor:", profErr);
+              }
+            }
+
             // Si viene con flag de preview o print, generamos el preview
             if (previewFlag === 'true' || printFlag === 'true') {
               // Necesitamos esperar a que el estado se asiente y profesional esté cargado
@@ -290,12 +311,30 @@ const ReportsPage = () => {
     doc.setFontSize(10);
     doc.setFont("helvetica", "normal");
     
-    // Line 1: Paciente  Obra Social  DNI
-    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 10, currentY);
-    doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 80, currentY);
-    doc.text(`DNI: ${reportData.dni || "-"}`, 150, currentY);
+    // Logic to handle long patient names
+    const patientLabel = "PACIENTE: ";
+    const patientName = reportData.patient.toUpperCase();
+    const fullPatientText = patientLabel + patientName;
+    const patientWidth = doc.getTextWidth(fullPatientText);
     
-    currentY += 7; // Slightly tighter spacing
+    // We check if the name is too long for the first column (approx 65mm safe limit)
+    if (patientWidth > 60) {
+      // Split and wrap
+      const splitPatient = doc.splitTextToSize(fullPatientText, 180);
+      doc.text(splitPatient, 10, currentY);
+      currentY += (splitPatient.length * 5); // Move down based on wrapping
+      
+      // OBRA SOCIAL and DNI go on their own line
+      doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 10, currentY);
+      doc.text(`DNI: ${reportData.dni || "-"}`, 120, currentY);
+      currentY += 8; // Extra gap before next section
+    } else {
+      // Standard layout
+      doc.text(fullPatientText, 10, currentY);
+      doc.text(`OBRA SOCIAL: ${(reportData.socialWork || "-").toUpperCase()}`, 80, currentY);
+      doc.text(`DNI: ${reportData.dni || "-"}`, 150, currentY);
+      currentY += 8; 
+    }
 
     // Line 2: Fecha  Solicitante  Motivo
     doc.text(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`, 10, currentY);
@@ -425,6 +464,12 @@ const ReportsPage = () => {
         recipientEmails.push(reportData.patientEmail);
       }
 
+      const formatDateForEmail = (dateStr) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}-${m}-${y}`;
+      };
+
       const displayTitle = (reportData.includeTitle 
         ? `INFORME DE ${selectedPractice}` 
         : (reportData.customTitle || selectedPractice)).toUpperCase();
@@ -436,7 +481,7 @@ const ReportsPage = () => {
           <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
             <tr>
               <td style="vertical-align: top; width: 100px;">
-                <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+                <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
               </td>
               <td style="vertical-align: top; padding-left: 15px;">
                 <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
@@ -461,7 +506,7 @@ const ReportsPage = () => {
             <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
               <li><strong>Paciente:</strong> ${reportData.patient}</li>
               <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
-              <li><strong>Fecha:</strong> ${reportData.date}</li>
+              <li><strong>Fecha:</strong> ${formatDateForEmail(reportData.date)}</li>
               <li><strong>Profesional Responsable:</strong> ${professional?.nombre || 'Dr/a.'}</li>
             </ul>
           </div>
@@ -485,7 +530,7 @@ const ReportsPage = () => {
           <hr/>
           <ul>
             <li><strong>Paciente:</strong> ${reportData.patient}</li>
-            <li><strong>DNI:</strong> ${reportData.patientDni || 'No informado'}</li>
+            <li><strong>DNI:</strong> ${reportData.dni || 'No informado'}</li>
             <li><strong>Estudio:</strong> ${displayTitle}</li>
             <li><strong>Profesional:</strong> ${professional?.nombre || 'Dr/a.'}</li>
           </ul>
@@ -546,7 +591,7 @@ const ReportsPage = () => {
         <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
           <tr>
             <td style="vertical-align: top; width: 100px;">
-              <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+                <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
             </td>
             <td style="vertical-align: top; padding-left: 15px;">
               <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
@@ -560,12 +605,26 @@ const ReportsPage = () => {
       </div>
     `;
 
+    const displayTitle = (reportData.includeTitle 
+      ? `INFORME DE ${selectedPractice}` 
+      : (reportData.customTitle || selectedPractice)).toUpperCase();
+
     const bodyPaciente = `
       <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
         <p>Estimado/a <strong>${reportData.patient}</strong>,</p>
         <p>Esperamos que se encuentre bien.</p>
         <p>Le informamos que ya está disponible el reenvío del informe correspondiente a su consulta en COAT. Adjunto encontrará el documento PDF.</p>
-        <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+      
+      <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
+        <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+          <li><strong>Paciente:</strong> ${reportData.patient}</li>
+          <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
+          <li><strong>Fecha:</strong> ${formatDateForEmail(reportData.date)}</li>
+        </ul>
+      </div>
+
+      <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
         ${emailFooter}
         <p style="font-size: 11px; color: #999; margin-top: 30px;">
           Este es un mensaje automático, por favor no responda a esta dirección de correo.

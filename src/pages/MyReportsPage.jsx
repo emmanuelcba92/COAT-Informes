@@ -305,6 +305,12 @@ const MyReportsPage = ({ user, userProfile }) => {
             reader.onerror = error => reject(error);
           });
 
+          const formatDateForEmail = (dateStr) => {
+            if (!dateStr) return '';
+            const [y, m, d] = dateStr.split('-');
+            return `${d}-${m}-${y}`;
+          };
+
           const displayTitle = (uploadData.reason || 'Informe Técnico').toUpperCase();
           const subjectPaciente = `COAT Informes - Nuevo estudio disponible: ${uploadData.patientName.toUpperCase()}`;
           
@@ -313,7 +319,7 @@ const MyReportsPage = ({ user, userProfile }) => {
               <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
                 <tr>
                   <td style="vertical-align: top; width: 100px;">
-                    <img src="https://informescoat.web.app/logo_coat.png" alt="COAT" width="80" style="display: block;">
+                    <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
                   </td>
                   <td style="vertical-align: top; padding-left: 15px;">
                     <h3 style="margin: 0; color: #1e3a8a; font-size: 14px;">Centro de Otorrinolaringología y Audiología (COAT)</h3>
@@ -338,7 +344,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                 <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
                   <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
                   <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
-                  <li><strong>Fecha:</strong> ${uploadData.date}</li>
+                  <li><strong>Fecha:</strong> ${formatDateForEmail(uploadData.date)}</li>
                   <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
                 </ul>
               </div>
