@@ -283,7 +283,7 @@ const ReportsPage = () => {
     // 1. Logo
     const logoUrl = "/coat_logo.png";
     try {
-      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'NONE');
+      doc.addImage(logoUrl, 'PNG', 10, 8, 35, 16, undefined, 'FAST');
     } catch (e) {
       console.error("Logo error:", e);
     }
@@ -389,18 +389,34 @@ const ReportsPage = () => {
       try {
         let imageData = prof.signatureBase64;
         
-        // Si no es Base64 (es una URL de Supabase), tenemos que descargarla
+        // Si no es Base64 (es una URL de Supabase), tenemos que descargarla y REDIMENSIONARLA
         if (imageData.startsWith('http')) {
-          const response = await fetch(imageData);
-          const blob = await response.blob();
-          imageData = await new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result);
-            reader.readAsDataURL(blob);
-          });
+          try {
+            const response = await fetch(imageData);
+            const blob = await response.blob();
+            imageData = await new Promise((resolve) => {
+              const img = new Image();
+              img.crossOrigin = "Anonymous";
+              img.onload = () => {
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                // Redimensionar a un tamaño profesional razonable (max 600px de ancho)
+                const maxWidth = 600;
+                const scale = Math.min(1, maxWidth / img.width);
+                canvas.width = img.width * scale;
+                canvas.height = img.height * scale;
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                resolve(canvas.toDataURL('image/png', 0.8)); // 0.8 quality
+              };
+              img.src = URL.createObjectURL(blob);
+            });
+          } catch (err) {
+            console.error("Error downloading/resizing signature:", err);
+            // Fallback to original URL if possible, or skip
+          }
         }
 
-        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'NONE');
+        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'FAST');
         currentY += 15;
       } catch (e) {
         console.error("Error signature:", e);
