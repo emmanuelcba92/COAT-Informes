@@ -109,8 +109,8 @@ function App() {
   }, []);
 
 
-  const isSecretaria = userProfile?.role?.toLowerCase().includes('secre');
-  const isAdmin = userProfile?.role?.toLowerCase().includes('admin') || 
+  const isSecretaria = userProfile?.role === 'secre' || userProfile?.role === 'secretaría';
+  const isAdmin = userProfile?.role === 'admin' || 
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
                   currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
 

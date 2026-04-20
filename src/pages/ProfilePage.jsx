@@ -213,6 +213,8 @@ const ProfilePage = () => {
     }
   };
 
+  const canEditHeader = profile.role === 'directora_medica';
+
   const handleSave = async () => {
     if (!auth.currentUser) return;
     if (!profile.nombre) {
@@ -294,7 +296,8 @@ const ProfilePage = () => {
           </section>
 
           {/* headers Section */}
-          <section className="card p-8">
+          {canEditHeader && (
+            <section className="card p-8">
             <h3 className="flex items-center gap-3 text-lg font-bold mb-8 border-b border-main pb-4">
               <FileText className="text-green-500" />
               Configuración de Membretes
@@ -344,6 +347,7 @@ const ProfilePage = () => {
               </div>
             </div>
           </section>
+        )}
         </div>
 
         {/* Right: Signature & Security */}

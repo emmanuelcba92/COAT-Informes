@@ -35,7 +35,8 @@ const ReportsPage = () => {
     reason: '',
     patientEmail: '',
     includeTitle: true,
-    customTitle: ''
+    customTitle: '',
+    enableHeader: true
   });
   
   const [selectedPractice, setSelectedPractice] = useState('');
@@ -78,6 +79,7 @@ const ReportsPage = () => {
         reason: reportData.reason || '',
         patientEmail: reportData.patientEmail || '',
         includeTitle: reportData.includeTitle,
+        enableHeader: reportData.enableHeader,
         pdfUrl: pdfUrl,
         fechaUpdatedAt: new Date().toISOString()
       };
@@ -167,7 +169,8 @@ const ReportsPage = () => {
               reason: data.reason || '',
               patientEmail: data.patientEmail || '',
               includeTitle: data.includeTitle !== undefined ? data.includeTitle : true,
-              customTitle: data.customTitle || ''
+              customTitle: data.customTitle || '',
+              enableHeader: data.enableHeader || false
             });
             setSelectedPractice(data.practicaNombre || '');
             setContent(data.contenidoTexto || '');
@@ -289,24 +292,37 @@ const ReportsPage = () => {
     }
 
     // 2. Header Text
-    doc.setTextColor(60, 60, 60);
     let headerY = 16; 
-    activeHeader.forEach((line, index) => {
-      if (line && line.trim() !== '') {
-        let fontSize = 7.5;
-        if (index === 0) fontSize = 11;
-        else if (index === 1 || index === 2) fontSize = 10;
-        
-        doc.setFontSize(fontSize);
-        doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-        doc.text(line.toUpperCase(), 108, headerY, { align: 'center' });
-        headerY += (fontSize / 2.8) + 0.8;
-      } else {
-        headerY += 4.5;
-      }
-    });
+    if (reportData.enableHeader && prof.role === 'directora_medica') {
+      doc.setTextColor(60, 60, 60);
+      activeHeader.forEach((line, index) => {
+        if (line && line.trim() !== '') {
+          let fontSize = 7.5;
+          if (index === 0) fontSize = 11;
+          else if (index === 1 || index === 2) fontSize = 10;
+          
+          doc.setFontSize(fontSize);
+          doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
+          doc.text(line.toUpperCase(), 108, headerY, { align: 'center' });
+          headerY += (fontSize / 2.8) + 0.8;
+        } else {
+          headerY += 4.5;
+        }
+      });
+    } else {
+      // General Header (Photo version)
+      doc.setTextColor(30, 30, 30);
+      doc.setFontSize(10);
+      doc.setFont('helvetica', 'bold');
+      doc.text("CENTRO OTOAUDIOLÓGICO DE ALTA TECNOLOGÍA", 108, 14, { align: 'center' });
+      doc.setFontSize(9);
+      doc.setFont('helvetica', 'normal');
+      doc.text("NARIZ • GARGANTA • OÍDO", 108, 19, { align: 'center' });
+    }
 
-    let currentY = Math.max(headerY + 5, 45); 
+    let currentY = (reportData.enableHeader && prof.role === 'directora_medica') 
+      ? Math.max(headerY + 5, 45) 
+      : 30; 
     doc.setDrawColor(200);
     doc.line(10, currentY - 5, 200, currentY - 5);
 
@@ -378,12 +394,12 @@ const ReportsPage = () => {
       currentY += 4.8;
     });
     
-    // Signature Area
-    currentY += 10;
-    if (currentY > pageHeight - 35) {
+    // Signature Area - Siempre al fondo de la hoja
+    if (currentY > pageHeight - 65) {
        doc.addPage();
        currentY = 20;
     }
+    currentY = pageHeight - 55;
 
     if (prof.signatureBase64) {
       try {
@@ -442,6 +458,20 @@ const ReportsPage = () => {
       doc.text(text, 160, currentY, { align: 'center' });
       currentY += (i === 0 ? 3.5 : 3);
     });
+
+    // 10. Footer Institucional (Bottom of page)
+    doc.setDrawColor(30, 58, 138); // Blue COAT color
+    doc.setLineWidth(0.5);
+    doc.line(10, pageHeight - 22, 200, pageHeight - 22);
+    
+    doc.setFontSize(7.5);
+    doc.setTextColor(60, 60, 60);
+    doc.setFont("helvetica", "normal");
+    const footerLine1 = "Urquiza 401 - Alberdi - X5000KPI Córdoba - Teléfono: 0351 423-9428";
+    const footerLine2 = "+54 3543 579794 - Solicite turnos online: www.coat.com.ar";
+    
+    doc.text(footerLine1, 105, pageHeight - 15, { align: 'center' });
+    doc.text(footerLine2, 105, pageHeight - 11, { align: 'center' });
 
     if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
@@ -834,6 +864,38 @@ const ReportsPage = () => {
                 <p className="text-xs text-gray-400">{isEditing ? 'Modificando informe guardado' : 'Complete los datos para generar el PDF protocolizado'}</p>
               </div>
             </div>
+
+            {professional?.role === 'directora_medica' && (
+              <div 
+                className={`
+                  flex items-center gap-3 px-4 py-2 rounded-2xl border transition-all duration-300 cursor-pointer
+                  ${reportData.enableHeader 
+                    ? 'bg-blue-600/10 border-blue-500/50 shadow-lg shadow-blue-500/5' 
+                    : 'bg-slate-100 dark:bg-slate-800/50 border-transparent'}
+                `}
+                onClick={() => setReportData({ ...reportData, enableHeader: !reportData.enableHeader })}
+              >
+                <div className="text-right select-none">
+                  <p className={`text-[10px] font-black uppercase leading-none mb-0.5 ${reportData.enableHeader ? 'text-blue-600' : 'text-slate-400'}`}>
+                    Membrete
+                  </p>
+                  <p className="text-[9px] font-bold text-slate-400 opacity-60 leading-tight">Personalizado</p>
+                </div>
+                <div 
+                  className={`
+                    relative w-12 h-6 rounded-full transition-all duration-500 
+                    ${reportData.enableHeader ? 'bg-blue-600 shadow-inner' : 'bg-slate-300 dark:bg-slate-700 shadow-inner'}
+                  `}
+                >
+                  <div className={`
+                    absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow-md transition-all duration-500 flex items-center justify-center
+                    ${reportData.enableHeader ? 'translate-x-6' : 'translate-x-0'}
+                  `}>
+                    {reportData.enableHeader && <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-pulse" />}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -912,6 +974,7 @@ const ReportsPage = () => {
               />
             </div>
           </div>
+
 
           <div className="space-y-1">
             <label className="text-xs font-bold uppercase opacity-60 text-blue-600">Práctica Realizada</label>

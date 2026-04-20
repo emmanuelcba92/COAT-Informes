@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Stethoscope, 
@@ -67,6 +68,7 @@ const firebaseConfig = {
 };
 
 const AdminPage = () => {
+  const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState('users');
   const [appsScriptUrl, setAppsScriptUrl] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -102,6 +104,43 @@ const AdminPage = () => {
   const [isModelsSaving, setIsModelsSaving] = useState(false);
   const [editingModelId, setEditingModelId] = useState(null);
   const [modelForm, setModelForm] = useState({ n: '', b: '', practiceId: '' });
+
+  // Security Check
+  useEffect(() => {
+    const checkAuth = async () => {
+      const user = getAuth().currentUser;
+      if (!user) {
+        navigate('/login');
+        return;
+      }
+
+      const email = user.email?.toLowerCase();
+      const whiteList = ['egomez@coat.com.ar', 'aparedes@coat.com.ar'];
+      
+      try {
+        const docRef = doc(db, 'users', user.uid);
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const profile = docSnap.data();
+          const role = profile.role?.toLowerCase() || '';
+          
+          const isAuthorized = role === 'admin' || whiteList.includes(email);
+          
+          if (!isAuthorized) {
+            console.warn("Acceso denegado a Administración para:", email, "Rol:", role);
+            navigate('/');
+          }
+        } else if (!whiteList.includes(email)) {
+          navigate('/');
+        }
+      } catch (err) {
+        console.error("Error verificando permisos:", err);
+        if (!whiteList.includes(email)) navigate('/');
+      }
+    };
+    checkAuth();
+  }, [navigate]);
 
   // Real-time synchronization
   useEffect(() => {
@@ -1109,7 +1148,8 @@ const AdminPage = () => {
                       onChange={e => setTargetProf({...targetProf, role: e.target.value})}
                     >
                       <option value="médico">Médico (Solo sus informes)</option>
-                      <option value="médico_admin">Médico Admin (Acceso total)</option>
+                      <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
+                      <option value="admin">Administrador (Acceso total)</option>
                       <option value="secre">Secretaría (Carga datos)</option>
                     </select>
                   </div>
@@ -1150,7 +1190,8 @@ const AdminPage = () => {
                 </div>
 
                 {/* Headers */}
-                <div className="space-y-4">
+                {targetProf.role === 'directora_medica' && (
+                  <div className="space-y-4">
                    <div className="flex gap-4 border-b border-main">
                       <button 
                         onClick={() => setPreviewType('general')}
@@ -1180,7 +1221,8 @@ const AdminPage = () => {
                         </div>
                       ))}
                    </div>
-                </div>
+                  </div>
+                )}
               </div>
 
               <div className="p-8 border-t border-main flex gap-4 bg-[var(--bg-card)]">
@@ -1294,7 +1336,7 @@ const AdminPage = () => {
                         className="input-field appearance-none cursor-pointer"
                       >
                         <option value="médico">Médico (Solo sus informes)</option>
-                        <option value="fonoaudiología">Fonoaudiología (Solo sus informes)</option>
+                        <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
                         <option value="secretaría">Secretaría (Solo lectura)</option>
                         <option value="admin">Administrador (Control Total)</option>
                       </select>
