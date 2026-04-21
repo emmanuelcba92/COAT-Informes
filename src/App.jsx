@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
 
 const LoginPage = React.lazy(() => import('./pages/LoginPage'));
@@ -94,6 +94,10 @@ function App() {
       if (user) {
         try {
           const docRef = doc(db, 'users', user.uid);
+          
+          // Actualizar última conexión al cargar la app
+          updateDoc(docRef, { lastLogin: new Date().toISOString() }).catch(e => console.error(e));
+
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             setUserProfile(docSnap.data());
