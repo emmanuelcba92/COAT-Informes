@@ -412,7 +412,8 @@ const AdminPage = () => {
       me: isStaff ? '' : (u.me || '-'),
       id: u.id,
       role: role,
-      isOfficial: u.id.length === 28
+      isOfficial: u.id.length === 28,
+      lastLogin: u.lastLogin || null
     };
   };
 
@@ -688,6 +689,7 @@ const AdminPage = () => {
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Médico</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Especialidad</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Estado</th>
+                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Última Conexión</th>
                       <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Acciones</th>
                     </tr>
                   </thead>
@@ -718,6 +720,25 @@ const AdminPage = () => {
                           }`}>
                             {user._std.isOfficial ? 'Oficial' : 'Provisorio'}
                           </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col">
+                            <span className="text-xs font-bold text-[var(--text-main)]">
+                              {user._std.lastLogin ? new Date(user._std.lastLogin).toLocaleDateString('es-AR', {
+                                day: '2-digit',
+                                month: '2-digit',
+                                year: 'numeric'
+                              }) : 'Nunca'}
+                            </span>
+                            {user._std.lastLogin && (
+                              <span className="text-[10px] text-gray-400">
+                                {new Date(user._std.lastLogin).toLocaleTimeString('es-AR', {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })} hs
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

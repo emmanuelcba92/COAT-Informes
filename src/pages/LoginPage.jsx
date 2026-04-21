@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LogIn, User, Lock, AlertCircle, Sun, Moon } from 'lucide-react';
-import { auth } from '../services/firebase';
+import { auth, db } from '../services/firebase';
 import { signInWithEmailAndPassword, setPersistence, browserSessionPersistence } from 'firebase/auth';
+import { doc, updateDoc } from 'firebase/firestore';
 
 const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
   const [username, setUsername] = useState('');
@@ -24,6 +25,16 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
       const fullEmail = `${username.trim()}@coat.com.ar`;
       await setPersistence(auth, browserSessionPersistence);
       const userCredential = await signInWithEmailAndPassword(auth, fullEmail, password);
+      
+      // Actualizar última conexión en Firestore
+      try {
+        await updateDoc(doc(db, 'users', userCredential.user.uid), {
+          lastLogin: new Date().toISOString()
+        });
+      } catch (updateErr) {
+        console.error("Error updating lastLogin:", updateErr);
+      }
+
       onLogin(userCredential.user);
     } catch (err) {
       console.error("Login error:", err);
