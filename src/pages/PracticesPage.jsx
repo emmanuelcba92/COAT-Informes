@@ -68,10 +68,10 @@ const PracticesPage = () => {
       };
       await setDoc(userRef, { personalPractices: updatedPersonal }, { merge: true });
       setPersonalPractices(updatedPersonal);
-      alert('Plantilla personalizada guardada con éxito.');
+      alert('Modelo personalizado guardado con éxito.');
     } catch (err) {
       console.error("Error saving customization:", err);
-      alert('Error al guardar la plantilla.');
+      alert('Error al guardar el modelo.');
     } finally {
       setIsSaving(false);
     }
@@ -115,7 +115,7 @@ const PracticesPage = () => {
     ],
   };
 
-  if (isLoading) return <div className="p-20 text-center opacity-50"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando prácticas...</div>;
+  if (isLoading) return <div className="p-20 text-center opacity-50"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando modelos...</div>;
 
   return (
     <div className="flex h-[calc(100vh-140px)] gap-6 overflow-hidden">
@@ -125,7 +125,7 @@ const PracticesPage = () => {
           <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
           <input 
             type="text" 
-            placeholder="Buscar prácticas..." 
+            placeholder="Buscar modelos..." 
             className="input-field pl-10" 
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
@@ -156,7 +156,7 @@ const PracticesPage = () => {
               </motion.div>
             ))
           ) : (
-            <div className="p-10 text-center text-xs text-gray-400 italic">No se encontraron prácticas.</div>
+            <div className="p-10 text-center text-xs text-gray-400 italic">No se encontraron modelos.</div>
           )}
         </div>
       </div>
@@ -171,7 +171,7 @@ const PracticesPage = () => {
                 </div>
                 <div>
                   <h3 className="font-bold text-lg">{selectedPractice.n}</h3>
-                  <p className="text-xs text-gray-400">Personalizando plantilla de informe</p>
+                  <p className="text-xs text-gray-400">Personalizando modelo de informe</p>
                 </div>
               </div>
               <div className="flex gap-2">
@@ -182,7 +182,7 @@ const PracticesPage = () => {
                     className="flex items-center gap-2 text-xs px-4 py-2 border border-red-100 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all font-bold"
                   >
                     <RotateCcw size={14} />
-                    Restaurar Original
+                    Restaurar Modelo Original
                   </button>
                 )}
                 <button 
@@ -191,7 +191,7 @@ const PracticesPage = () => {
                   className="btn-primary flex items-center gap-2 text-sm px-4"
                 >
                   {isSaving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  Guardar Plantilla
+                  Guardar Modelo
                 </button>
               </div>
             </div>
@@ -199,7 +199,7 @@ const PracticesPage = () => {
             <div className="flex-1 overflow-hidden p-6 flex flex-col gap-4">
               <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-xl text-blue-700 dark:text-blue-400 text-xs">
                 <Info size={16} className="mt-0.5 flex-shrink-0" />
-                <p>Usted puede editar el contenido de esta práctica. Lo que guarde aquí será lo que aparezca por defecto al seleccionar esta práctica en la pestaña de informes.</p>
+                <p>Usted puede editar el contenido de este modelo. Lo que guarde aquí será lo que aparezca por defecto al seleccionar esta práctica en la sección de generación de informes.</p>
               </div>
               
               <div className="flex-1 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 transition-all bg-white text-black">
@@ -219,8 +219,8 @@ const PracticesPage = () => {
               <Bookmark size={40} />
             </div>
             <div>
-              <h3 className="text-xl font-bold">Mis Plantillas de Prácticas</h3>
-              <p className="text-gray-400 max-w-xs mx-auto">Elija una práctica para personalizar el texto que se cargará automáticamente en sus informes.</p>
+              <h3 className="text-xl font-bold">Mis Modelos de Informe</h3>
+              <p className="text-gray-400 max-w-xs mx-auto">Elija una práctica para personalizar el modelo que se cargará automáticamente en sus informes.</p>
             </div>
           </div>
         )}

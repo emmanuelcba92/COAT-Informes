@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
+  Activity,
   Users, 
   Stethoscope, 
   Mail, 
@@ -28,9 +29,10 @@ import {
   Search as SearchIcon,
   Database,
   RefreshCw,
-  CheckCircle2
+  CheckCircle2,
+  GripVertical
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Reorder } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -104,6 +106,15 @@ const AdminPage = () => {
   const [isModelsSaving, setIsModelsSaving] = useState(false);
   const [editingModelId, setEditingModelId] = useState(null);
   const [modelForm, setModelForm] = useState({ n: '', b: '', practiceId: '' });
+
+  // State for Order Settings (DYNAMIC CATEGORIES)
+  const [orderSettings, setOrderSettings] = useState({ categories: [], practicesByType: {}, patientEmailRequired: false, ordersEnabled: true });
+  const [isSavingOrderSettings, setIsSavingOrderSettings] = useState(false);
+  const [selectedOrderCategory, setSelectedOrderCategory] = useState(null);
+  const [newCategoryForm, setNewCategoryForm] = useState({ id: '', label: '', icon: 'Clipboard' });
+  const [newPracticeForm, setNewPracticeForm] = useState({ n: '', c: '' });
+  const [editingOrderPracticeIdx, setEditingOrderPracticeIdx] = useState(null);
+  const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({ n: '', c: '' });
 
   // Security Check
   useEffect(() => {
@@ -186,6 +197,7 @@ const AdminPage = () => {
     });
 
     fetchStorageStats();
+    fetchGlobalStats();
 
     // Sync Settings
     const unsubscribeSettings = onSnapshot(doc(db, 'config', 'settings'), (docSnap) => {
@@ -197,10 +209,18 @@ const AdminPage = () => {
       }
     });
 
+    // Sync Order Settings
+    const unsubscribeOrderSettings = onSnapshot(doc(db, 'config', 'order_settings'), (docSnap) => {
+      if (docSnap.exists()) {
+        setOrderSettings(docSnap.data());
+      }
+    });
+
     return () => {
       unsubscribePractices();
       unsubscribeUsers();
       unsubscribeSettings();
+      unsubscribeOrderSettings();
     };
   }, []);
 
@@ -212,22 +232,54 @@ const AdminPage = () => {
     sbSize: 0, 
     loading: true 
   });
+  const [globalStats, setGlobalStats] = useState({
+    patients: 0,
+    reports: 0,
+    orders: 0,
+    loading: true
+  });
   const [cleanRange, setCleanRange] = useState({ start: '', end: '' });
   const [cleanOptions, setCleanOptions] = useState({ pdfs: true, records: false });
   const [isCleaning, setIsCleaning] = useState(false);
   const [cleanSummary, setCleanSummary] = useState(null);
 
+  const fetchGlobalStats = async () => {
+    setGlobalStats(prev => ({ ...prev, loading: true }));
+    try {
+      const [patientsCount, reportsCount, ordersCount] = await Promise.all([
+        getCountFromServer(collection(db, 'patients')),
+        getCountFromServer(collection(db, 'reports')),
+        getCountFromServer(collection(db, 'orders'))
+      ]);
+
+      setGlobalStats({
+        patients: patientsCount.data().count,
+        reports: reportsCount.data().count,
+        orders: ordersCount.data().count,
+        loading: false
+      });
+    } catch (err) {
+      console.error("Error fetching global stats:", err);
+      setGlobalStats(prev => ({ ...prev, loading: false }));
+    }
+  };
+
   const fetchStorageStats = async () => {
     setStorageStats(prev => ({ ...prev, loading: true }));
     try {
-      // 1. Firebase (Database)
-      const reportsSnap = await getDocs(collection(db, 'reports'));
-      const fbCount = reportsSnap.size;
+      // 1. Firebase (Database) - Calculamos peso de Informes, Pedidos y Pacientes
+      const [reportsSnap, ordersSnap, patientsSnap] = await Promise.all([
+        getDocs(collection(db, 'reports')),
+        getDocs(collection(db, 'orders')),
+        getDocs(collection(db, 'patients'))
+      ]);
+      
+      const fbCount = reportsSnap.size + ordersSnap.size + patientsSnap.size;
       
       let totalBytes = 0;
-      reportsSnap.forEach(doc => {
-        totalBytes += JSON.stringify(doc.data()).length;
-      });
+      reportsSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
+      ordersSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
+      patientsSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
 
       // 2. Supabase (Files)
       const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
@@ -394,10 +446,11 @@ const AdminPage = () => {
   };
 
   const tabs = [
-    { id: 'users', label: 'Gestión de Usuarios', icon: <Users size={20} /> },
-    { id: 'practices', label: 'Gestión de Prácticas', icon: <Stethoscope size={20} /> },
+    { id: 'users', label: 'Usuarios', icon: <Users size={20} /> },
+    { id: 'stats', label: 'Dashboard', icon: <Activity size={20} /> },
+    { id: 'practices', label: 'Gestión Informes', icon: <Stethoscope size={20} /> },
+    { id: 'orders', label: 'Gestión Pedidos', icon: <ClipboardList size={20} /> },
     { id: 'settings', label: 'Configuración', icon: <ShieldCheck size={20} /> },
-    { id: 'maintenance', label: 'Mantenimiento', icon: <Settings2 size={20} /> },
   ];
 
   // Helper to get standardized user data
@@ -492,7 +545,7 @@ const AdminPage = () => {
   };
 
   const handleDeletePractice = async (id) => {
-    if (window.confirm('¿Eliminar práctica?')) await deleteDoc(doc(db, 'practices', id));
+    if (window.confirm('¿Eliminar modelo de informe?')) await deleteDoc(doc(db, 'practices', id));
   };
 
   const handleSaveSettings = async () => {
@@ -509,6 +562,102 @@ const AdminPage = () => {
     } finally {
       setIsSavingSettings(false);
     }
+  };
+
+  const handleSaveOrderSettings = async (newData) => {
+    setIsSavingOrderSettings(true);
+    try {
+      await setDoc(doc(db, 'config', 'order_settings'), newData);
+    } catch (err) {
+      alert("Error al guardar gestión de pedidos: " + err.message);
+    } finally {
+      setIsSavingOrderSettings(false);
+    }
+  };
+
+  const handleAddOrderCategory = async () => {
+    if (!newCategoryForm.id || !newCategoryForm.label) return alert("Complete los datos de la categoría");
+    const updated = {
+      ...orderSettings,
+      categories: [...orderSettings.categories, newCategoryForm],
+      practicesByType: { ...orderSettings.practicesByType, [newCategoryForm.id]: [] }
+    };
+    await handleSaveOrderSettings(updated);
+    setNewCategoryForm({ id: '', label: '', icon: 'Clipboard' });
+  };
+
+  const handleDeleteOrderCategory = async (catId) => {
+    if (!window.confirm("¿Eliminar categoría y todas sus prácticas?")) return;
+    const updated = {
+      ...orderSettings,
+      categories: orderSettings.categories.filter(c => c.id !== catId),
+      practicesByType: { ...orderSettings.practicesByType }
+    };
+    delete updated.practicesByType[catId];
+    await handleSaveOrderSettings(updated);
+    if (selectedOrderCategory === catId) setSelectedOrderCategory(null);
+  };
+
+  const handleAddOrderPractice = async () => {
+    if (!selectedOrderCategory || !newPracticeForm.n) return alert("Complete nombre de la práctica");
+    const currentList = orderSettings.practicesByType[selectedOrderCategory] || [];
+    const updated = {
+      ...orderSettings,
+      practicesByType: {
+        ...orderSettings.practicesByType,
+        [selectedOrderCategory]: [...currentList, newPracticeForm]
+      }
+    };
+    await handleSaveOrderSettings(updated);
+    setNewPracticeForm({ n: '', c: '' });
+  };
+
+  const handleStartEditOrderPractice = (idx, p) => {
+    setEditingOrderPracticeIdx(idx);
+    setEditOrderPracticeForm({ n: p.n, c: p.c || '' });
+  };
+
+  const handleSaveEditOrderPractice = async (idx) => {
+    if (!editOrderPracticeForm.n) return alert("El nombre es obligatorio");
+    const currentList = [...(orderSettings.practicesByType[selectedOrderCategory] || [])];
+    currentList[idx] = editOrderPracticeForm;
+    
+    const updated = {
+      ...orderSettings,
+      practicesByType: {
+        ...orderSettings.practicesByType,
+        [selectedOrderCategory]: currentList
+      }
+    };
+    await handleSaveOrderSettings(updated);
+    setEditingOrderPracticeIdx(null);
+  };
+
+  const handleReorderOrderPractices = (newList) => {
+    const updated = {
+      ...orderSettings,
+      practicesByType: {
+        ...orderSettings.practicesByType,
+        [selectedOrderCategory]: newList
+      }
+    };
+    // Update local state immediately for smoothness
+    setOrderSettings(updated);
+    // Then persist
+    handleSaveOrderSettings(updated);
+  };
+
+  const handleDeleteOrderPractice = async (pIdx) => {
+    const currentList = [...(orderSettings.practicesByType[selectedOrderCategory] || [])];
+    currentList.splice(pIdx, 1);
+    const updated = {
+      ...orderSettings,
+      practicesByType: {
+        ...orderSettings.practicesByType,
+        [selectedOrderCategory]: currentList
+      }
+    };
+    await handleSaveOrderSettings(updated);
   };
 
   const handleManageUser = (user) => {
@@ -631,7 +780,7 @@ const AdminPage = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-4 border-b border-main">
         <div>
           <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Administración</h1>
-          <p className="text-gray-500 font-medium">Control centralizado de usuarios y prácticas</p>
+          <p className="text-gray-500 font-medium">Control centralizado de usuarios e informes</p>
         </div>
         
         {/* Navigation Tabs */}
@@ -654,6 +803,262 @@ const AdminPage = () => {
       </div>
 
       <div className="animate-slide-up">
+        {activeTab === 'stats' && (
+          <div className="space-y-8">
+            {/* Main Metrics Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="card p-6 border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div>
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Pacientes Totales</p>
+                    <h3 className="text-4xl font-black text-[var(--text-main)]">
+                      {globalStats.loading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : globalStats.patients}
+                    </h3>
+                  </div>
+                  <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                    <UserIcon size={32} />
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 w-full opacity-20" />
+                  </div>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Base centralizada</p>
+                </div>
+              </motion.div>
+
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                className="card p-6 border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div>
+                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">Informes Médicos</p>
+                    <h3 className="text-4xl font-black text-[var(--text-main)]">
+                      {globalStats.loading ? <Loader2 className="animate-spin text-indigo-600" size={32} /> : globalStats.reports}
+                    </h3>
+                  </div>
+                  <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                    <FileText size={32} />
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                    <div className="h-full bg-indigo-600 w-full opacity-20" />
+                  </div>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Registros clínicos</p>
+                </div>
+              </motion.div>
+
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="card p-6 border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group"
+              >
+                <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
+                <div className="flex items-center justify-between relative z-10">
+                  <div>
+                    <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-1">Pedidos Generados</p>
+                    <h3 className="text-4xl font-black text-[var(--text-main)]">
+                      {globalStats.loading ? <Loader2 className="animate-spin text-purple-600" size={32} /> : globalStats.orders}
+                    </h3>
+                  </div>
+                  <div className="w-16 h-16 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30">
+                    <ClipboardList size={32} />
+                  </div>
+                </div>
+                <div className="mt-6 flex items-center gap-2">
+                  <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
+                    <div className="h-full bg-purple-600 w-full opacity-20" />
+                  </div>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Historial dinámico</p>
+                </div>
+              </motion.div>
+            </div>
+
+            {/* Storage Detailed Info */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 rounded-xl">
+                    <Database size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold">Almacenamiento de Datos (Firestore)</h3>
+                </div>
+                
+                <div className="space-y-6">
+                  <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">
+                    <div className="flex justify-between items-end mb-4">
+                      <div>
+                        <p className="text-3xl font-black text-[var(--text-main)]">{storageStats.fbSize} <span className="text-sm font-medium text-[var(--text-sub)]">KB</span></p>
+                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">Espacio ocupado en BD</p>
+                      </div>
+                    </div>
+                    <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
+                      <div 
+                        className="h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_10px_rgba(37,99,235,0.5)]" 
+                        style={{ width: `${Math.min((storageStats.fbSize / 1024) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <p className="text-sm text-gray-500 leading-relaxed">
+                    La base de datos Firestore almacena los metadatos de los informes, pacientes y ahora también los pedidos. 
+                    Al regenerar los PDFs dinámicamente, mantenemos este consumo en niveles óptimos.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 rounded-xl">
+                    <Upload size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold">Almacenamiento de Archivos (Supabase)</h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">
+                    <div className="flex justify-between items-end mb-4">
+                      <div>
+                        <p className="text-3xl font-black text-[var(--text-main)]">{storageStats.sbSize} <span className="text-sm font-medium text-[var(--text-sub)]">MB</span></p>
+                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">Archivos y Firmas</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xl font-bold text-emerald-600">{storageStats.sbCount}</p>
+                        <p className="text-[10px] font-bold text-[var(--text-sub)] uppercase">Archivos</p>
+                      </div>
+                    </div>
+                    <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
+                      <div 
+                        className="h-full bg-emerald-600 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
+                        style={{ width: `${Math.min((storageStats.sbSize / 100) * 100, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                    Supabase aloja los PDFs generados en informes anteriores y las firmas de los profesionales. 
+                    El plan gratuito permite hasta 1GB, lo cual es suficiente para miles de registros.
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            <div className="flex justify-center">
+              <button 
+                onClick={() => { fetchGlobalStats(); fetchStorageStats(); }}
+                className="flex items-center gap-2 px-6 py-3 bg-[var(--bg-card)] border border-[var(--border-main)] text-[var(--text-sub)] rounded-2xl font-bold hover:bg-[var(--hover-main)] transition-all shadow-sm"
+              >
+                <RefreshCw size={20} className={globalStats.loading ? 'animate-spin' : ''} />
+                Actualizar Métricas
+              </button>
+            </div>
+
+            {/* Mantenimiento Unificado */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-8 border-t border-main">
+              <div className="lg:col-span-2 bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2.5 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-xl">
+                      <Trash2 size={24} />
+                    </div>
+                    <h3 className="text-xl font-bold">Limpieza Manual por Fecha</h3>
+                  </div>
+                  <button onClick={() => setCleanSummary(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-gray-400">
+                    <RefreshCw size={18} />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Fecha Inicio</label>
+                    <input type="date" value={cleanRange.start} onChange={e => setCleanRange({...cleanRange, start: e.target.value})} className="input-field" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Fecha Fin</label>
+                    <input type="date" value={cleanRange.end} onChange={e => setCleanRange({...cleanRange, end: e.target.value})} className="input-field" />
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={cleanOptions.pdfs} onChange={e => setCleanOptions({...cleanOptions, pdfs: e.target.checked})} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
+                    <span className="text-xs font-bold text-[var(--text-main)]">ELIMINAR ARCHIVOS PDFS</span>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={cleanOptions.records} onChange={e => setCleanOptions({...cleanOptions, records: e.target.checked})} className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
+                    <span className="text-xs font-bold text-red-600 uppercase">Eliminar registros de base de datos</span>
+                  </label>
+                </div>
+
+                {cleanSummary ? (
+                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl border border-blue-100 dark:border-blue-900/30">
+                    <div className="flex justify-between items-center mb-4">
+                      <div>
+                        <p className="text-sm font-bold text-blue-900 dark:text-blue-300">Análisis completado</p>
+                        <p className="text-xs text-blue-600">Se encontraron {cleanSummary.total} informes en este rango.</p>
+                      </div>
+                      <button onClick={handleExecuteCleanup} disabled={isCleaning} className="btn-primary bg-red-600 text-white px-6 py-2 flex items-center gap-2">
+                        {isCleaning ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                        Confirmar Limpieza
+                      </button>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <button 
+                    onClick={handleAnalyzeCleanup}
+                    disabled={isCleaning || !cleanRange.start || !cleanRange.end}
+                    className="w-full btn-primary py-4 flex items-center justify-center gap-3 text-lg"
+                  >
+                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={22} />}
+                    ANALIZAR RANGO SELECCIONADO
+                  </button>
+                )}
+              </div>
+
+              <div className="lg:col-span-1 space-y-6">
+                <div className="bg-[var(--bg-card)] p-6 rounded-[2rem] border border-[var(--border-main)] shadow-sm">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 rounded-lg">
+                      <ShieldCheck size={20} />
+                    </div>
+                    <h4 className="font-bold">Mantenimiento Protegido</h4>
+                  </div>
+                  <p className="text-xs text-gray-500 mb-4 leading-relaxed">
+                    Elimina archivos en Supabase que no tienen un informe asociado (huérfanos). Las firmas de profesionales están protegidas.
+                  </p>
+                  <button 
+                    onClick={handleCleanOrphans}
+                    disabled={isCleaning}
+                    className="w-full py-3 bg-[var(--bg-secondary)] hover:bg-red-50 dark:hover:bg-red-900/10 text-[var(--text-sub)] hover:text-red-600 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-main"
+                  >
+                    {isCleaning ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
+                    Limpiar Archivos Huérfanos
+                  </button>
+                </div>
+
+                <div className="bg-amber-50 dark:bg-amber-900/10 p-6 rounded-[2rem] border border-amber-100 dark:border-amber-900/30">
+                  <div className="flex items-center gap-2 text-amber-700 dark:text-amber-500 mb-2">
+                    <Activity size={18} />
+                    <span className="text-xs font-black uppercase">Nota de Seguridad</span>
+                  </div>
+                  <p className="text-[11px] text-amber-600/80 leading-relaxed italic">
+                    "La eliminación de registros es definitiva e irreversible. Se recomienda realizar copias de seguridad de informes críticos antes de proceder."
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {activeTab === 'users' && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-[var(--border-main)]">
@@ -685,20 +1090,20 @@ const AdminPage = () => {
               <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="bg-gray-50/50 dark:bg-slate-900/50 border-b border-main">
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Médico</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Especialidad</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Estado</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Última Conexión</th>
-                      <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 text-right">Acciones</th>
+                    <tr className="bg-[var(--bg-secondary)] border-b border-main">
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Profesional</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Especialidad</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Estado</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Acceso</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Acciones</th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.map((user, idx) => (
-                      <tr key={user.id} className="border-b border-main/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors group">
+                      <tr key={user.id} className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors group">
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-4">
-                            <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 text-blue-600 rounded-xl flex items-center justify-center font-bold text-lg">
+                            <div className="w-10 h-10 bg-blue-100/30 text-blue-600 rounded-xl flex items-center justify-center font-black text-lg border border-main shadow-sm">
                               {user._std.nombre.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
@@ -773,16 +1178,16 @@ const AdminPage = () => {
               <div className="card p-8 bg-[var(--bg-card)] sticky top-8">
                 <h3 className="text-xl font-bold flex items-center gap-2 mb-6">
                   {selectedPractice ? <Edit2 className="text-blue-500" /> : <Plus className="text-green-500" />}
-                  {selectedPractice ? 'Editar Práctica' : 'Nueva Práctica'}
+                  {selectedPractice ? 'Editar Modelo' : 'Nuevo Modelo'}
                 </h3>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase text-gray-400 ml-1">Código</label>
-                    <input type="text" value={practiceForm.c} onChange={e => setPracticeForm({...practiceForm, c: e.target.value.toUpperCase()})} className="input-field" placeholder="Ej: OT01" />
+                    <input type="text" value={practiceForm.c} onChange={e => setPracticeForm({...practiceForm, c: e.target.value.toUpperCase()})} className="input-field" placeholder="Código..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase text-gray-400 ml-1">Nombre</label>
-                    <input type="text" value={practiceForm.n} onChange={e => setPracticeForm({...practiceForm, n: e.target.value})} className="input-field" placeholder="Ej: Rinoscopia" />
+                    <input type="text" value={practiceForm.n} onChange={e => setPracticeForm({...practiceForm, n: e.target.value})} className="input-field" placeholder="Nombre..." />
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase text-gray-400 ml-1">Informe Base (Template)</label>
@@ -802,7 +1207,7 @@ const AdminPage = () => {
                     </div>
                   </label>
                   <button onClick={handleSavePractice} className="btn-primary w-full py-4 mt-2 font-black uppercase tracking-widest text-xs">
-                    {selectedPractice ? 'Actualizar Práctica' : 'Guardar Nueva Práctica'}
+                    {selectedPractice ? 'Actualizar Modelo' : 'Guardar Nuevo Modelo'}
                   </button>
                 </div>
               </div>
@@ -811,7 +1216,7 @@ const AdminPage = () => {
             <div className="lg:col-span-2">
               <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-main overflow-hidden">
                 <div className="p-6 border-b border-main flex items-center justify-between">
-                  <h3 className="font-bold flex items-center gap-2"><ClipboardList size={20} className="text-blue-500" /> Catálogo de Prácticas</h3>
+                  <h3 className="font-bold flex items-center gap-2"><ClipboardList size={20} className="text-blue-500" /> Catálogo de Modelos</h3>
                   <div className="relative w-48">
                     <SearchIcon size={14} className="absolute left-3 top-2.5 text-gray-400" />
                     <input type="text" placeholder="Filtrar..." className="input-field pl-9 py-1.5 text-xs" value={practiceSearch} onChange={e => setPracticeSearch(e.target.value)} />
@@ -820,15 +1225,15 @@ const AdminPage = () => {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
-                      <tr className="bg-gray-50/30 dark:bg-slate-900/30 text-[10px] uppercase font-black tracking-widest text-gray-400 border-b border-main">
+                      <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-widest text-[var(--text-sub)] border-b border-main">
                         <th className="px-6 py-4">Cód.</th>
-                        <th className="px-6 py-4">Práctica</th>
+                        <th className="px-6 py-4">Modelo / Práctica</th>
                         <th className="px-6 py-4 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredPractices.map(p => (
-                        <tr key={p.id} className="border-b border-main/50 hover:bg-slate-50/50 dark:hover:bg-slate-800/30 transition-colors">
+                        <tr key={p.id} className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors">
                           <td className="px-6 py-4 font-mono font-bold text-blue-600 text-xs">{p.c}</td>
                           <td className="px-6 py-4 font-medium text-sm">{p.n}</td>
                           <td className="px-6 py-4 text-right space-x-1">
@@ -841,6 +1246,214 @@ const AdminPage = () => {
                   </table>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="lg:col-span-1 space-y-6">
+              <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--text-main)]"><Settings2 size={20} className="text-blue-600" /> Parámetros de Pedidos</h3>
+                <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--text-main)]">Email de Paciente Obligatorio</span>
+                    <span className="text-[10px] text-gray-400 uppercase font-black">Controla si el campo es requerido</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only"
+                      checked={orderSettings.patientEmailRequired || false}
+                      onChange={(e) => handleSaveOrderSettings({...orderSettings, patientEmailRequired: e.target.checked})}
+                    />
+                    <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.patientEmailRequired ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.patientEmailRequired ? 'translate-x-5' : ''}`} />
+                    </div>
+                  </div>
+                </label>
+                <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-4">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--text-main)]">Habilitar Módulo Pedidos</span>
+                    <span className="text-[10px] text-gray-400 uppercase font-black">Si se apaga, solo admins lo ven</span>
+                  </div>
+                  <div className="relative">
+                    <input 
+                      type="checkbox" 
+                      className="sr-only"
+                      checked={orderSettings.ordersEnabled ?? true}
+                      onChange={(e) => {
+                        const newValue = e.target.checked;
+                        const action = newValue ? 'habilitar' : 'deshabilitar';
+                        if (window.confirm(`¿Está seguro que desea ${action} el módulo de pedidos para todos los usuarios?`)) {
+                          handleSaveOrderSettings({...orderSettings, ordersEnabled: newValue});
+                        }
+                      }}
+                    />
+                    <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.ordersEnabled !== false ? 'bg-green-600' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.ordersEnabled !== false ? 'translate-x-5' : ''}`} />
+                    </div>
+                  </div>
+                </label>
+              </div>
+
+              <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Plus size={20} className="text-blue-600" /> Nueva Categoría</h3>
+                <div className="space-y-4">
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">ID Único</label>
+                    <input type="text" className="input-field" value={newCategoryForm.id} onChange={e => setNewCategoryForm({...newCategoryForm, id: e.target.value.toLowerCase().replace(/\s/g, '_')})} placeholder="ID..." />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">Etiqueta Visible</label>
+                    <input type="text" className="input-field" value={newCategoryForm.label} onChange={e => setNewCategoryForm({...newCategoryForm, label: e.target.value})} placeholder="Nombre de categoría" />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">Icono</label>
+                    <select className="input-field cursor-pointer" value={newCategoryForm.icon} onChange={e => setNewCategoryForm({...newCategoryForm, icon: e.target.value})}>
+                      <option value="Clipboard">Portapapeles</option>
+                      <option value="Stethoscope">Estetoscopio</option>
+                      <option value="Activity">Actividad/Onda</option>
+                      <option value="Search">Lupa</option>
+                      <option value="Eye">Ojo</option>
+                      <option value="Heart">Corazón</option>
+                    </select>
+                  </div>
+                  <button onClick={handleAddOrderCategory} className="btn-primary w-full py-3 mt-2 flex items-center justify-center gap-2">
+                    {isSavingOrderSettings ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />} AGREGAR CATEGORÍA
+                  </button>
+                </div>
+              </div>
+
+              <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm overflow-hidden">
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-[var(--text-main)]"><ClipboardList size={20} className="text-blue-600" /> Categorías Activas</h3>
+                <div className="space-y-2">
+                  {orderSettings.categories.map(cat => (
+                    <div 
+                      key={cat.id} 
+                      onClick={() => setSelectedOrderCategory(cat.id)}
+                      className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${selectedOrderCategory === cat.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-[var(--bg-secondary)] border-transparent hover:border-blue-300'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-black uppercase tracking-tighter">{cat.label}</span>
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteOrderCategory(cat.id); }} className={`p-2 rounded-xl transition-all ${selectedOrderCategory === cat.id ? 'hover:bg-blue-700 text-white' : 'hover:bg-red-50 text-red-400'}`}><Trash2 size={16} /></button>
+                    </div>
+                  ))}
+                  {orderSettings.categories.length === 0 && <p className="text-center py-8 text-gray-400 text-sm italic">No hay categorías configuradas.</p>}
+                </div>
+              </div>
+            </div>
+
+            <div className="lg:col-span-2 space-y-6">
+              {selectedOrderCategory ? (
+                <div className="card bg-[var(--bg-card)] border border-main rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col h-full">
+                  <div className="p-8 border-b border-main bg-[var(--bg-secondary)]/50 flex items-center justify-between">
+                    <div>
+                      <h3 className="text-2xl font-black text-[var(--text-main)]">Estudios: {orderSettings.categories.find(c => c.id === selectedOrderCategory)?.label}</h3>
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Gestionar lista de estudios para esta categoría</p>
+                    </div>
+                  </div>
+
+                  <div className="p-8 border-b border-main bg-[var(--bg-card)]">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div className="md:col-span-2 space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Nombre del Estudio</label>
+                        <input type="text" className="input-field" value={newPracticeForm.n} onChange={e => setNewPracticeForm({...newPracticeForm, n: e.target.value})} placeholder="Estudio..." />
+                      </div>
+                      <div className="md:col-span-1 space-y-1">
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Código</label>
+                        <input type="text" className="input-field" value={newPracticeForm.c} onChange={e => setNewPracticeForm({...newPracticeForm, c: e.target.value})} placeholder="Código..." />
+                      </div>
+                      <div className="md:col-span-1 flex items-end">
+                        <button onClick={handleAddOrderPractice} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
+                           <Plus size={18} /> AGREGAR
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Reorder.Group 
+                    axis="y" 
+                    values={orderSettings.practicesByType[selectedOrderCategory] || []} 
+                    onReorder={handleReorderOrderPractices}
+                    className="flex-1 p-8 space-y-3 overflow-y-auto max-h-[600px] custom-scrollbar"
+                  >
+                    {(orderSettings.practicesByType[selectedOrderCategory] || []).map((p, idx) => (
+                      <Reorder.Item 
+                        key={p.n + idx} 
+                        value={p}
+                        whileDrag={{ 
+                          scale: 1.02, 
+                          boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" 
+                        }}
+                        className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl border border-transparent hover:border-blue-400 transition-all group shadow-sm cursor-grab active:cursor-grabbing"
+                      >
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="flex items-center gap-2">
+                            <GripVertical className="text-gray-300 group-hover:text-blue-400 transition-colors" size={20} />
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center text-xs font-bold">{idx + 1}</div>
+                          </div>
+                          
+                          {editingOrderPracticeIdx === idx ? (
+                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 pr-4">
+                              <input 
+                                type="text" 
+                                className="input-field py-1.5 text-sm" 
+                                value={editOrderPracticeForm.n} 
+                                onChange={e => setEditOrderPracticeForm({...editOrderPracticeForm, n: e.target.value})}
+                                autoFocus
+                              />
+                              <input 
+                                type="text" 
+                                className="input-field py-1.5 text-xs font-mono" 
+                                value={editOrderPracticeForm.c} 
+                                onChange={e => setEditOrderPracticeForm({...editOrderPracticeForm, c: e.target.value.toUpperCase()})}
+                                placeholder="Cód."
+                              />
+                            </div>
+                          ) : (
+                            <div className="flex-1">
+                              <p className="font-bold text-sm text-[var(--text-main)]">{p.n}</p>
+                              <p className="text-[10px] font-black text-gray-400 uppercase">CÓDIGO: {p.c || '--'}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-1">
+                          {editingOrderPracticeIdx === idx ? (
+                            <>
+                              <button onClick={() => handleSaveEditOrderPractice(idx)} className="p-2 text-green-500 hover:bg-green-50 rounded-xl transition-all" title="Guardar"><Check size={18} /></button>
+                              <button onClick={() => setEditingOrderPracticeIdx(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all" title="Cancelar"><X size={18} /></button>
+                            </>
+                          ) : (
+                            <>
+                              <button onClick={() => handleStartEditOrderPractice(idx, p)} className="p-2 opacity-0 group-hover:opacity-100 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Edit2 size={18} /></button>
+                              <button onClick={() => handleDeleteOrderPractice(idx)} className="p-2 opacity-0 group-hover:opacity-100 text-red-400 hover:bg-red-50 rounded-xl transition-all" title="Eliminar"><Trash2 size={18} /></button>
+                            </>
+                          )}
+                        </div>
+                      </Reorder.Item>
+                    ))}
+                    {(orderSettings.practicesByType[selectedOrderCategory] || []).length === 0 && (
+                      <div className="text-center py-20 text-gray-400">
+                        <Database size={48} className="mx-auto mb-4 opacity-10" />
+                        <p className="text-sm font-bold uppercase tracking-widest">Sin estudios registrados</p>
+                      </div>
+                    )}
+                  </Reorder.Group>
+                </div>
+              ) : (
+                <div className="card bg-[var(--bg-card)] border border-main rounded-[2.5rem] border-dashed flex flex-col items-center justify-center p-20 text-center space-y-6">
+                  <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/10 rounded-full flex items-center justify-center text-blue-400">
+                    <ClipboardList size={48} />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-black text-[var(--text-main)]">Seleccione una Categoría</h3>
+                    <p className="text-gray-400 max-w-xs mx-auto mt-2">Elija una categoría de la izquierda para gestionar sus estudios asociados o agregue una nueva.</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -889,7 +1502,7 @@ const AdminPage = () => {
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
-                    <Key size={14} /> Token de Seguridad (Opcional)
+                    <Key size={14} /> Token de Seguridad
                   </label>
                   <input 
                     type="password" 

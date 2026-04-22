@@ -21,16 +21,21 @@ import {
   X
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, collection, getDocs, addDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, addDoc, setDoc } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const ReportsPage = () => {
+const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
   const [reportData, setReportData] = useState({
     patient: '',
     socialWork: '',
     dni: '',
-    date: new Date().toISOString().split('T')[0],
+    date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
     requester: '',
     reason: '',
     patientEmail: '',
@@ -38,13 +43,57 @@ const ReportsPage = () => {
     customTitle: '',
     enableHeader: true
   });
+
+  // Patient autocomplete logic
+  useEffect(() => {
+    const searchPatient = async () => {
+      const cleanDni = reportData.dni.trim();
+      if (cleanDni.length >= 7 && cleanDni.length <= 9) {
+        try {
+          const docRef = doc(db, 'patients', cleanDni);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setReportData(prev => ({
+              ...prev,
+              patient: data.name || prev.patient,
+              socialWork: data.insurance || prev.socialWork
+              // Email is intentionally NOT autocompleted as requested
+            }));
+            showToast('Datos de paciente cargados');
+          }
+        } catch (err) {
+          console.error("Error searching patient:", err);
+        }
+      }
+    };
+    const timer = setTimeout(searchPatient, 600);
+    return () => clearTimeout(timer);
+  }, [reportData.dni]);
+
+  const savePatientToHistory = async () => {
+    const cleanDni = reportData.dni.trim();
+    if (!cleanDni || cleanDni.length < 7) return;
+    try {
+      const patientRef = doc(db, 'patients', cleanDni);
+      await setDoc(patientRef, {
+        name: reportData.patient.trim(),
+        dni: cleanDni,
+        insurance: reportData.socialWork.trim(),
+        email: reportData.patientEmail.trim(),
+        lastUpdated: new Date().toISOString()
+      }, { merge: true });
+    } catch (err) {
+      console.error("Error saving patient to history:", err);
+    }
+  };
   
   const [selectedPractice, setSelectedPractice] = useState('');
   const [content, setContent] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
-  const [professional, setProfessional] = useState(null);
+  const [professional, setProfessional] = useState(initialProfile || null);
   const [dbPractices, setDbPractices] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
   const navigate = useNavigate();
@@ -66,7 +115,7 @@ const ReportsPage = () => {
     if (!auth.currentUser || !reportData.patient) return;
     try {
       const data = {
-        profesionalId: auth.currentUser.uid,
+        profesionalId: editId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
         profesionalNombre: professional?.nombre || 'Desconocido',
         pacienteNombre: reportData.patient.toUpperCase(),
         pacienteDni: reportData.dni || '',
@@ -104,51 +153,40 @@ const ReportsPage = () => {
     const fetchData = async () => {
       if (!auth.currentUser) return;
       try {
-        const uid = auth.currentUser.uid;
-        const email = auth.currentUser.email || '';
-        
-        const docRef = doc(db, 'users', uid);
-        let docSnap = await getDoc(docRef);
-        let profData = null;
+        // Carga paralela de Prácticas y Configuración
+        const [practicesSnap, configSnap] = await Promise.all([
+          getDocs(collection(db, 'practices')),
+          getDoc(doc(db, 'config', 'settings'))
+        ]);
 
-        if (docSnap.exists()) {
-          profData = docSnap.data();
-        } else if (email) {
-          const legacyId = email.replace(/[@.]/g, '_');
-          const legacyRef = doc(db, 'users', legacyId);
-          const legacySnap = await getDoc(legacyRef);
-          if (legacySnap.exists()) {
-            profData = legacySnap.data();
-          }
-        }
-
-        if (profData) {
-          setProfessional({
-            ...profData,
-            nombre: profData.nombre || profData.n || 'Médico',
-            especialidad: profData.especialidad || profData.esp || '',
-            mp: profData.mp || profData.m || '',
-            headerGeneral: profData.headerGeneral || Array(8).fill(''),
-            headerFibro: profData.headerFibro || Array(8).fill(''),
-          });
-        }
-
-        const practicesRef = collection(db, 'practices');
-        const practicesSnap = await getDocs(practicesRef);
         const list = practicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setDbPractices(list);
 
-        const configRef = doc(db, 'config', 'settings');
-        const configSnap = await getDoc(configRef);
         if (configSnap.exists()) {
           setConfig(configSnap.data());
+        }
+
+        // Si no tenemos el perfil por props (caso raro), lo buscamos
+        if (!professional) {
+          const docSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+          if (docSnap.exists()) {
+            const profData = docSnap.data();
+            setProfessional({
+              ...profData,
+              nombre: profData.nombre || profData.n || 'Médico',
+              especialidad: profData.especialidad || profData.esp || '',
+              mp: profData.mp || profData.m || '',
+              headerGeneral: profData.headerGeneral || Array(8).fill(''),
+              headerFibro: profData.headerFibro || Array(8).fill(''),
+            });
+          }
         }
       } catch (err) {
         console.error("Error fetching data:", err);
       }
     };
     fetchData();
-  }, []);
+  }, [auth.currentUser, professional]);
 
   // Lógica para CARGAR el informe si estamos editando
   useEffect(() => {
@@ -263,6 +301,7 @@ const ReportsPage = () => {
       return null;
     }
 
+    await savePatientToHistory();
     setIsGenerating(true);
     // 0. Preparation
     const doc = new jsPDF({ compress: true });
@@ -500,12 +539,14 @@ const ReportsPage = () => {
       return;
     }
     
+    await savePatientToHistory();
+    setIsSending(true);
+    
     if (reportData.patientEmail && (!reportData.patientEmail.includes('@') || !reportData.patientEmail.includes('.'))) {
       showToast('Por favor ingrese un email de paciente válido o déjelo en blanco.', 'error');
       return;
     }
 
-    setIsSending(true);
     try {
       const pdfDoc = await generatePDF('instance');
       if (!pdfDoc) {
@@ -906,7 +947,7 @@ const ReportsPage = () => {
                 className="input-field" 
                 placeholder="Nombre y Apellido completo"
                 value={reportData.patient}
-                onChange={e => setReportData({...reportData, patient: e.target.value})}
+                onChange={e => setReportData({...reportData, patient: toTitleCase(e.target.value)})}
               />
             </div>
             <div className="space-y-1">
@@ -924,9 +965,9 @@ const ReportsPage = () => {
               <input 
                 type="text" 
                 className="input-field"
-                placeholder="Ej: OSDE, PAMI..."
+                placeholder=""
                 value={reportData.socialWork}
-                onChange={e => setReportData({...reportData, socialWork: e.target.value})}
+                onChange={e => setReportData({...reportData, socialWork: toTitleCase(e.target.value)})}
               />
             </div>
             <div className="space-y-1">
@@ -947,7 +988,7 @@ const ReportsPage = () => {
                 className="input-field"
                 placeholder="Médico que solicita..."
                 value={reportData.requester}
-                onChange={e => setReportData({...reportData, requester: e.target.value})}
+                onChange={e => setReportData({...reportData, requester: toTitleCase(e.target.value)})}
               />
             </div>
           </div>
@@ -958,9 +999,9 @@ const ReportsPage = () => {
               <input 
                 type="text" 
                 className="input-field"
-                placeholder="Ej: Control, Derivación..."
+                placeholder=""
                 value={reportData.reason}
-                onChange={e => setReportData({...reportData, reason: e.target.value})}
+                onChange={e => setReportData({...reportData, reason: toTitleCase(e.target.value)})}
               />
             </div>
             <div className="space-y-1">
@@ -968,7 +1009,7 @@ const ReportsPage = () => {
               <input 
                 type="email" 
                 className={`input-field ${reportData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reportData.patientEmail)) ? 'input-error' : ''}`}
-                placeholder="Para envío de copia por mail"
+                placeholder="Email..."
                 value={reportData.patientEmail}
                 onChange={e => setReportData({...reportData, patientEmail: e.target.value})}
               />
@@ -977,13 +1018,13 @@ const ReportsPage = () => {
 
 
           <div className="space-y-1">
-            <label className="text-xs font-bold uppercase opacity-60 text-blue-600">Práctica Realizada</label>
+            <label className="text-xs font-bold uppercase opacity-60 text-blue-600">Informe / Modelo</label>
             <select 
               className="input-field appearance-none cursor-pointer font-bold text-lg text-[var(--text-main)] bg-[var(--bg-secondary)]"
               value={selectedPractice}
               onChange={e => handlePracticeChange(e.target.value)}
             >
-              <option value="" className="bg-[var(--bg-card)]">Seleccione una práctica...</option>
+              <option value="" className="bg-[var(--bg-card)]">Seleccione un modelo de informe...</option>
               {dbPractices.map(p => <option key={p.id} value={p.n} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.n}</option>)}
             </select>
           </div>
@@ -998,7 +1039,7 @@ const ReportsPage = () => {
               <input 
                 type="text" 
                 className="input-field border-amber-200 focus:border-amber-400 bg-amber-50/20"
-                placeholder="Ej: INFORME DE..."
+                placeholder=""
                 value={reportData.customTitle}
                 onChange={e => setReportData({...reportData, customTitle: e.target.value})}
               />

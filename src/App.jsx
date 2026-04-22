@@ -1,40 +1,63 @@
 import React, { useState, useEffect } from 'react';
-import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
+import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
-  FileText, 
-  User, 
-  Settings, 
-  Activity, 
-  Sun, 
-  Moon, 
-  LogOut,
-  ChevronRight,
-  Menu,
-  ClipboardList
+  FileText, User, Users, Settings, Activity, Sun, Moon, LogOut, 
+  ChevronRight, Menu, ClipboardList, Layout, FilePlus, History, BookTemplate
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
+import { createClient } from '@supabase/supabase-js';
 
-const LoginPage = React.lazy(() => import('./pages/LoginPage'));
-const ReportsPage = React.lazy(() => import('./pages/ReportsPage'));
+// Inicializar Supabase para el heartbeat (evitar pausa por inactividad)
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
+
+import AuthPage from './pages/AuthPage.jsx';
+const ReportsMain = React.lazy(() => import('./pages/ReportsMain'));
 const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
-const PracticesPage = React.lazy(() => import('./pages/PracticesPage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
-const MyReportsPage = React.lazy(() => import('./pages/MyReportsPage'));
+const OrdersMain = React.lazy(() => import('./pages/OrdersMain'));
+const PatientsPage = React.lazy(() => import('./pages/PatientsPage'));
+
+// Preload critical routes
+const preloadRoutes = () => {
+  import('./pages/ReportsMain');
+  import('./pages/OrdersMain');
+};
 
 const PageLoader = () => (
-  <div className="flex flex-col items-center justify-center min-h-[60vh] gap-4">
-    <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-    <p className="text-sm font-bold opacity-40 uppercase tracking-widest">Cargando...</p>
+  <div className="fixed inset-0 flex flex-col items-center justify-center bg-[var(--bg-page)] z-[100] animate-in fade-in duration-500">
+    <div className="relative mb-6">
+      <div className="w-20 h-20 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <img src="/coat_logo.png" alt="COAT" className="w-10 h-10 object-contain animate-pulse" />
+      </div>
+    </div>
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-lg font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent uppercase tracking-[0.2em] animate-pulse">
+        COAT
+      </p>
+      <div className="flex gap-1">
+        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+        <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-bounce"></div>
+      </div>
+    </div>
   </div>
 );
 
 function App() {
   const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isSecretaria, setIsSecretaria] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
+  const [ordersEnabled, setOrdersEnabled] = useState(true);
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
@@ -88,41 +111,76 @@ function App() {
     };
   }, [currentUser]);
 
+  // Pre-carga agresiva un segundo después del inicio
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged(async (user) => {
-      setCurrentUser(user);
+    const timer = setTimeout(() => {
+      preloadRoutes();
+    }, 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        setCurrentUser(user);
+        
+        // Heartbeat de Supabase: Evita que el proyecto se pause por falta de uso
+        // Se ejecuta una sola vez al detectar al usuario logueado
+        try {
+          await supabase.storage.from('informescoat').list('', { limit: 1 });
+          console.log("Supabase heartbeat sent");
+        } catch (e) {
+          console.warn("Supabase Heartbeat error (normal si el proyecto está pausado):", e.message);
+        }
+
         try {
           const docRef = doc(db, 'users', user.uid);
-          
-          // Actualizar última conexión al cargar la app
-          updateDoc(docRef, { lastLogin: new Date().toISOString() }).catch(e => console.error(e));
-
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
-            setUserProfile(docSnap.data());
+            const data = docSnap.data();
+            setUserProfile(data);
+            const role = data.role?.toLowerCase() || '';
+            setIsSecretaria(role === 'secretaria' || role === 'secre' || role === 'secretaría');
+            setIsDirectora(role.includes('directora') || role.includes('director'));
           }
-        } catch (err) {
-          console.error("Error fetching user profile:", err);
+        } catch (error) {
+          console.error("Error fetching profile:", error);
         }
       } else {
+        setCurrentUser(null);
         setUserProfile(null);
+        setIsSecretaria(false);
+        setIsDirectora(false);
+      }
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(doc(db, 'config', 'order_settings'), (snap) => {
+      if (snap.exists()) {
+        setOrdersEnabled(snap.data().ordersEnabled ?? true);
       }
     });
     return () => unsubscribe();
   }, []);
 
-
-  const isSecretaria = userProfile?.role === 'secre' || userProfile?.role === 'secretaría';
   const isAdmin = userProfile?.role === 'admin' || 
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
                   currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
 
+  const isDirectora = userProfile?.role === 'directora' || 
+                      userProfile?.role === 'directora medica' ||
+                      userProfile?.role === 'directora médica';
+
+  const canSeeOrders = ordersEnabled || isAdmin || isDirectora;
+
   const navItems = [
-    { id: 'reports', label: 'Informes', icon: <FileText size={24} />, path: '/', show: true },
-    { id: 'history', label: isSecretaria ? 'Ver Informes' : 'Mis Informes', icon: <ClipboardList size={24} />, path: '/history', show: true },
+    { id: 'reports', label: 'Informes', icon: <Layout size={24} />, path: '/reports', show: true },
+    { id: 'orders', label: 'Pedidos', icon: <ClipboardList size={24} />, path: '/orders', show: canSeeOrders },
+    { id: 'patients', label: 'Pacientes', icon: <Users size={24} />, path: '/patients', show: isAdmin || isDirectora || isSecretaria },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile', show: true },
-    { id: 'practices', label: 'Mis Prácticas', icon: <Activity size={24} />, path: '/practices', show: !isSecretaria },
     { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', show: isAdmin },
   ].filter(item => item.show);
 
@@ -142,16 +200,14 @@ function App() {
   if (!currentUser) {
     return (
       <div className={`min-h-screen transition-all duration-500 ${isDarkMode ? 'dark bg-slate-950' : 'bg-blue-50'}`}>
-        <React.Suspense fallback={<PageLoader />}>
-          <LoginPage 
-            onLogin={(user) => {
-              setCurrentUser(user);
-              navigate('/');
-            }} 
-            isDarkMode={isDarkMode} 
-            toggleTheme={toggleTheme} 
-          />
-        </React.Suspense>
+        <AuthPage 
+          onLogin={(user) => {
+            setCurrentUser(user);
+            navigate('/reports');
+          }} 
+          isDarkMode={isDarkMode} 
+          toggleTheme={toggleTheme} 
+        />
       </div>
     );
   }
@@ -169,13 +225,15 @@ function App() {
             <div
               key={item.id}
               onClick={() => navigate(item.path)}
-              className={`nav-rail-item ${location.pathname === item.path ? 'active' : ''}`}
+              className={`nav-rail-item ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
               title={item.label}
             >
-              <div className={`p-2 rounded-full transition-colors ${location.pathname === item.path ? 'bg-blue-600 text-white' : ''}`}>
+              <div className={`p-2 rounded-full transition-all duration-300 ${location.pathname.startsWith(item.path) ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'}`}>
                 {item.icon}
               </div>
-              <span className="text-[10px] uppercase tracking-wider text-center">{item.label}</span>
+              <span className={`text-[10px] font-black uppercase tracking-tighter text-center transition-colors duration-300 ${location.pathname.startsWith(item.path) ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
+                {item.label}
+              </span>
             </div>
           ))}
         </nav>
@@ -221,10 +279,53 @@ function App() {
       {/* Main Content Area */}
       <main className="flex-1 overflow-auto">
         <header className="header">
-          <div className="flex items-center gap-4">
-            <h2 className="text-xl font-bold opacity-80 tracking-tight">
-              {navItems.find(i => i.path === location.pathname)?.label || 'Panel'}
+          <div className="flex items-center justify-between w-full gap-4">
+            <h2 className="text-xl font-bold opacity-80 tracking-tight shrink-0">
+              {navItems.find(i => location.pathname.startsWith(i.path))?.label || 'Panel'}
             </h2>
+
+            {/* Dynamic Tabs in Header */}
+            {(location.pathname.startsWith('/reports') || location.pathname.startsWith('/orders')) && (
+              <div className="hidden md:flex items-center gap-1 bg-[var(--bg-secondary)] p-1 rounded-xl border border-main">
+                {(location.pathname.startsWith('/reports') ? [
+                  { id: 'new', label: 'Generar Informe', icon: FilePlus, path: '/reports/new', show: !isSecretaria },
+                  { id: 'history', label: isSecretaria ? 'Ver Informes' : 'Historial', icon: History, path: '/reports/history', show: true },
+                  { id: 'models', label: 'Mis Modelos', icon: BookTemplate, path: '/reports/models', show: !isSecretaria }
+                ] : [
+                  { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria },
+                  { id: 'history', label: isSecretaria ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
+                ]).filter(tab => tab.show).map((tab) => {
+                  const isActive = location.pathname.startsWith(tab.path) || 
+                                 (tab.id === 'new' && (location.pathname === '/reports' || location.pathname === '/orders'));
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => navigate(tab.path)}
+                      className={`
+                        relative flex items-center gap-2 px-6 py-2 rounded-lg text-sm font-bold transition-all
+                        ${isActive 
+                          ? 'text-white shadow-sm' 
+                          : 'text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400'
+                        }
+                      `}
+                    >
+                      <div className="relative z-10 flex items-center gap-2">
+                        <tab.icon size={16} />
+                        <span>{tab.label}</span>
+                      </div>
+                      {isActive && (
+                        <motion.div
+                          layoutId="headerTab"
+                          className="absolute inset-0 bg-blue-600 rounded-lg"
+                          transition={{ type: "spring", bounce: 0.2, duration: 0.5 }}
+                        />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            <div className="flex-1 md:hidden"></div>
           </div>
         </header>
 
@@ -236,14 +337,16 @@ function App() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="p-6 md:p-10"
+              className="p-3 md:pt-4 md:px-8 md:pb-8"
             >
               <Routes>
-                <Route path="/" element={<ReportsPage />} />
-                <Route path="/history" element={<MyReportsPage user={currentUser} userProfile={userProfile} />} />
+                <Route path="/" element={<Navigate to="/reports" replace />} />
+                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} />} />
+                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isSecretaria={isSecretaria} />} />
+                <Route path="/patients" element={isAdmin || isDirectora || isSecretaria ? <PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} /> : <Navigate to="/reports" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/practices" element={<PracticesPage />} />
-                <Route path="/admin" element={<AdminPage />} />
+                <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/reports" replace />} />
+                <Route path="*" element={<Navigate to="/reports" replace />} />
               </Routes>
             </motion.div>
           </AnimatePresence>

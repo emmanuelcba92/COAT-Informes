@@ -2,13 +2,13 @@
 
 @layer base {
   :root {
-    --bg-page: #f1f5f9;
+    --bg-page: #f1f1eb;
     --bg-card: #ffffff;
-    --bg-secondary: #f8fafc;
-    --text-main: #0f172a;
-    --text-sub: #334155;
-    --border-main: #e2e8f0;
-    --hover-main: rgba(59, 130, 246, 0.08);
+    --bg-secondary: #e2e2da;
+    --text-main: #2d2d2a;
+    --text-sub: #71716a;
+    --border-main: #d8d8d1;
+    --hover-main: rgba(37, 99, 235, 0.08);
   }
 
   :root.dark,
@@ -36,25 +36,30 @@
   }
   
   .input-field {
-    @apply w-full px-4 py-3 border rounded-2xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all duration-200 font-medium;
+    @apply w-full px-4 py-3 border rounded-2xl focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all duration-300 font-medium;
     background-color: var(--bg-secondary);
     border-color: var(--border-main);
     color: var(--text-main);
   }
 
   .input-error {
-    @apply border-red-500 bg-red-500/5 focus:ring-red-500/20 focus:border-red-500;
+    @apply border-red-500 bg-red-500/5 focus:ring-red-500/10 focus:border-red-500;
   }
 
   .card {
-    @apply rounded-3xl border shadow-sm overflow-hidden transition-all duration-300;
+    @apply rounded-3xl border shadow-[0_4px_20px_rgba(0,0,0,0.03)] overflow-hidden transition-all duration-300;
     background-color: var(--bg-card);
     border-color: var(--border-main);
   }
 
   .glass {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-main);
+    @apply backdrop-blur-md;
+    background-color: rgba(255, 255, 255, 0.8);
+    border-right: 1px solid var(--border-main);
+  }
+
+  .dark .glass {
+    background-color: rgba(15, 23, 42, 0.8);
   }
 
   .border-main {
@@ -87,7 +92,7 @@
 }
 
 .header {
-  @apply h-16 flex items-center justify-between px-8 border-b sticky top-0 z-40;
+  @apply h-12 flex items-center justify-between px-8 border-b sticky top-0 z-40;
   background-color: var(--bg-card);
   border-color: var(--border-main);
 }
@@ -109,6 +114,11 @@
   content: "Grande" !important;
 }
 .ql-picker.ql-size .ql-picker-label[data-value="huge"]::before,
-.ql-picker.ql-size .ql-picker-item[data-value="huge"]::before {
-  content: "Muy Grande" !important;
+.ql-editor {
+  min-height: 250px;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 14px !important;
+  line-height: 1.6 !important;
+  background-color: var(--bg-secondary);
+  color: var(--text-main);
 }

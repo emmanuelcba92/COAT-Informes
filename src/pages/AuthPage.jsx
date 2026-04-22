@@ -86,7 +86,7 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
                 type="text"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                placeholder="ej: dr.garcia"
+                placeholder="Usuario..."
                 className="w-full pl-11 pr-4 py-3 border-2 focus:border-blue-600 rounded-2xl outline-none transition-all"
                 style={{ 
                   backgroundColor: 'var(--bg-secondary)', 

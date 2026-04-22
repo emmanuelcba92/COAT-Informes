@@ -48,17 +48,28 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
-const MyReportsPage = ({ user, userProfile }) => {
+const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) => {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   const [professionals, setProfessionals] = useState([]);
 
   const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
-  const isSecretaria = userProfile?.role?.toLowerCase().includes('secre');
+  const isSecretaria = isSecretariaProp || userProfile?.role?.toLowerCase().includes('secre');
   const canSelectProfessional = isAdmin || isSecretaria;
 
-  const [selectedProfId, setSelectedProfId] = useState(canSelectProfessional ? 'all' : user.uid);
+  const [selectedProfId, setSelectedProfId] = useState('all');
+
+  // Sync selectedProfId when role is determined
+  useEffect(() => {
+    if (userProfile) {
+      if (canSelectProfessional) {
+        setSelectedProfId('all');
+      } else {
+        setSelectedProfId(user.uid);
+      }
+    }
+  }, [userProfile, canSelectProfessional, user.uid]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [lastVisible, setLastVisible] = useState(null);
@@ -482,8 +493,8 @@ const MyReportsPage = ({ user, userProfile }) => {
     if (report.pdfUrl) {
       window.open(report.pdfUrl, '_blank');
     } else {
-      // Si no tiene PDF (es informe interno), vamos a la vista previa
-      navigate(`/?edit=${report.id}&preview=true`);
+      // Si no tiene PDF (es informe interno), vamos a la vista previa en la página de informes
+      navigate(`/reports/new?edit=${report.id}&preview=true`);
     }
   };
 
@@ -492,7 +503,7 @@ const MyReportsPage = ({ user, userProfile }) => {
       showToast('Los PDFs externos no se pueden editar.', 'info');
       return;
     }
-    navigate(`/?edit=${report.id}`);
+    navigate(`/reports/new?edit=${report.id}`);
   };
 
   const filteredReports = reports.filter(r => {
@@ -512,19 +523,23 @@ const MyReportsPage = ({ user, userProfile }) => {
         <div>
           <h1 className="text-3xl font-black tracking-tight flex items-center gap-3">
             <ClipboardList className="text-blue-600" size={32} />
-            {canSelectProfessional ? 'Ver Informes por Profesional' : 'Mis Informes Realizados'}
+            {isSecretaria ? 'Visor de Informes' : (canSelectProfessional ? 'Ver Informes por Profesional' : 'Mis Informes Realizados')}
           </h1>
-          <p className="text-gray-500 mt-1 font-medium">Historial completo de diagnósticos y prácticas</p>
+          <p className="text-gray-500 mt-1 font-medium">
+            {isSecretaria ? 'Consulta y descarga de informes de todos los profesionales' : 'Historial completo de diagnósticos y prácticas'}
+          </p>
         </div>
 
         <div className="flex items-center gap-3">
-            <button 
-                onClick={() => setIsUploadModalOpen(true)}
-                className="btn-primary px-6 py-3 flex items-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
-            >
-                <Upload size={20} />
-                <span>Subir PDF</span>
-            </button>
+            {!isSecretaria && (
+              <button 
+                  onClick={() => setIsUploadModalOpen(true)}
+                  className="btn-primary px-6 py-3 flex items-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
+              >
+                  <Upload size={20} />
+                  <span>Subir PDF</span>
+              </button>
+            )}
 
             {canSelectProfessional && (
             <div className="flex items-center gap-4 bg-[var(--bg-card)] p-2 rounded-2xl border border-main shadow-sm min-w-[240px]">
@@ -686,13 +701,15 @@ const MyReportsPage = ({ user, userProfile }) => {
                             <Printer className="w-5 h-5" />
                           </button>
 
-                          <button 
-                            onClick={() => handleEditReport(report)}
-                            className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
-                            title="Editar Informe"
-                          >
-                            <PenLine className="w-5 h-5" />
-                          </button>
+                          {(isAdmin || !isSecretaria) && (
+                            <button 
+                              onClick={() => handleEditReport(report)}
+                              className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
+                              title="Editar Informe"
+                            >
+                              <PenLine className="w-5 h-5" />
+                            </button>
+                          )}
 
                           {(isAdmin || (!isSecretaria && user.uid === report.profesionalId)) && (
                             <button 
@@ -837,7 +854,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                       <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Obra Social (Opc)</label>
                       <input 
                         type="text" 
-                        placeholder="Ej: OSDE..."
+                        placeholder=""
                         className="input-field"
                         value={uploadData.socialWork}
                         onChange={e => setUploadData({...uploadData, socialWork: e.target.value})}
@@ -882,7 +899,7 @@ const MyReportsPage = ({ user, userProfile }) => {
                     <input 
                       required
                       type="text" 
-                      placeholder="Ej: Fibro de control..."
+                      placeholder=""
                       className="input-field"
                       value={uploadData.reason}
                       onChange={e => setUploadData({...uploadData, reason: e.target.value})}
