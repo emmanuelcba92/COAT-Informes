@@ -1,20 +1,20 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { 
+import React, { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import {
   Activity,
-  Users, 
-  Stethoscope, 
-  Mail, 
-  Plus, 
-  FileUp, 
-  Trash2, 
-  Edit2, 
+  Users,
+  Stethoscope,
+  Mail,
+  Plus,
+  FileUp,
+  Trash2,
+  Edit2,
   ExternalLink,
-  Settings2, 
-  UserPlus, 
-  X, 
-  Check, 
-  Key, 
+  Settings2,
+  UserPlus,
+  X,
+  Check,
+  Key,
   ShieldCheck,
   ClipboardList,
   Search,
@@ -30,21 +30,25 @@ import {
   Database,
   RefreshCw,
   CheckCircle2,
-  GripVertical
-} from 'lucide-react';
-import { motion, AnimatePresence, Reorder } from 'framer-motion';
-import * as XLSX from 'xlsx';
-import { initializeApp, deleteApp } from 'firebase/app';
-import { getAuth, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { db } from '../services/firebase';
-import { 
-  collection, 
-  onSnapshot, 
-  doc, 
-  addDoc, 
-  updateDoc, 
-  deleteDoc, 
-  query, 
+  GripVertical,
+} from "lucide-react";
+import { motion, AnimatePresence, Reorder } from "framer-motion";
+import * as XLSX from "xlsx";
+import { initializeApp, deleteApp } from "firebase/app";
+import {
+  getAuth,
+  createUserWithEmailAndPassword,
+  signOut,
+} from "firebase/auth";
+import { db } from "../services/firebase";
+import {
+  collection,
+  onSnapshot,
+  doc,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  query,
   orderBy,
   setDoc,
   getDoc,
@@ -52,14 +56,14 @@ import {
   where,
   limit,
   getCountFromServer,
-  writeBatch
-} from 'firebase/firestore';
-import { createClient } from '@supabase/supabase-js';
+  writeBatch,
+} from "firebase/firestore";
+import { createClient } from "@supabase/supabase-js";
 
-// Inicializar Supabase para gestión de archivos
+// Inicializar Supabase para gestiÃ³n de archivos
 const supabase = createClient(
   import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
+  import.meta.env.VITE_SUPABASE_ANON_KEY,
 );
 
 const firebaseConfig = {
@@ -71,83 +75,114 @@ const firebaseConfig = {
 
 const AdminPage = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState('users');
-  const [appsScriptUrl, setAppsScriptUrl] = useState('');
-  const [adminEmail, setAdminEmail] = useState('');
-  const [token, setToken] = useState('');
+  const [activeTab, setActiveTab] = useState("users");
+  const [appsScriptUrl, setAppsScriptUrl] = useState("");
+  const [adminEmail, setAdminEmail] = useState("");
+  const [token, setToken] = useState("");
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
-  const [pasteData, setPasteData] = useState('');
-  const [manualUserForm, setManualUserForm] = useState({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '', role: 'médico' });
+  const [pasteData, setPasteData] = useState("");
+  const [manualUserForm, setManualUserForm] = useState({
+    nombre: "",
+    mp: "",
+    me: "",
+    especialidad: "",
+    u: "",
+    password: "",
+    role: "mÃ©dico",
+  });
   const [loading, setLoading] = useState(true);
-  
+
   // State for Users
   const [users, setUsers] = useState([]);
-  const [userSearch, setUserSearch] = useState('');
+  const [userSearch, setUserSearch] = useState("");
 
   // State for Practices
   const [practices, setPractices] = useState([]);
-  const [practiceSearch, setPracticeSearch] = useState('');
-  const [practiceForm, setPracticeForm] = useState({ c: '', n: '', b: '', st: true });
+  const [practiceSearch, setPracticeSearch] = useState("");
+  const [practiceForm, setPracticeForm] = useState({
+    c: "",
+    n: "",
+    b: "",
+    st: true,
+  });
   const [selectedPractice, setSelectedPractice] = useState(null);
 
   // State for Managing Professional Profile
-  const [isManageProfessionalModalOpen, setIsManageProfessionalModalOpen] = useState(false);
+  const [isManageProfessionalModalOpen, setIsManageProfessionalModalOpen] =
+    useState(false);
   const [targetProf, setTargetProf] = useState(null);
   const [isProfSaving, setIsProfSaving] = useState(false);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewType, setPreviewType] = useState('general'); // 'general' or 'fibro'
+  const [previewType, setPreviewType] = useState("general"); // 'general' or 'fibro'
   const [isUploadingSignature, setIsUploadingSignature] = useState(false);
-  
+
   // State for Managing Professional MODELS (Personal Practices)
   const [isModelsModalOpen, setIsModelsModalOpen] = useState(false);
   const [targetUserForModels, setTargetUserForModels] = useState(null);
   const [isModelsSaving, setIsModelsSaving] = useState(false);
   const [editingModelId, setEditingModelId] = useState(null);
-  const [modelForm, setModelForm] = useState({ n: '', b: '', practiceId: '' });
+  const [modelForm, setModelForm] = useState({ n: "", b: "", practiceId: "" });
 
   // State for Order Settings (DYNAMIC CATEGORIES)
-  const [orderSettings, setOrderSettings] = useState({ categories: [], practicesByType: {}, patientEmailRequired: false, ordersEnabled: true });
+  const [orderSettings, setOrderSettings] = useState({
+    categories: [],
+    practicesByType: {},
+    patientEmailRequired: false,
+    ordersEnabled: true,
+  });
   const [isSavingOrderSettings, setIsSavingOrderSettings] = useState(false);
   const [selectedOrderCategory, setSelectedOrderCategory] = useState(null);
-  const [newCategoryForm, setNewCategoryForm] = useState({ id: '', label: '', icon: 'Clipboard' });
-  const [newPracticeForm, setNewPracticeForm] = useState({ n: '', c: '' });
+  const [newCategoryForm, setNewCategoryForm] = useState({
+    id: "",
+    label: "",
+    icon: "Clipboard",
+  });
+  const [newPracticeForm, setNewPracticeForm] = useState({ n: "", c: "" });
   const [editingOrderPracticeIdx, setEditingOrderPracticeIdx] = useState(null);
-  const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({ n: '', c: '' });
+  const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({
+    n: "",
+    c: "",
+  });
 
   // Security Check
   useEffect(() => {
     const checkAuth = async () => {
       const user = getAuth().currentUser;
       if (!user) {
-        navigate('/login');
+        navigate("/login");
         return;
       }
 
       const email = user.email?.toLowerCase();
-      const whiteList = ['egomez@coat.com.ar', 'aparedes@coat.com.ar'];
-      
+      const whiteList = ["egomez@coat.com.ar", "aparedes@coat.com.ar"];
+
       try {
-        const docRef = doc(db, 'users', user.uid);
+        const docRef = doc(db, "users", user.uid);
         const docSnap = await getDoc(docRef);
-        
+
         if (docSnap.exists()) {
           const profile = docSnap.data();
-          const role = profile.role?.toLowerCase() || '';
-          
-          const isAuthorized = role === 'admin' || whiteList.includes(email);
-          
+          const role = profile.role?.toLowerCase() || "";
+
+          const isAuthorized = role === "admin" || whiteList.includes(email);
+
           if (!isAuthorized) {
-            console.warn("Acceso denegado a Administración para:", email, "Rol:", role);
-            navigate('/');
+            console.warn(
+              "Acceso denegado a AdministraciÃ³n para:",
+              email,
+              "Rol:",
+              role,
+            );
+            navigate("/");
           }
         } else if (!whiteList.includes(email)) {
-          navigate('/');
+          navigate("/");
         }
       } catch (err) {
         console.error("Error verificando permisos:", err);
-        if (!whiteList.includes(email)) navigate('/');
+        if (!whiteList.includes(email)) navigate("/");
       }
     };
     checkAuth();
@@ -156,25 +191,31 @@ const AdminPage = () => {
   // Real-time synchronization
   useEffect(() => {
     setLoading(true);
-    
+
     // Sync Practices
-    const qPractices = query(collection(db, 'practices'), orderBy('n', 'asc'));
+    const qPractices = query(collection(db, "practices"), orderBy("n", "asc"));
     const unsubscribePractices = onSnapshot(qPractices, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setPractices(list);
     });
 
     // Sync Users
-    const qUsers = query(collection(db, 'users'));
+    const qUsers = query(collection(db, "users"));
     const unsubscribeUsers = onSnapshot(qUsers, (snapshot) => {
-      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
+      const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+
       const uniqueUsers = {};
-      list.forEach(u => {
-        const email = (u.email || u.e || (typeof u.id === 'string' && u.id.includes('@') ? u.id : '')).toLowerCase().trim();
-        const username = (u.u || '').toLowerCase().trim();
+      list.forEach((u) => {
+        const email = (
+          u.email ||
+          u.e ||
+          (typeof u.id === "string" && u.id.includes("@") ? u.id : "")
+        )
+          .toLowerCase()
+          .trim();
+        const username = (u.u || "").toLowerCase().trim();
         const key = email || username || u.id;
-        
+
         if (!key) return;
 
         if (!uniqueUsers[key]) {
@@ -183,10 +224,10 @@ const AdminPage = () => {
           const existing = uniqueUsers[key];
           const currentHasName = !!(u.nombre || u.n);
           const existingHasName = !!(existing.nombre || existing.n);
-          
+
           if (currentHasName && !existingHasName) {
             uniqueUsers[key] = u;
-          } 
+          }
           if (u.id.length === 28 && existing.id.length !== 28) {
             uniqueUsers[key] = u;
           }
@@ -200,21 +241,27 @@ const AdminPage = () => {
     fetchGlobalStats();
 
     // Sync Settings
-    const unsubscribeSettings = onSnapshot(doc(db, 'config', 'settings'), (docSnap) => {
-      if (docSnap.exists()) {
-        const data = docSnap.data();
-        setAppsScriptUrl(data.appsScriptUrl || '');
-        setAdminEmail(data.adminEmail || '');
-        setToken(data.token || '');
-      }
-    });
+    const unsubscribeSettings = onSnapshot(
+      doc(db, "config", "settings"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setAppsScriptUrl(data.appsScriptUrl || "");
+          setAdminEmail(data.adminEmail || "");
+          setToken(data.token || "");
+        }
+      },
+    );
 
     // Sync Order Settings
-    const unsubscribeOrderSettings = onSnapshot(doc(db, 'config', 'order_settings'), (docSnap) => {
-      if (docSnap.exists()) {
-        setOrderSettings(docSnap.data());
-      }
-    });
+    const unsubscribeOrderSettings = onSnapshot(
+      doc(db, "config", "order_settings"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setOrderSettings(docSnap.data());
+        }
+      },
+    );
 
     return () => {
       unsubscribePractices();
@@ -225,89 +272,105 @@ const AdminPage = () => {
   }, []);
 
   // ESTADOS PARA MANTENIMIENTO Y ALMACENAMIENTO
-  const [storageStats, setStorageStats] = useState({ 
-    fbCount: 0, 
-    fbSize: 0, 
-    sbCount: 0, 
-    sbSize: 0, 
-    loading: true 
+  const [storageStats, setStorageStats] = useState({
+    fbCount: 0,
+    fbSize: 0,
+    sbCount: 0,
+    sbSize: 0,
+    loading: true,
   });
   const [globalStats, setGlobalStats] = useState({
     patients: 0,
     reports: 0,
     orders: 0,
-    loading: true
+    loading: true,
   });
-  const [cleanRange, setCleanRange] = useState({ start: '', end: '' });
-  const [cleanOptions, setCleanOptions] = useState({ pdfs: true, records: false });
+  const [cleanRange, setCleanRange] = useState({ start: "", end: "" });
+  const [cleanOptions, setCleanOptions] = useState({
+    pdfs: true,
+    records: false,
+  });
   const [isCleaning, setIsCleaning] = useState(false);
   const [cleanSummary, setCleanSummary] = useState(null);
 
   const fetchGlobalStats = async () => {
-    setGlobalStats(prev => ({ ...prev, loading: true }));
+    setGlobalStats((prev) => ({ ...prev, loading: true }));
     try {
       const [patientsCount, reportsCount, ordersCount] = await Promise.all([
-        getCountFromServer(collection(db, 'patients')),
-        getCountFromServer(collection(db, 'reports')),
-        getCountFromServer(collection(db, 'orders'))
+        getCountFromServer(collection(db, "patients")),
+        getCountFromServer(collection(db, "reports")),
+        getCountFromServer(collection(db, "orders")),
       ]);
 
       setGlobalStats({
         patients: patientsCount.data().count,
         reports: reportsCount.data().count,
         orders: ordersCount.data().count,
-        loading: false
+        loading: false,
       });
     } catch (err) {
       console.error("Error fetching global stats:", err);
-      setGlobalStats(prev => ({ ...prev, loading: false }));
+      setGlobalStats((prev) => ({ ...prev, loading: false }));
     }
   };
 
   const fetchStorageStats = async () => {
-    setStorageStats(prev => ({ ...prev, loading: true }));
+    setStorageStats((prev) => ({ ...prev, loading: true }));
     try {
       // 1. Firebase (Database) - Calculamos peso de Informes, Pedidos y Pacientes
       const [reportsSnap, ordersSnap, patientsSnap] = await Promise.all([
-        getDocs(collection(db, 'reports')),
-        getDocs(collection(db, 'orders')),
-        getDocs(collection(db, 'patients'))
+        getDocs(collection(db, "reports")),
+        getDocs(collection(db, "orders")),
+        getDocs(collection(db, "patients")),
       ]);
-      
+
       const fbCount = reportsSnap.size + ordersSnap.size + patientsSnap.size;
-      
+
       let totalBytes = 0;
-      reportsSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
-      ordersSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
-      patientsSnap.forEach(doc => { totalBytes += JSON.stringify(doc.data()).length; });
+      reportsSnap.forEach((doc) => {
+        totalBytes += JSON.stringify(doc.data()).length;
+      });
+      ordersSnap.forEach((doc) => {
+        totalBytes += JSON.stringify(doc.data()).length;
+      });
+      patientsSnap.forEach((doc) => {
+        totalBytes += JSON.stringify(doc.data()).length;
+      });
 
       // 2. Supabase (Files)
-      const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
-      
+      const { data: files } = await supabase.storage
+        .from("informescoat")
+        .list("", { limit: 1000 });
+
       let sbSize = 0;
       let sbCount = 0;
       if (files) {
-        const realFiles = files.filter(f => f.name !== '.emptyFolderPlaceholder');
+        const realFiles = files.filter(
+          (f) => f.name !== ".emptyFolderPlaceholder",
+        );
         sbCount = realFiles.length;
-        sbSize = realFiles.reduce((acc, file) => acc + (file.metadata?.size || 0), 0);
+        sbSize = realFiles.reduce(
+          (acc, file) => acc + (file.metadata?.size || 0),
+          0,
+        );
       }
 
       setStorageStats({
         fbCount,
-        fbSize: (totalBytes / 1024).toFixed(2), 
+        fbSize: (totalBytes / 1024).toFixed(2),
         sbCount,
-        sbSize: (sbSize / (1024 * 1024)).toFixed(2), 
-        loading: false
+        sbSize: (sbSize / (1024 * 1024)).toFixed(2),
+        loading: false,
       });
     } catch (err) {
       console.error("Error fetching stats:", err);
-      setStorageStats(prev => ({ ...prev, loading: false }));
+      setStorageStats((prev) => ({ ...prev, loading: false }));
     }
   };
 
   const handleAnalyzeCleanup = async () => {
     if (!cleanRange.start || !cleanRange.end) {
-      alert("Por favor seleccione un rango de fechas válido.");
+      alert("Por favor seleccione un rango de fechas vÃ¡lido.");
       return;
     }
     setIsCleaning(true);
@@ -315,20 +378,22 @@ const AdminPage = () => {
 
     try {
       const q = query(
-        collection(db, 'reports'),
-        where('fecha', '>=', cleanRange.start),
-        where('fecha', '<=', cleanRange.end)
+        collection(db, "reports"),
+        where("fecha", ">=", cleanRange.start),
+        where("fecha", "<=", cleanRange.end),
       );
 
       const snap = await getDocs(q);
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      const withFiles = docs.filter(d => d.storagePath || d.pdfUrl?.includes('supabase'));
-      
+      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      const withFiles = docs.filter(
+        (d) => d.storagePath || d.pdfUrl?.includes("supabase"),
+      );
+
       setCleanSummary({
         total: docs.length,
         withFiles: withFiles.length,
         estimatedSize: (withFiles.length * 0.5).toFixed(1),
-        docs: docs
+        docs: docs,
       });
     } catch (err) {
       console.error("Error analyzing:", err);
@@ -340,7 +405,12 @@ const AdminPage = () => {
 
   const handleExecuteCleanup = async () => {
     if (!cleanSummary) return;
-    if (!window.confirm(`¿ESTÁ SEGURO? Esta acción es irreversible.\nSe eliminarán ${cleanOptions.records ? 'REGISTROS Y ARCHIVOS' : 'SOLO ARCHIVOS'} de ${cleanSummary.total} informes.`)) return;
+    if (
+      !window.confirm(
+        `Â¿ESTÃ SEGURO? Esta acciÃ³n es irreversible.\nSe eliminarÃ¡n ${cleanOptions.records ? "REGISTROS Y ARCHIVOS" : "SOLO ARCHIVOS"} de ${cleanSummary.total} informes.`,
+      )
+    )
+      return;
 
     setIsCleaning(true);
     try {
@@ -351,7 +421,9 @@ const AdminPage = () => {
         for (const docData of cleanSummary.docs) {
           const path = docData.storagePath;
           if (path) {
-            const { error } = await supabase.storage.from('informescoat').remove([path]);
+            const { error } = await supabase.storage
+              .from("informescoat")
+              .remove([path]);
             if (!error) filesDeleted++;
           }
         }
@@ -359,123 +431,159 @@ const AdminPage = () => {
 
       if (cleanOptions.records) {
         const batch = writeBatch(db);
-        cleanSummary.docs.forEach(d => {
-          batch.delete(doc(db, 'reports', d.id));
+        cleanSummary.docs.forEach((d) => {
+          batch.delete(doc(db, "reports", d.id));
           recordsDeleted++;
         });
         await batch.commit();
       } else if (cleanOptions.pdfs) {
         const batch = writeBatch(db);
-        cleanSummary.docs.forEach(d => {
+        cleanSummary.docs.forEach((d) => {
           if (d.storagePath) {
-            batch.update(doc(db, 'reports', d.id), { 
-              pdfUrl: null, 
+            batch.update(doc(db, "reports", d.id), {
+              pdfUrl: null,
               storagePath: null,
-              notaMantenimiento: `Archivo eliminado por limpieza el ${new Date().toLocaleDateString()}` 
+              notaMantenimiento: `Archivo eliminado por limpieza el ${new Date().toLocaleDateString()}`,
             });
           }
         });
         await batch.commit();
       }
 
-      alert(`Limpieza completada:\n- Archivos borrados: ${filesDeleted}\n- Registros borrados: ${recordsDeleted}`);
+      alert(
+        `Limpieza completada:\n- Archivos borrados: ${filesDeleted}\n- Registros borrados: ${recordsDeleted}`,
+      );
       setCleanSummary(null);
       fetchStorageStats();
     } catch (err) {
       console.error("Error in cleanup:", err);
-      alert("Ocurrió un error parcial durante la limpieza.");
+      alert("OcurriÃ³ un error parcial durante la limpieza.");
     } finally {
       setIsCleaning(false);
     }
   };
 
   const handleCleanOrphans = async () => {
-    if (!window.confirm('¿Desea eliminar los archivos de ALMACENAMIENTO que NO tienen un informe asociado? (Esto NO borrará firmas)')) return;
+    if (
+      !window.confirm(
+        "Â¿Desea eliminar los archivos de ALMACENAMIENTO que NO tienen un informe asociado? (Esto NO borrarÃ¡ firmas)",
+      )
+    )
+      return;
     setIsCleaning(true);
     try {
-      // 1. Obtener todos los archivos de Supabase (Raíz)
-      const { data: files } = await supabase.storage.from('informescoat').list('', { limit: 1000 });
+      // 1. Obtener todos los archivos de Supabase (RaÃ­z)
+      const { data: files } = await supabase.storage
+        .from("informescoat")
+        .list("", { limit: 1000 });
       if (!files || files.length === 0) {
-        alert("No hay archivos en la raíz de Supabase.");
+        alert("No hay archivos en la raÃ­z de Supabase.");
         return;
       }
 
       // 2. Obtener todos los storagePaths de Firebase (Informes)
-      const fbSnap = await getDocs(collection(db, 'reports'));
-      const activePaths = new Set(fbSnap.docs.map(doc => doc.data().storagePath).filter(Boolean));
+      const fbSnap = await getDocs(collection(db, "reports"));
+      const activePaths = new Set(
+        fbSnap.docs.map((doc) => doc.data().storagePath).filter(Boolean),
+      );
 
       // 3. Obtener todas las firmas activas de Usuarios (Para protegerlas)
-      const usersSnap = await getDocs(collection(db, 'users'));
-      const signatureUrls = usersSnap.docs.map(doc => doc.data().signatureBase64).filter(Boolean);
-      
-      // 4. Identificar huérfanos con PROTECCIÓN
+      const usersSnap = await getDocs(collection(db, "users"));
+      const signatureUrls = usersSnap.docs
+        .map((doc) => doc.data().signatureBase64)
+        .filter(Boolean);
+
+      // 4. Identificar huÃ©rfanos con PROTECCIÃ“N
       const orphanedPaths = files
-        .filter(f => {
+        .filter((f) => {
           const name = f.name;
-          // PROTECCIÓN 1: No borrar carpetas (metadata null en list suele ser carpeta)
+          // PROTECCIÃ“N 1: No borrar carpetas (metadata null en list suele ser carpeta)
           if (!f.metadata) return false;
-          // PROTECCIÓN 2: No borrar la carpeta de firmas ni archivos dentro de ella (aunque list root no debería traerlos)
-          if (name === 'firmas' || name === '.emptyFolderPlaceholder') return false;
-          // PROTECCIÓN 3: Si es un reporte activo, ignorar
+          // PROTECCIÃ“N 2: No borrar la carpeta de firmas ni archivos dentro de ella (aunque list root no deberÃ­a traerlos)
+          if (name === "firmas" || name === ".emptyFolderPlaceholder")
+            return false;
+          // PROTECCIÃ“N 3: Si es un reporte activo, ignorar
           if (activePaths.has(name)) return false;
-          // PROTECCIÓN 4: Si por alguna razón la URL de una firma coincide con el nombre del archivo, proteger
-          const isASignature = signatureUrls.some(url => url.includes(name));
+          // PROTECCIÃ“N 4: Si por alguna razÃ³n la URL de una firma coincide con el nombre del archivo, proteger
+          const isASignature = signatureUrls.some((url) => url.includes(name));
           if (isASignature) return false;
 
-          return true; // Es un huérfano real en la raíz
+          return true; // Es un huÃ©rfano real en la raÃ­z
         })
-        .map(f => f.name);
+        .map((f) => f.name);
 
       if (orphanedPaths.length === 0) {
-        alert("No se encontraron archivos huérfanos en la raíz.");
+        alert("No se encontraron archivos huÃ©rfanos en la raÃ­z.");
       } else {
-        const { error } = await supabase.storage.from('informescoat').remove(orphanedPaths);
+        const { error } = await supabase.storage
+          .from("informescoat")
+          .remove(orphanedPaths);
         if (error) {
           alert("Error de Supabase: " + error.message);
         } else {
-          alert(`Limpieza protegida finalizada. Se borraron ${orphanedPaths.length} archivos huérfanos.`);
+          alert(
+            `Limpieza protegida finalizada. Se borraron ${orphanedPaths.length} archivos huÃ©rfanos.`,
+          );
         }
       }
-      
+
       setTimeout(() => fetchStorageStats(), 1500);
     } catch (err) {
-      alert("Error crítico limpiando huérfanos: " + err.message);
+      alert("Error crÃ­tico limpiando huÃ©rfanos: " + err.message);
     } finally {
       setIsCleaning(false);
     }
   };
 
   const tabs = [
-    { id: 'users', label: 'Usuarios', icon: <Users size={20} /> },
-    { id: 'stats', label: 'Dashboard', icon: <Activity size={20} /> },
-    { id: 'practices', label: 'Gestión Informes', icon: <Stethoscope size={20} /> },
-    { id: 'orders', label: 'Gestión Pedidos', icon: <ClipboardList size={20} /> },
-    { id: 'settings', label: 'Configuración', icon: <ShieldCheck size={20} /> },
+    { id: "users", label: "Usuarios", icon: <Users size={20} /> },
+    { id: "stats", label: "Dashboard", icon: <Activity size={20} /> },
+    {
+      id: "practices",
+      label: "GestiÃ³n Informes",
+      icon: <Stethoscope size={20} />,
+    },
+    {
+      id: "orders",
+      label: "GestiÃ³n Pedidos",
+      icon: <ClipboardList size={20} />,
+    },
+    {
+      id: "settings",
+      label: "ConfiguraciÃ³n",
+      icon: <ShieldCheck size={20} />,
+    },
   ];
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
-    const role = u.role || 'médico';
-    const isStaff = role === 'admin' || role === 'secre';
+    const role = u.role || "mÃ©dico";
+    const isStaff = role === "admin" || role === "secre";
     return {
-      nombre: (u.nombre || u.n || u.u || 'Sin nombre').toUpperCase().trim(),
-      email: (u.email || u.e || u.u || '').toLowerCase().trim(),
-      especialidad: isStaff ? '' : (u.especialidad || u.esp || 'Otorrinolaringólogo'),
-      mp: isStaff ? '' : (u.mp || u.m || '-'),
-      me: isStaff ? '' : (u.me || '-'),
+      nombre: (u.nombre || u.n || u.u || "Sin nombre").toUpperCase().trim(),
+      email: (u.email || u.e || u.u || "").toLowerCase().trim(),
+      especialidad: isStaff
+        ? ""
+        : u.especialidad || u.esp || "OtorrinolaringÃ³logo",
+      mp: isStaff ? "" : u.mp || u.m || "-",
+      me: isStaff ? "" : u.me || "-",
       id: u.id,
       role: role,
       isOfficial: u.id.length === 28,
-      lastLogin: u.lastLogin || null
+      lastLogin: u.lastLogin || null,
     };
   };
 
   const handleDeleteUser = async (id) => {
-    if (window.confirm('¿Eliminar este perfil profesional? (No elimina su cuenta de acceso de Firebase Auth)')) {
+    if (
+      window.confirm(
+        "Â¿Eliminar este perfil profesional? (No elimina su cuenta de acceso de Firebase Auth)",
+      )
+    ) {
       try {
-        await deleteDoc(doc(db, 'users', id));
+        await deleteDoc(doc(db, "users", id));
       } catch (err) {
-        alert('Error: ' + err.message);
+        alert("Error: " + err.message);
       }
     }
   };
@@ -487,53 +595,73 @@ const AdminPage = () => {
     reader.onload = async (event) => {
       try {
         const bstr = event.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wb = XLSX.read(bstr, { type: "binary" });
         const ws = wb.Sheets[wb.SheetNames[0]];
         const data = XLSX.utils.sheet_to_json(ws);
-        
+
         const secondaryApp = initializeApp(firebaseConfig, "SecondaryExcel");
         const secondaryAuth = getAuth(secondaryApp);
 
         for (const item of data) {
           const userData = {
-            nombre: (item.Profesional || item.Nombre || item.nombre || 'Profesional').trim(),
-            mp: item.MP || item.mp || '-',
-            me: item.ME || item.me || '-',
-            especialidad: item.Especialidad || item.especialidad || 'ORL',
-            u: (item.Usuario || item.usuario || 'user').toLowerCase().trim(),
-            email: `${(item.Usuario || item.usuario || 'user').toLowerCase().trim()}@coat.com.ar`
+            nombre: (
+              item.Profesional ||
+              item.Nombre ||
+              item.nombre ||
+              "Profesional"
+            ).trim(),
+            mp: item.MP || item.mp || "-",
+            me: item.ME || item.me || "-",
+            especialidad: item.Especialidad || item.especialidad || "ORL",
+            u: (item.Usuario || item.usuario || "user").toLowerCase().trim(),
+            email: `${(item.Usuario || item.usuario || "user").toLowerCase().trim()}@coat.com.ar`,
           };
-          const password = (item.Contraseña || item.contraseña || '123456').toString();
-          
+          const password = (
+            item.Contraseña ||
+            item.contraseña ||
+            "123456"
+          ).toString();
+
           try {
-            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, userData.email, password);
-            await setDoc(doc(db, 'users', userCredential.user.uid), { ...userData, isOfficial: true }, { merge: true });
+            const userCredential = await createUserWithEmailAndPassword(
+              secondaryAuth,
+              userData.email,
+              password,
+            );
+            await setDoc(
+              doc(db, "users", userCredential.user.uid),
+              { ...userData, isOfficial: true },
+              { merge: true },
+            );
             await signOut(secondaryAuth);
           } catch (authErr) {
-            const userSlug = userData.email.replace(/[@.]/g, '_');
-            await setDoc(doc(db, 'users', userSlug), userData, { merge: true });
+            const userSlug = userData.email.replace(/[@.]/g, "_");
+            await setDoc(doc(db, "users", userSlug), userData, { merge: true });
           }
         }
         await deleteApp(secondaryApp);
-        alert('Carga masiva finalizada');
+        alert("Carga masiva finalizada");
       } catch (error) {
-        alert('Error en Excel');
+        alert("Error en Excel");
       }
     };
     reader.readAsBinaryString(file);
-    e.target.value = '';
+    e.target.value = "";
   };
 
   const handleSavePractice = async () => {
-    if (!practiceForm.c || !practiceForm.n) return alert('Campos obligatorios');
+    if (!practiceForm.c || !practiceForm.n) return alert("Campos obligatorios");
     try {
       if (selectedPractice) {
-        await updateDoc(doc(db, 'practices', selectedPractice.id), practiceForm);
+        await updateDoc(
+          doc(db, "practices", selectedPractice.id),
+          practiceForm,
+        );
         setSelectedPractice(null);
       } else {
-        await addDoc(collection(db, 'practices'), practiceForm);
+        await addDoc(collection(db, "practices"), practiceForm);
       }
-      setPracticeForm({ c: '', n: '', b: '', st: true });
+      setPracticeForm({ c: "", n: "", b: "", st: true });
     } catch (err) {
       alert(err.message);
     }
@@ -541,24 +669,30 @@ const AdminPage = () => {
 
   const handleEditPractice = (p) => {
     setSelectedPractice(p);
-    setPracticeForm({ c: p.c, n: p.n, b: p.b, st: p.st !== undefined ? p.st : true });
+    setPracticeForm({
+      c: p.c,
+      n: p.n,
+      b: p.b,
+      st: p.st !== undefined ? p.st : true,
+    });
   };
 
   const handleDeletePractice = async (id) => {
-    if (window.confirm('¿Eliminar modelo de informe?')) await deleteDoc(doc(db, 'practices', id));
+    if (window.confirm("Â¿Eliminar modelo de informe?"))
+      await deleteDoc(doc(db, "practices", id));
   };
 
   const handleSaveSettings = async () => {
     setIsSavingSettings(true);
     try {
-      await setDoc(doc(db, 'config', 'settings'), {
+      await setDoc(doc(db, "config", "settings"), {
         appsScriptUrl,
         adminEmail,
-        token
+        token,
       });
-      alert('Configuración guardada correctamente');
+      alert("ConfiguraciÃ³n guardada correctamente");
     } catch (err) {
-      alert('Error al guardar: ' + err.message);
+      alert("Error al guardar: " + err.message);
     } finally {
       setIsSavingSettings(false);
     }
@@ -567,31 +701,36 @@ const AdminPage = () => {
   const handleSaveOrderSettings = async (newData) => {
     setIsSavingOrderSettings(true);
     try {
-      await setDoc(doc(db, 'config', 'order_settings'), newData);
+      await setDoc(doc(db, "config", "order_settings"), newData);
     } catch (err) {
-      alert("Error al guardar gestión de pedidos: " + err.message);
+      alert("Error al guardar gestiÃ³n de pedidos: " + err.message);
     } finally {
       setIsSavingOrderSettings(false);
     }
   };
 
   const handleAddOrderCategory = async () => {
-    if (!newCategoryForm.id || !newCategoryForm.label) return alert("Complete los datos de la categoría");
+    if (!newCategoryForm.id || !newCategoryForm.label)
+      return alert("Complete los datos de la categorÃ­a");
     const updated = {
       ...orderSettings,
       categories: [...orderSettings.categories, newCategoryForm],
-      practicesByType: { ...orderSettings.practicesByType, [newCategoryForm.id]: [] }
+      practicesByType: {
+        ...orderSettings.practicesByType,
+        [newCategoryForm.id]: [],
+      },
     };
     await handleSaveOrderSettings(updated);
-    setNewCategoryForm({ id: '', label: '', icon: 'Clipboard' });
+    setNewCategoryForm({ id: "", label: "", icon: "Clipboard" });
   };
 
   const handleDeleteOrderCategory = async (catId) => {
-    if (!window.confirm("¿Eliminar categoría y todas sus prácticas?")) return;
+    if (!window.confirm("Â¿Eliminar categorÃ­a y todas sus prÃ¡cticas?"))
+      return;
     const updated = {
       ...orderSettings,
-      categories: orderSettings.categories.filter(c => c.id !== catId),
-      practicesByType: { ...orderSettings.practicesByType }
+      categories: orderSettings.categories.filter((c) => c.id !== catId),
+      practicesByType: { ...orderSettings.practicesByType },
     };
     delete updated.practicesByType[catId];
     await handleSaveOrderSettings(updated);
@@ -599,35 +738,39 @@ const AdminPage = () => {
   };
 
   const handleAddOrderPractice = async () => {
-    if (!selectedOrderCategory || !newPracticeForm.n) return alert("Complete nombre de la práctica");
-    const currentList = orderSettings.practicesByType[selectedOrderCategory] || [];
+    if (!selectedOrderCategory || !newPracticeForm.n)
+      return alert("Complete nombre de la prÃ¡ctica");
+    const currentList =
+      orderSettings.practicesByType[selectedOrderCategory] || [];
     const updated = {
       ...orderSettings,
       practicesByType: {
         ...orderSettings.practicesByType,
-        [selectedOrderCategory]: [...currentList, newPracticeForm]
-      }
+        [selectedOrderCategory]: [...currentList, newPracticeForm],
+      },
     };
     await handleSaveOrderSettings(updated);
-    setNewPracticeForm({ n: '', c: '' });
+    setNewPracticeForm({ n: "", c: "" });
   };
 
   const handleStartEditOrderPractice = (idx, p) => {
     setEditingOrderPracticeIdx(idx);
-    setEditOrderPracticeForm({ n: p.n, c: p.c || '' });
+    setEditOrderPracticeForm({ n: p.n, c: p.c || "" });
   };
 
   const handleSaveEditOrderPractice = async (idx) => {
     if (!editOrderPracticeForm.n) return alert("El nombre es obligatorio");
-    const currentList = [...(orderSettings.practicesByType[selectedOrderCategory] || [])];
+    const currentList = [
+      ...(orderSettings.practicesByType[selectedOrderCategory] || []),
+    ];
     currentList[idx] = editOrderPracticeForm;
-    
+
     const updated = {
       ...orderSettings,
       practicesByType: {
         ...orderSettings.practicesByType,
-        [selectedOrderCategory]: currentList
-      }
+        [selectedOrderCategory]: currentList,
+      },
     };
     await handleSaveOrderSettings(updated);
     setEditingOrderPracticeIdx(null);
@@ -638,8 +781,8 @@ const AdminPage = () => {
       ...orderSettings,
       practicesByType: {
         ...orderSettings.practicesByType,
-        [selectedOrderCategory]: newList
-      }
+        [selectedOrderCategory]: newList,
+      },
     };
     // Update local state immediately for smoothness
     setOrderSettings(updated);
@@ -648,14 +791,16 @@ const AdminPage = () => {
   };
 
   const handleDeleteOrderPractice = async (pIdx) => {
-    const currentList = [...(orderSettings.practicesByType[selectedOrderCategory] || [])];
+    const currentList = [
+      ...(orderSettings.practicesByType[selectedOrderCategory] || []),
+    ];
     currentList.splice(pIdx, 1);
     const updated = {
       ...orderSettings,
       practicesByType: {
         ...orderSettings.practicesByType,
-        [selectedOrderCategory]: currentList
-      }
+        [selectedOrderCategory]: currentList,
+      },
     };
     await handleSaveOrderSettings(updated);
   };
@@ -663,9 +808,9 @@ const AdminPage = () => {
   const handleManageUser = (user) => {
     setTargetProf({
       ...user,
-      headerGeneral: user.headerGeneral || Array(8).fill(''),
-      headerFibro: user.headerFibro || Array(8).fill(''),
-      signatureBase64: user.signatureBase64 || null
+      headerGeneral: user.headerGeneral || Array(8).fill(""),
+      headerFibro: user.headerFibro || Array(8).fill(""),
+      signatureBase64: user.signatureBase64 || null,
     });
     setIsManageProfessionalModalOpen(true);
   };
@@ -674,9 +819,11 @@ const AdminPage = () => {
     if (!targetProf) return;
     setIsProfSaving(true);
     try {
-      await setDoc(doc(db, 'users', targetProf.id), targetProf, { merge: true });
+      await setDoc(doc(db, "users", targetProf.id), targetProf, {
+        merge: true,
+      });
       setIsManageProfessionalModalOpen(false);
-      alert('Perfil actualizado');
+      alert("Perfil actualizado");
     } catch (err) {
       alert(err.message);
     } finally {
@@ -685,8 +832,12 @@ const AdminPage = () => {
   };
 
   const handleManualUserCreate = async () => {
-    if (!manualUserForm.nombre || !manualUserForm.u || !manualUserForm.password) {
-      return alert('Completa nombre, usuario y contraseña');
+    if (
+      !manualUserForm.nombre ||
+      !manualUserForm.u ||
+      !manualUserForm.password
+    ) {
+      return alert("Completa nombre, usuario y contraseña");
     }
 
     const secondaryApp = initializeApp(firebaseConfig, "SecondaryManual");
@@ -694,25 +845,33 @@ const AdminPage = () => {
 
     try {
       const email = `${manualUserForm.u.toLowerCase().trim()}@coat.com.ar`;
-      const res = await createUserWithEmailAndPassword(secondaryAuth, email, manualUserForm.password);
-      
-      await setDoc(doc(db, 'users', res.user.uid), {
-        nombre: manualUserForm.nombre.trim(),
-        u: manualUserForm.u.toLowerCase().trim(),
-        email: email,
-        especialidad: 'Otorrinolaringólogo',
-        mp: '-',
-        me: '-',
-        isOfficial: true,
-        role: manualUserForm.role || 'médico'
-      }, { merge: true });
+      const res = await createUserWithEmailAndPassword(
+        secondaryAuth,
+        email,
+        manualUserForm.password,
+      );
+
+      await setDoc(
+        doc(db, "users", res.user.uid),
+        {
+          nombre: manualUserForm.nombre.trim(),
+          u: manualUserForm.u.toLowerCase().trim(),
+          email: email,
+          especialidad: "Otorrinolaringólogo",
+          mp: "-",
+          me: "-",
+          isOfficial: true,
+          role: manualUserForm.role || "médico",
+        },
+        { merge: true },
+      );
 
       await signOut(secondaryAuth);
       setIsManualModalOpen(false);
-      setManualUserForm({ nombre: '', mp: '', me: '', especialidad: '', u: '', password: '', role: 'médico' });
-      alert('Usuario creado con éxito');
+      // setManualUserForm({ nombre: "", mp: "", me: "", especialidad: "", u: "", password: "", role: "medico" });
+      alert("Usuario creado con éxito");
     } catch (err) {
-      alert('Error: ' + err.message);
+      alert("Error: " + err.message);
     } finally {
       await deleteApp(secondaryApp);
     }
@@ -728,71 +887,79 @@ const AdminPage = () => {
     const file = e.target.files[0];
     if (!file || !targetProf) return;
 
-    if (!file.type.startsWith('image/')) {
-        alert('Por favor, selecciona una imagen válida.');
-        return;
+    if (!file.type.startsWith("image/")) {
+      alert("Por favor, selecciona una imagen vÃ¡lida.");
+      return;
     }
 
     setIsUploadingSignature(true);
     try {
       const uid = targetProf.id || targetProf.uid; // targetProf has id or uid
       if (!uid) throw new Error("ID de profesional no encontrado");
-      
-      const fileExt = file.name.split('.').pop();
+
+      const fileExt = file.name.split(".").pop();
       const fileName = `firmas/${uid}_${Date.now()}.${fileExt}`;
 
       const { data, error } = await supabase.storage
-        .from('informescoat')
+        .from("informescoat")
         .upload(fileName, file, {
-          cacheControl: '3600',
-          upsert: true
+          cacheControl: "3600",
+          upsert: true,
         });
 
       if (error) throw error;
 
-      const { data: { publicUrl } } = supabase.storage
-        .from('informescoat')
-        .getPublicUrl(fileName);
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("informescoat").getPublicUrl(fileName);
 
       setTargetProf({ ...targetProf, signatureBase64: publicUrl });
     } catch (err) {
-      console.error('Error uploading signature (admin):', err);
-      alert('Error cargando firma: ' + err.message);
+      console.error("Error uploading signature (admin):", err);
+      alert("Error cargando firma: " + err.message);
     } finally {
       setIsUploadingSignature(false);
     }
   };
 
   const filteredUsers = users
-    .map(u => ({ ...u, _std: getStandardUser(u) }))
-    .filter(u => {
+    .map((u) => ({ ...u, _std: getStandardUser(u) }))
+    .filter((u) => {
       const search = userSearch.toLowerCase();
-      return u._std.nombre.toLowerCase().includes(search) || u._std.email.toLowerCase().includes(search);
+      return (
+        u._std.nombre.toLowerCase().includes(search) ||
+        u._std.email.toLowerCase().includes(search)
+      );
     });
 
-  const filteredPractices = practices.filter(p => 
-    (p.n || '').toLowerCase().includes(practiceSearch.toLowerCase()) || 
-    (p.c || '').toLowerCase().includes(practiceSearch.toLowerCase())
+  const filteredPractices = practices.filter(
+    (p) =>
+      (p.n || "").toLowerCase().includes(practiceSearch.toLowerCase()) ||
+      (p.c || "").toLowerCase().includes(practiceSearch.toLowerCase()),
   );
 
   return (
     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in p-4 pb-20">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-4 border-b border-main">
         <div>
-          <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">Administración</h1>
-          <p className="text-gray-500 font-medium">Control centralizado de usuarios e informes</p>
+          <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+            AdministraciÃ³n
+          </h1>
+          <p className="text-gray-500 font-medium">
+            Control centralizado de usuarios e informes
+          </p>
         </div>
-        
+
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 px-5 py-2.5 rounded-2xl font-bold transition-all text-sm ${
-                activeTab === tab.id 
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' 
-                  : 'bg-[var(--bg-card)] text-[var(--text-sub)] hover:bg-[var(--hover-main)] border border-[var(--border-main)]'
+                activeTab === tab.id
+                  ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20"
+                  : "bg-[var(--bg-card)] text-[var(--text-sub)] hover:bg-[var(--hover-main)] border border-[var(--border-main)]"
               }`}
             >
               {tab.icon}
@@ -803,11 +970,11 @@ const AdminPage = () => {
       </div>
 
       <div className="animate-slide-up">
-        {activeTab === 'stats' && (
+        {activeTab === "stats" && (
           <div className="space-y-8">
             {/* Main Metrics Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 className="card p-6 border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group"
@@ -815,9 +982,18 @@ const AdminPage = () => {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">Pacientes Totales</p>
+                    <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em] mb-1">
+                      Pacientes Totales
+                    </p>
                     <h3 className="text-4xl font-black text-[var(--text-main)]">
-                      {globalStats.loading ? <Loader2 className="animate-spin text-blue-600" size={32} /> : globalStats.patients}
+                      {globalStats.loading ? (
+                        <Loader2
+                          className="animate-spin text-blue-600"
+                          size={32}
+                        />
+                      ) : (
+                        globalStats.patients
+                      )}
                     </h3>
                   </div>
                   <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
@@ -828,11 +1004,13 @@ const AdminPage = () => {
                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
                     <div className="h-full bg-blue-600 w-full opacity-20" />
                   </div>
-                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Base centralizada</p>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">
+                    Base centralizada
+                  </p>
                 </div>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.1 }}
@@ -841,9 +1019,18 @@ const AdminPage = () => {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">Informes Médicos</p>
+                    <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">
+                      Informes MÃ©dicos
+                    </p>
                     <h3 className="text-4xl font-black text-[var(--text-main)]">
-                      {globalStats.loading ? <Loader2 className="animate-spin text-indigo-600" size={32} /> : globalStats.reports}
+                      {globalStats.loading ? (
+                        <Loader2
+                          className="animate-spin text-indigo-600"
+                          size={32}
+                        />
+                      ) : (
+                        globalStats.reports
+                      )}
                     </h3>
                   </div>
                   <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/30">
@@ -854,11 +1041,13 @@ const AdminPage = () => {
                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
                     <div className="h-full bg-indigo-600 w-full opacity-20" />
                   </div>
-                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Registros clínicos</p>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">
+                    Registros clÃ­nicos
+                  </p>
                 </div>
               </motion.div>
 
-              <motion.div 
+              <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
@@ -867,9 +1056,18 @@ const AdminPage = () => {
                 <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -mr-16 -mt-16 transition-transform group-hover:scale-125" />
                 <div className="flex items-center justify-between relative z-10">
                   <div>
-                    <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-1">Pedidos Generados</p>
+                    <p className="text-[10px] font-black text-purple-600 uppercase tracking-[0.2em] mb-1">
+                      Pedidos Generados
+                    </p>
                     <h3 className="text-4xl font-black text-[var(--text-main)]">
-                      {globalStats.loading ? <Loader2 className="animate-spin text-purple-600" size={32} /> : globalStats.orders}
+                      {globalStats.loading ? (
+                        <Loader2
+                          className="animate-spin text-purple-600"
+                          size={32}
+                        />
+                      ) : (
+                        globalStats.orders
+                      )}
                     </h3>
                   </div>
                   <div className="w-16 h-16 bg-purple-600 text-white rounded-2xl flex items-center justify-center shadow-lg shadow-purple-500/30">
@@ -880,7 +1078,9 @@ const AdminPage = () => {
                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">
                     <div className="h-full bg-purple-600 w-full opacity-20" />
                   </div>
-                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">Historial dinámico</p>
+                  <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">
+                    Historial dinÃ¡mico
+                  </p>
                 </div>
               </motion.div>
             </div>
@@ -892,27 +1092,40 @@ const AdminPage = () => {
                   <div className="p-2.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 rounded-xl">
                     <Database size={24} />
                   </div>
-                  <h3 className="text-xl font-bold">Almacenamiento de Datos (Firestore)</h3>
+                  <h3 className="text-xl font-bold">
+                    Almacenamiento de Datos (Firestore)
+                  </h3>
                 </div>
-                
+
                 <div className="space-y-6">
                   <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">
                     <div className="flex justify-between items-end mb-4">
                       <div>
-                        <p className="text-3xl font-black text-[var(--text-main)]">{storageStats.fbSize} <span className="text-sm font-medium text-[var(--text-sub)]">KB</span></p>
-                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">Espacio ocupado en BD</p>
+                        <p className="text-3xl font-black text-[var(--text-main)]">
+                          {storageStats.fbSize}{" "}
+                          <span className="text-sm font-medium text-[var(--text-sub)]">
+                            KB
+                          </span>
+                        </p>
+                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">
+                          Espacio ocupado en BD
+                        </p>
                       </div>
                     </div>
                     <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
-                      <div 
-                        className="h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_10px_rgba(37,99,235,0.5)]" 
-                        style={{ width: `${Math.min((storageStats.fbSize / 1024) * 100, 100)}%` }}
+                      <div
+                        className="h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_10px_rgba(37,99,235,0.5)]"
+                        style={{
+                          width: `${Math.min((storageStats.fbSize / 1024) * 100, 100)}%`,
+                        }}
                       ></div>
                     </div>
                   </div>
                   <p className="text-sm text-gray-500 leading-relaxed">
-                    La base de datos Firestore almacena los metadatos de los informes, pacientes y ahora también los pedidos. 
-                    Al regenerar los PDFs dinámicamente, mantenemos este consumo en niveles óptimos.
+                    La base de datos Firestore almacena los metadatos de los
+                    informes, pacientes y ahora tambiÃ©n los pedidos. Al
+                    regenerar los PDFs dinÃ¡micamente, mantenemos este consumo
+                    en niveles Ã³ptimos.
                   </p>
                 </div>
               </div>
@@ -922,43 +1135,65 @@ const AdminPage = () => {
                   <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 rounded-xl">
                     <Upload size={24} />
                   </div>
-                  <h3 className="text-xl font-bold">Almacenamiento de Archivos (Supabase)</h3>
+                  <h3 className="text-xl font-bold">
+                    Almacenamiento de Archivos (Supabase)
+                  </h3>
                 </div>
 
                 <div className="space-y-6">
                   <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">
                     <div className="flex justify-between items-end mb-4">
                       <div>
-                        <p className="text-3xl font-black text-[var(--text-main)]">{storageStats.sbSize} <span className="text-sm font-medium text-[var(--text-sub)]">MB</span></p>
-                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">Archivos y Firmas</p>
+                        <p className="text-3xl font-black text-[var(--text-main)]">
+                          {storageStats.sbSize}{" "}
+                          <span className="text-sm font-medium text-[var(--text-sub)]">
+                            MB
+                          </span>
+                        </p>
+                        <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">
+                          Archivos y Firmas
+                        </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-xl font-bold text-emerald-600">{storageStats.sbCount}</p>
-                        <p className="text-[10px] font-bold text-[var(--text-sub)] uppercase">Archivos</p>
+                        <p className="text-xl font-bold text-emerald-600">
+                          {storageStats.sbCount}
+                        </p>
+                        <p className="text-[10px] font-bold text-[var(--text-sub)] uppercase">
+                          Archivos
+                        </p>
                       </div>
                     </div>
                     <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
-                      <div 
-                        className="h-full bg-emerald-600 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]" 
-                        style={{ width: `${Math.min((storageStats.sbSize / 100) * 100, 100)}%` }}
+                      <div
+                        className="h-full bg-emerald-600 transition-all duration-1000 shadow-[0_0_10px_rgba(16,185,129,0.5)]"
+                        style={{
+                          width: `${Math.min((storageStats.sbSize / 100) * 100, 100)}%`,
+                        }}
                       ></div>
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                    Supabase aloja los PDFs generados en informes anteriores y las firmas de los profesionales. 
-                    El plan gratuito permite hasta 1GB, lo cual es suficiente para miles de registros.
+                    Supabase aloja los PDFs generados en informes anteriores y
+                    las firmas de los profesionales. El plan gratuito permite
+                    hasta 1GB, lo cual es suficiente para miles de registros.
                   </p>
                 </div>
               </div>
             </div>
-            
+
             <div className="flex justify-center">
-              <button 
-                onClick={() => { fetchGlobalStats(); fetchStorageStats(); }}
+              <button
+                onClick={() => {
+                  fetchGlobalStats();
+                  fetchStorageStats();
+                }}
                 className="flex items-center gap-2 px-6 py-3 bg-[var(--bg-card)] border border-[var(--border-main)] text-[var(--text-sub)] rounded-2xl font-bold hover:bg-[var(--hover-main)] transition-all shadow-sm"
               >
-                <RefreshCw size={20} className={globalStats.loading ? 'animate-spin' : ''} />
-                Actualizar Métricas
+                <RefreshCw
+                  size={20}
+                  className={globalStats.loading ? "animate-spin" : ""}
+                />
+                Actualizar MÃ©tricas
               </button>
             </div>
 
@@ -970,55 +1205,125 @@ const AdminPage = () => {
                     <div className="p-2.5 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-xl">
                       <Trash2 size={24} />
                     </div>
-                    <h3 className="text-xl font-bold">Limpieza Manual por Fecha</h3>
+                    <h3 className="text-xl font-bold">
+                      Limpieza Manual por Fecha
+                    </h3>
                   </div>
-                  <button onClick={() => setCleanSummary(null)} className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-gray-400">
+                  <button
+                    onClick={() => setCleanSummary(null)}
+                    className="p-2 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full text-gray-400"
+                  >
                     <RefreshCw size={18} />
                   </button>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Fecha Inicio</label>
-                    <input type="date" value={cleanRange.start} onChange={e => setCleanRange({...cleanRange, start: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      Fecha Inicio
+                    </label>
+                    <input
+                      type="date"
+                      value={cleanRange.start}
+                      onChange={(e) =>
+                        setCleanRange({ ...cleanRange, start: e.target.value })
+                      }
+                      className="input-field"
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Fecha Fin</label>
-                    <input type="date" value={cleanRange.end} onChange={e => setCleanRange({...cleanRange, end: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      Fecha Fin
+                    </label>
+                    <input
+                      type="date"
+                      value={cleanRange.end}
+                      onChange={(e) =>
+                        setCleanRange({ ...cleanRange, end: e.target.value })
+                      }
+                      className="input-field"
+                    />
                   </div>
                 </div>
 
                 <div className="flex flex-wrap gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-slate-100 dark:border-slate-800">
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={cleanOptions.pdfs} onChange={e => setCleanOptions({...cleanOptions, pdfs: e.target.checked})} className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500" />
-                    <span className="text-xs font-bold text-[var(--text-main)]">ELIMINAR ARCHIVOS PDFS</span>
+                    <input
+                      type="checkbox"
+                      checked={cleanOptions.pdfs}
+                      onChange={(e) =>
+                        setCleanOptions({
+                          ...cleanOptions,
+                          pdfs: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-xs font-bold text-[var(--text-main)]">
+                      ELIMINAR ARCHIVOS PDFS
+                    </span>
                   </label>
                   <label className="flex items-center gap-2 cursor-pointer">
-                    <input type="checkbox" checked={cleanOptions.records} onChange={e => setCleanOptions({...cleanOptions, records: e.target.checked})} className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500" />
-                    <span className="text-xs font-bold text-red-600 uppercase">Eliminar registros de base de datos</span>
+                    <input
+                      type="checkbox"
+                      checked={cleanOptions.records}
+                      onChange={(e) =>
+                        setCleanOptions({
+                          ...cleanOptions,
+                          records: e.target.checked,
+                        })
+                      }
+                      className="w-4 h-4 rounded border-gray-300 text-red-600 focus:ring-red-500"
+                    />
+                    <span className="text-xs font-bold text-red-600 uppercase">
+                      Eliminar registros de base de datos
+                    </span>
                   </label>
                 </div>
 
                 {cleanSummary ? (
-                  <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl border border-blue-100 dark:border-blue-900/30">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.95 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="p-6 bg-blue-50 dark:bg-blue-900/10 rounded-3xl border border-blue-100 dark:border-blue-900/30"
+                  >
                     <div className="flex justify-between items-center mb-4">
                       <div>
-                        <p className="text-sm font-bold text-blue-900 dark:text-blue-300">Análisis completado</p>
-                        <p className="text-xs text-blue-600">Se encontraron {cleanSummary.total} informes en este rango.</p>
+                        <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
+                          AnÃ¡lisis completado
+                        </p>
+                        <p className="text-xs text-blue-600">
+                          Se encontraron {cleanSummary.total} informes en este
+                          rango.
+                        </p>
                       </div>
-                      <button onClick={handleExecuteCleanup} disabled={isCleaning} className="btn-primary bg-red-600 text-white px-6 py-2 flex items-center gap-2">
-                        {isCleaning ? <Loader2 size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                      <button
+                        onClick={handleExecuteCleanup}
+                        disabled={isCleaning}
+                        className="btn-primary bg-red-600 text-white px-6 py-2 flex items-center gap-2"
+                      >
+                        {isCleaning ? (
+                          <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                          <Trash2 size={16} />
+                        )}
                         Confirmar Limpieza
                       </button>
                     </div>
                   </motion.div>
                 ) : (
-                  <button 
+                  <button
                     onClick={handleAnalyzeCleanup}
-                    disabled={isCleaning || !cleanRange.start || !cleanRange.end}
+                    disabled={
+                      isCleaning || !cleanRange.start || !cleanRange.end
+                    }
                     className="w-full btn-primary py-4 flex items-center justify-center gap-3 text-lg"
                   >
-                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={22} />}
+                    {isCleaning ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Search size={22} />
+                    )}
                     ANALIZAR RANGO SELECCIONADO
                   </button>
                 )}
@@ -1033,25 +1338,35 @@ const AdminPage = () => {
                     <h4 className="font-bold">Mantenimiento Protegido</h4>
                   </div>
                   <p className="text-xs text-gray-500 mb-4 leading-relaxed">
-                    Elimina archivos en Supabase que no tienen un informe asociado (huérfanos). Las firmas de profesionales están protegidas.
+                    Elimina archivos en Supabase que no tienen un informe
+                    asociado (huÃ©rfanos). Las firmas de profesionales estÃ¡n
+                    protegidas.
                   </p>
-                  <button 
+                  <button
                     onClick={handleCleanOrphans}
                     disabled={isCleaning}
                     className="w-full py-3 bg-[var(--bg-secondary)] hover:bg-red-50 dark:hover:bg-red-900/10 text-[var(--text-sub)] hover:text-red-600 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 border border-main"
                   >
-                    {isCleaning ? <Loader2 className="animate-spin" size={16} /> : <Trash2 size={16} />}
-                    Limpiar Archivos Huérfanos
+                    {isCleaning ? (
+                      <Loader2 className="animate-spin" size={16} />
+                    ) : (
+                      <Trash2 size={16} />
+                    )}
+                    Limpiar Archivos HuÃ©rfanos
                   </button>
                 </div>
 
                 <div className="bg-amber-50 dark:bg-amber-900/10 p-6 rounded-[2rem] border border-amber-100 dark:border-amber-900/30">
                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-500 mb-2">
                     <Activity size={18} />
-                    <span className="text-xs font-black uppercase">Nota de Seguridad</span>
+                    <span className="text-xs font-black uppercase">
+                      Nota de Seguridad
+                    </span>
                   </div>
                   <p className="text-[11px] text-amber-600/80 leading-relaxed italic">
-                    "La eliminación de registros es definitiva e irreversible. Se recomienda realizar copias de seguridad de informes críticos antes de proceder."
+                    "La eliminaciÃ³n de registros es definitiva e irreversible.
+                    Se recomienda realizar copias de seguridad de informes
+                    crÃ­ticos antes de proceder."
                   </p>
                 </div>
               </div>
@@ -1059,12 +1374,15 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === 'users' && (
+        {activeTab === "users" && (
           <div className="space-y-6">
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-[var(--border-main)]">
               <div className="relative w-full md:w-96">
-                <SearchIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
-                <input 
+                <SearchIcon
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={18}
+                />
+                <input
                   type="text"
                   placeholder="Buscar profesional..."
                   value={userSearch}
@@ -1076,9 +1394,17 @@ const AdminPage = () => {
                 <label className="flex items-center gap-2 px-5 py-2.5 bg-green-100 dark:bg-green-900/20 text-green-600 rounded-2xl font-bold text-sm cursor-pointer hover:bg-green-200 transition-colors">
                   <FileUp size={18} />
                   <span>Importar Excel</span>
-                  <input type="file" className="hidden" accept=".xlsx, .xls" onChange={handleExcelUpload} />
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".xlsx, .xls"
+                    onChange={handleExcelUpload}
+                  />
                 </label>
-                <button onClick={() => setIsManualModalOpen(true)} className="btn-primary flex items-center gap-2 py-2.5">
+                <button
+                  onClick={() => setIsManualModalOpen(true)}
+                  className="btn-primary flex items-center gap-2 py-2.5"
+                >
                   <Plus size={18} />
                   <span>Nuevo</span>
                 </button>
@@ -1091,70 +1417,108 @@ const AdminPage = () => {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-[var(--bg-secondary)] border-b border-main">
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Profesional</th>
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Especialidad</th>
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Estado</th>
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Acceso</th>
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Acciones</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Profesional
+                      </th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Especialidad
+                      </th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Estado
+                      </th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
+                        Acceso
+                      </th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">
+                        Acciones
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
                     {filteredUsers.map((user, idx) => (
-                      <tr key={user.id} className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors group">
+                      <tr
+                        key={user.id}
+                        className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors group"
+                      >
                         <td className="px-6 py-4">
                           <div className="flex items-center gap-4">
                             <div className="w-10 h-10 bg-blue-100/30 text-blue-600 rounded-xl flex items-center justify-center font-black text-lg border border-main shadow-sm">
                               {user._std.nombre.charAt(0).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-[var(--text-main)] truncate">{user._std.nombre}</p>
-                              <p className="text-xs text-gray-400 truncate">{user._std.email}</p>
+                              <p className="font-bold text-[var(--text-main)] truncate">
+                                {user._std.nombre}
+                              </p>
+                              <p className="text-xs text-gray-400 truncate">
+                                {user._std.email}
+                              </p>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-xs font-medium text-[var(--text-sub)]">{user._std.especialidad}</span>
+                          <span className="text-xs font-medium text-[var(--text-sub)]">
+                            {user._std.especialidad}
+                          </span>
                           <div className="flex gap-2 mt-1">
-                            {user._std.mp && <span className="text-[9px] font-mono text-gray-400">MP: {user._std.mp}</span>}
-                            {user._std.me && <span className="text-[9px] font-mono text-gray-400">ME: {user._std.me}</span>}
+                            {user._std.mp && (
+                              <span className="text-[9px] font-mono text-gray-400">
+                                MP: {user._std.mp}
+                              </span>
+                            )}
+                            {user._std.me && (
+                              <span className="text-[9px] font-mono text-gray-400">
+                                ME: {user._std.me}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${
-                            user._std.isOfficial ? 'bg-green-100 text-green-600' : 'bg-orange-100 text-orange-600'
-                          }`}>
-                            {user._std.isOfficial ? 'Oficial' : 'Provisorio'}
+                          <span
+                            className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${
+                              user._std.isOfficial
+                                ? "bg-green-100 text-green-600"
+                                : "bg-orange-100 text-orange-600"
+                            }`}
+                          >
+                            {user._std.isOfficial ? "Oficial" : "Provisorio"}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className="text-xs font-bold text-[var(--text-main)]">
-                              {user._std.lastLogin ? new Date(user._std.lastLogin).toLocaleDateString('es-AR', {
-                                day: '2-digit',
-                                month: '2-digit',
-                                year: 'numeric'
-                              }) : 'Nunca'}
+                              {user._std.lastLogin
+                                ? new Date(
+                                    user._std.lastLogin,
+                                  ).toLocaleDateString("es-AR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric",
+                                  })
+                                : "Nunca"}
                             </span>
                             {user._std.lastLogin && (
                               <span className="text-[10px] text-gray-400">
-                                {new Date(user._std.lastLogin).toLocaleTimeString('es-AR', {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })} hs
+                                {new Date(
+                                  user._std.lastLogin,
+                                ).toLocaleTimeString("es-AR", {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}{" "}
+                                hs
                               </span>
                             )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
+                            <button
                               onClick={() => handleManageUser(user)}
                               className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
                               title="Configurar Perfil"
                             >
                               <UserCog size={18} />
                             </button>
-                            <button 
+                            <button
                               onClick={() => handleDeleteUser(user.id)}
                               className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-colors"
                               title="Eliminar"
@@ -1172,73 +1536,153 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === 'practices' && (
+        {activeTab === "practices" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">
               <div className="card p-8 bg-[var(--bg-card)] sticky top-8">
                 <h3 className="text-xl font-bold flex items-center gap-2 mb-6">
-                  {selectedPractice ? <Edit2 className="text-blue-500" /> : <Plus className="text-green-500" />}
-                  {selectedPractice ? 'Editar Modelo' : 'Nuevo Modelo'}
+                  {selectedPractice ? (
+                    <Edit2 className="text-blue-500" />
+                  ) : (
+                    <Plus className="text-green-500" />
+                  )}
+                  {selectedPractice ? "Editar Modelo" : "Nuevo Modelo"}
                 </h3>
                 <div className="space-y-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">Código</label>
-                    <input type="text" value={practiceForm.c} onChange={e => setPracticeForm({...practiceForm, c: e.target.value.toUpperCase()})} className="input-field" placeholder="Código..." />
+                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
+                      CÃ³digo
+                    </label>
+                    <input
+                      type="text"
+                      value={practiceForm.c}
+                      onChange={(e) =>
+                        setPracticeForm({
+                          ...practiceForm,
+                          c: e.target.value.toUpperCase(),
+                        })
+                      }
+                      className="input-field"
+                      placeholder="CÃ³digo..."
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">Nombre</label>
-                    <input type="text" value={practiceForm.n} onChange={e => setPracticeForm({...practiceForm, n: e.target.value})} className="input-field" placeholder="Nombre..." />
+                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      value={practiceForm.n}
+                      onChange={(e) =>
+                        setPracticeForm({ ...practiceForm, n: e.target.value })
+                      }
+                      className="input-field"
+                      placeholder="Nombre..."
+                    />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">Informe Base (Template)</label>
-                    <textarea rows="8" value={practiceForm.b} onChange={e => setPracticeForm({...practiceForm, b: e.target.value})} className="input-field p-4 resize-none" placeholder="Texto que aparecerá por defecto..." />
+                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
+                      Informe Base (Template)
+                    </label>
+                    <textarea
+                      rows="8"
+                      value={practiceForm.b}
+                      onChange={(e) =>
+                        setPracticeForm({ ...practiceForm, b: e.target.value })
+                      }
+                      className="input-field p-4 resize-none"
+                      placeholder="Texto que aparecerÃ¡ por defecto..."
+                    />
                   </div>
 
                   <label className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 cursor-pointer group">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       checked={practiceForm.st}
-                      onChange={e => setPracticeForm({...practiceForm, st: e.target.checked})}
+                      onChange={(e) =>
+                        setPracticeForm({
+                          ...practiceForm,
+                          st: e.target.checked,
+                        })
+                      }
                       className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
                     />
                     <div className="flex flex-col">
-                      <span className="text-xs font-bold text-blue-900">Incluir título "INFORME DE..."</span>
-                      <span className="text-[10px] text-blue-700/70">Si se desactiva, se podrá poner un título manual.</span>
+                      <span className="text-xs font-bold text-blue-900">
+                        Incluir tÃ­tulo "INFORME DE..."
+                      </span>
+                      <span className="text-[10px] text-blue-700/70">
+                        Si se desactiva, se podrÃ¡ poner un tÃ­tulo manual.
+                      </span>
                     </div>
                   </label>
-                  <button onClick={handleSavePractice} className="btn-primary w-full py-4 mt-2 font-black uppercase tracking-widest text-xs">
-                    {selectedPractice ? 'Actualizar Modelo' : 'Guardar Nuevo Modelo'}
+                  <button
+                    onClick={handleSavePractice}
+                    className="btn-primary w-full py-4 mt-2 font-black uppercase tracking-widest text-xs"
+                  >
+                    {selectedPractice
+                      ? "Actualizar Modelo"
+                      : "Guardar Nuevo Modelo"}
                   </button>
                 </div>
               </div>
             </div>
-            
+
             <div className="lg:col-span-2">
               <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-main overflow-hidden">
                 <div className="p-6 border-b border-main flex items-center justify-between">
-                  <h3 className="font-bold flex items-center gap-2"><ClipboardList size={20} className="text-blue-500" /> Catálogo de Modelos</h3>
+                  <h3 className="font-bold flex items-center gap-2">
+                    <ClipboardList size={20} className="text-blue-500" />{" "}
+                    CatÃ¡logo de Modelos
+                  </h3>
                   <div className="relative w-48">
-                    <SearchIcon size={14} className="absolute left-3 top-2.5 text-gray-400" />
-                    <input type="text" placeholder="Filtrar..." className="input-field pl-9 py-1.5 text-xs" value={practiceSearch} onChange={e => setPracticeSearch(e.target.value)} />
+                    <SearchIcon
+                      size={14}
+                      className="absolute left-3 top-2.5 text-gray-400"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Filtrar..."
+                      className="input-field pl-9 py-1.5 text-xs"
+                      value={practiceSearch}
+                      onChange={(e) => setPracticeSearch(e.target.value)}
+                    />
                   </div>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-widest text-[var(--text-sub)] border-b border-main">
-                        <th className="px-6 py-4">Cód.</th>
-                        <th className="px-6 py-4">Modelo / Práctica</th>
+                        <th className="px-6 py-4">CÃ³d.</th>
+                        <th className="px-6 py-4">Modelo / PrÃ¡ctica</th>
                         <th className="px-6 py-4 text-right">Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredPractices.map(p => (
-                        <tr key={p.id} className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors">
-                          <td className="px-6 py-4 font-mono font-bold text-blue-600 text-xs">{p.c}</td>
-                          <td className="px-6 py-4 font-medium text-sm">{p.n}</td>
+                      {filteredPractices.map((p) => (
+                        <tr
+                          key={p.id}
+                          className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors"
+                        >
+                          <td className="px-6 py-4 font-mono font-bold text-blue-600 text-xs">
+                            {p.c}
+                          </td>
+                          <td className="px-6 py-4 font-medium text-sm">
+                            {p.n}
+                          </td>
                           <td className="px-6 py-4 text-right space-x-1">
-                            <button onClick={() => handleEditPractice(p)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"><Edit2 size={16} /></button>
-                            <button onClick={() => handleDeletePractice(p.id)} className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"><Trash2 size={16} /></button>
+                            <button
+                              onClick={() => handleEditPractice(p)}
+                              className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                            >
+                              <Edit2 size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeletePractice(p.id)}
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={16} />
+                            </button>
                           </td>
                         </tr>
                       ))}
@@ -1250,97 +1694,192 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === 'orders' && (
+        {activeTab === "orders" && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1 space-y-6">
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
-                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--text-main)]"><Settings2 size={20} className="text-blue-600" /> Parámetros de Pedidos</h3>
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--text-main)]">
+                  <Settings2 size={20} className="text-blue-600" /> ParÃ¡metros
+                  de Pedidos
+                </h3>
                 <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all">
                   <div className="flex flex-col">
-                    <span className="text-sm font-bold text-[var(--text-main)]">Email de Paciente Obligatorio</span>
-                    <span className="text-[10px] text-gray-400 uppercase font-black">Controla si el campo es requerido</span>
+                    <span className="text-sm font-bold text-[var(--text-main)]">
+                      Email de Paciente Obligatorio
+                    </span>
+                    <span className="text-[10px] text-gray-400 uppercase font-black">
+                      Controla si el campo es requerido
+                    </span>
                   </div>
                   <div className="relative">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="sr-only"
                       checked={orderSettings.patientEmailRequired || false}
-                      onChange={(e) => handleSaveOrderSettings({...orderSettings, patientEmailRequired: e.target.checked})}
+                      onChange={(e) =>
+                        handleSaveOrderSettings({
+                          ...orderSettings,
+                          patientEmailRequired: e.target.checked,
+                        })
+                      }
                     />
-                    <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.patientEmailRequired ? 'bg-blue-600' : 'bg-gray-300'}`}>
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.patientEmailRequired ? 'translate-x-5' : ''}`} />
+                    <div
+                      className={`w-10 h-5 rounded-full transition-all ${orderSettings.patientEmailRequired ? "bg-blue-600" : "bg-gray-300"}`}
+                    >
+                      <div
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.patientEmailRequired ? "translate-x-5" : ""}`}
+                      />
                     </div>
                   </div>
                 </label>
                 <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-4">
                   <div className="flex flex-col">
-                    <span className="text-sm font-bold text-[var(--text-main)]">Habilitar Módulo Pedidos</span>
-                    <span className="text-[10px] text-gray-400 uppercase font-black">Si se apaga, solo admins lo ven</span>
+                    <span className="text-sm font-bold text-[var(--text-main)]">
+                      Habilitar MÃ³dulo Pedidos
+                    </span>
+                    <span className="text-[10px] text-gray-400 uppercase font-black">
+                      Si se apaga, solo admins lo ven
+                    </span>
                   </div>
                   <div className="relative">
-                    <input 
-                      type="checkbox" 
+                    <input
+                      type="checkbox"
                       className="sr-only"
                       checked={orderSettings.ordersEnabled ?? true}
                       onChange={(e) => {
                         const newValue = e.target.checked;
-                        const action = newValue ? 'habilitar' : 'deshabilitar';
-                        if (window.confirm(`¿Está seguro que desea ${action} el módulo de pedidos para todos los usuarios?`)) {
-                          handleSaveOrderSettings({...orderSettings, ordersEnabled: newValue});
+                        const action = newValue ? "habilitar" : "deshabilitar";
+                        if (
+                          window.confirm(
+                            `Â¿EstÃ¡ seguro que desea ${action} el mÃ³dulo de pedidos para todos los usuarios?`,
+                          )
+                        ) {
+                          handleSaveOrderSettings({
+                            ...orderSettings,
+                            ordersEnabled: newValue,
+                          });
                         }
                       }}
                     />
-                    <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.ordersEnabled !== false ? 'bg-green-600' : 'bg-gray-300'}`}>
-                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.ordersEnabled !== false ? 'translate-x-5' : ''}`} />
+                    <div
+                      className={`w-10 h-5 rounded-full transition-all ${orderSettings.ordersEnabled !== false ? "bg-green-600" : "bg-gray-300"}`}
+                    >
+                      <div
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.ordersEnabled !== false ? "translate-x-5" : ""}`}
+                      />
                     </div>
                   </div>
                 </label>
               </div>
 
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2"><Plus size={20} className="text-blue-600" /> Nueva Categoría</h3>
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                  <Plus size={20} className="text-blue-600" /> Nueva CategorÃ­a
+                </h3>
                 <div className="space-y-4">
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">ID Único</label>
-                    <input type="text" className="input-field" value={newCategoryForm.id} onChange={e => setNewCategoryForm({...newCategoryForm, id: e.target.value.toLowerCase().replace(/\s/g, '_')})} placeholder="ID..." />
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">
+                      ID Ãšnico
+                    </label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={newCategoryForm.id}
+                      onChange={(e) =>
+                        setNewCategoryForm({
+                          ...newCategoryForm,
+                          id: e.target.value.toLowerCase().replace(/\s/g, "_"),
+                        })
+                      }
+                      placeholder="ID..."
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">Etiqueta Visible</label>
-                    <input type="text" className="input-field" value={newCategoryForm.label} onChange={e => setNewCategoryForm({...newCategoryForm, label: e.target.value})} placeholder="Nombre de categoría" />
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">
+                      Etiqueta Visible
+                    </label>
+                    <input
+                      type="text"
+                      className="input-field"
+                      value={newCategoryForm.label}
+                      onChange={(e) =>
+                        setNewCategoryForm({
+                          ...newCategoryForm,
+                          label: e.target.value,
+                        })
+                      }
+                      placeholder="Nombre de categorÃ­a"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">Icono</label>
-                    <select className="input-field cursor-pointer" value={newCategoryForm.icon} onChange={e => setNewCategoryForm({...newCategoryForm, icon: e.target.value})}>
+                    <label className="text-xs font-bold text-gray-400 uppercase ml-1">
+                      Icono
+                    </label>
+                    <select
+                      className="input-field cursor-pointer"
+                      value={newCategoryForm.icon}
+                      onChange={(e) =>
+                        setNewCategoryForm({
+                          ...newCategoryForm,
+                          icon: e.target.value,
+                        })
+                      }
+                    >
                       <option value="Clipboard">Portapapeles</option>
                       <option value="Stethoscope">Estetoscopio</option>
                       <option value="Activity">Actividad/Onda</option>
                       <option value="Search">Lupa</option>
                       <option value="Eye">Ojo</option>
-                      <option value="Heart">Corazón</option>
+                      <option value="Heart">CorazÃ³n</option>
                     </select>
                   </div>
-                  <button onClick={handleAddOrderCategory} className="btn-primary w-full py-3 mt-2 flex items-center justify-center gap-2">
-                    {isSavingOrderSettings ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />} AGREGAR CATEGORÍA
+                  <button
+                    onClick={handleAddOrderCategory}
+                    className="btn-primary w-full py-3 mt-2 flex items-center justify-center gap-2"
+                  >
+                    {isSavingOrderSettings ? (
+                      <Loader2 className="animate-spin" size={18} />
+                    ) : (
+                      <Plus size={18} />
+                    )}{" "}
+                    AGREGAR CATEGORÃA
                   </button>
                 </div>
               </div>
 
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm overflow-hidden">
-                <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-[var(--text-main)]"><ClipboardList size={20} className="text-blue-600" /> Categorías Activas</h3>
+                <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-[var(--text-main)]">
+                  <ClipboardList size={20} className="text-blue-600" />{" "}
+                  CategorÃ­as Activas
+                </h3>
                 <div className="space-y-2">
-                  {orderSettings.categories.map(cat => (
-                    <div 
-                      key={cat.id} 
+                  {orderSettings.categories.map((cat) => (
+                    <div
+                      key={cat.id}
                       onClick={() => setSelectedOrderCategory(cat.id)}
-                      className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${selectedOrderCategory === cat.id ? 'bg-blue-600 border-blue-600 text-white shadow-lg' : 'bg-[var(--bg-secondary)] border-transparent hover:border-blue-300'}`}
+                      className={`flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer ${selectedOrderCategory === cat.id ? "bg-blue-600 border-blue-600 text-white shadow-lg" : "bg-[var(--bg-secondary)] border-transparent hover:border-blue-300"}`}
                     >
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-black uppercase tracking-tighter">{cat.label}</span>
+                        <span className="text-xs font-black uppercase tracking-tighter">
+                          {cat.label}
+                        </span>
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteOrderCategory(cat.id); }} className={`p-2 rounded-xl transition-all ${selectedOrderCategory === cat.id ? 'hover:bg-blue-700 text-white' : 'hover:bg-red-50 text-red-400'}`}><Trash2 size={16} /></button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteOrderCategory(cat.id);
+                        }}
+                        className={`p-2 rounded-xl transition-all ${selectedOrderCategory === cat.id ? "hover:bg-blue-700 text-white" : "hover:bg-red-50 text-red-400"}`}
+                      >
+                        <Trash2 size={16} />
+                      </button>
                     </div>
                   ))}
-                  {orderSettings.categories.length === 0 && <p className="text-center py-8 text-gray-400 text-sm italic">No hay categorías configuradas.</p>}
+                  {orderSettings.categories.length === 0 && (
+                    <p className="text-center py-8 text-gray-400 text-sm italic">
+                      No hay categorÃ­as configuradas.
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -1350,72 +1889,134 @@ const AdminPage = () => {
                 <div className="card bg-[var(--bg-card)] border border-main rounded-[2.5rem] shadow-sm overflow-hidden flex flex-col h-full">
                   <div className="p-8 border-b border-main bg-[var(--bg-secondary)]/50 flex items-center justify-between">
                     <div>
-                      <h3 className="text-2xl font-black text-[var(--text-main)]">Estudios: {orderSettings.categories.find(c => c.id === selectedOrderCategory)?.label}</h3>
-                      <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">Gestionar lista de estudios para esta categoría</p>
+                      <h3 className="text-2xl font-black text-[var(--text-main)]">
+                        Estudios:{" "}
+                        {
+                          orderSettings.categories.find(
+                            (c) => c.id === selectedOrderCategory,
+                          )?.label
+                        }
+                      </h3>
+                      <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">
+                        Gestionar lista de estudios para esta categorÃ­a
+                      </p>
                     </div>
                   </div>
 
                   <div className="p-8 border-b border-main bg-[var(--bg-card)]">
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                       <div className="md:col-span-2 space-y-1">
-                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Nombre del Estudio</label>
-                        <input type="text" className="input-field" value={newPracticeForm.n} onChange={e => setNewPracticeForm({...newPracticeForm, n: e.target.value})} placeholder="Estudio..." />
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                          Nombre del Estudio
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newPracticeForm.n}
+                          onChange={(e) =>
+                            setNewPracticeForm({
+                              ...newPracticeForm,
+                              n: e.target.value,
+                            })
+                          }
+                          placeholder="Estudio..."
+                        />
                       </div>
                       <div className="md:col-span-1 space-y-1">
-                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Código</label>
-                        <input type="text" className="input-field" value={newPracticeForm.c} onChange={e => setNewPracticeForm({...newPracticeForm, c: e.target.value})} placeholder="Código..." />
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                          CÃ³digo
+                        </label>
+                        <input
+                          type="text"
+                          className="input-field"
+                          value={newPracticeForm.c}
+                          onChange={(e) =>
+                            setNewPracticeForm({
+                              ...newPracticeForm,
+                              c: e.target.value,
+                            })
+                          }
+                          placeholder="CÃ³digo..."
+                        />
                       </div>
                       <div className="md:col-span-1 flex items-end">
-                        <button onClick={handleAddOrderPractice} className="btn-primary w-full py-3 flex items-center justify-center gap-2">
-                           <Plus size={18} /> AGREGAR
+                        <button
+                          onClick={handleAddOrderPractice}
+                          className="btn-primary w-full py-3 flex items-center justify-center gap-2"
+                        >
+                          <Plus size={18} /> AGREGAR
                         </button>
                       </div>
                     </div>
                   </div>
 
-                  <Reorder.Group 
-                    axis="y" 
-                    values={orderSettings.practicesByType[selectedOrderCategory] || []} 
+                  <Reorder.Group
+                    axis="y"
+                    values={
+                      orderSettings.practicesByType[selectedOrderCategory] || []
+                    }
                     onReorder={handleReorderOrderPractices}
                     className="flex-1 p-8 space-y-3 overflow-y-auto max-h-[600px] custom-scrollbar"
                   >
-                    {(orderSettings.practicesByType[selectedOrderCategory] || []).map((p, idx) => (
-                      <Reorder.Item 
-                        key={p.n + idx} 
+                    {(
+                      orderSettings.practicesByType[selectedOrderCategory] || []
+                    ).map((p, idx) => (
+                      <Reorder.Item
+                        key={p.n + idx}
                         value={p}
-                        whileDrag={{ 
-                          scale: 1.02, 
-                          boxShadow: "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)" 
+                        whileDrag={{
+                          scale: 1.02,
+                          boxShadow:
+                            "0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1)",
                         }}
                         className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl border border-transparent hover:border-blue-400 transition-all group shadow-sm cursor-grab active:cursor-grabbing"
                       >
                         <div className="flex items-center gap-4 flex-1">
                           <div className="flex items-center gap-2">
-                            <GripVertical className="text-gray-300 group-hover:text-blue-400 transition-colors" size={20} />
-                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center text-xs font-bold">{idx + 1}</div>
+                            <GripVertical
+                              className="text-gray-300 group-hover:text-blue-400 transition-colors"
+                              size={20}
+                            />
+                            <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center text-xs font-bold">
+                              {idx + 1}
+                            </div>
                           </div>
-                          
+
                           {editingOrderPracticeIdx === idx ? (
                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 pr-4">
-                              <input 
-                                type="text" 
-                                className="input-field py-1.5 text-sm" 
-                                value={editOrderPracticeForm.n} 
-                                onChange={e => setEditOrderPracticeForm({...editOrderPracticeForm, n: e.target.value})}
+                              <input
+                                type="text"
+                                className="input-field py-1.5 text-sm"
+                                value={editOrderPracticeForm.n}
+                                onChange={(e) =>
+                                  setEditOrderPracticeForm({
+                                    ...editOrderPracticeForm,
+                                    n: e.target.value,
+                                  })
+                                }
                                 autoFocus
                               />
-                              <input 
-                                type="text" 
-                                className="input-field py-1.5 text-xs font-mono" 
-                                value={editOrderPracticeForm.c} 
-                                onChange={e => setEditOrderPracticeForm({...editOrderPracticeForm, c: e.target.value.toUpperCase()})}
-                                placeholder="Cód."
+                              <input
+                                type="text"
+                                className="input-field py-1.5 text-xs font-mono"
+                                value={editOrderPracticeForm.c}
+                                onChange={(e) =>
+                                  setEditOrderPracticeForm({
+                                    ...editOrderPracticeForm,
+                                    c: e.target.value.toUpperCase(),
+                                  })
+                                }
+                                placeholder="CÃ³d."
                               />
                             </div>
                           ) : (
                             <div className="flex-1">
-                              <p className="font-bold text-sm text-[var(--text-main)]">{p.n}</p>
-                              <p className="text-[10px] font-black text-gray-400 uppercase">CÓDIGO: {p.c || '--'}</p>
+                              <p className="font-bold text-sm text-[var(--text-main)]">
+                                {p.n}
+                              </p>
+                              <p className="text-[10px] font-black text-gray-400 uppercase">
+                                CÃ“DIGO: {p.c || "--"}
+                              </p>
                             </div>
                           )}
                         </div>
@@ -1423,22 +2024,55 @@ const AdminPage = () => {
                         <div className="flex items-center gap-1">
                           {editingOrderPracticeIdx === idx ? (
                             <>
-                              <button onClick={() => handleSaveEditOrderPractice(idx)} className="p-2 text-green-500 hover:bg-green-50 rounded-xl transition-all" title="Guardar"><Check size={18} /></button>
-                              <button onClick={() => setEditingOrderPracticeIdx(null)} className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all" title="Cancelar"><X size={18} /></button>
+                              <button
+                                onClick={() => handleSaveEditOrderPractice(idx)}
+                                className="p-2 text-green-500 hover:bg-green-50 rounded-xl transition-all"
+                                title="Guardar"
+                              >
+                                <Check size={18} />
+                              </button>
+                              <button
+                                onClick={() => setEditingOrderPracticeIdx(null)}
+                                className="p-2 text-gray-400 hover:bg-gray-100 rounded-xl transition-all"
+                                title="Cancelar"
+                              >
+                                <X size={18} />
+                              </button>
                             </>
                           ) : (
                             <>
-                              <button onClick={() => handleStartEditOrderPractice(idx, p)} className="p-2 opacity-0 group-hover:opacity-100 text-blue-500 hover:bg-blue-50 rounded-xl transition-all" title="Editar"><Edit2 size={18} /></button>
-                              <button onClick={() => handleDeleteOrderPractice(idx)} className="p-2 opacity-0 group-hover:opacity-100 text-red-400 hover:bg-red-50 rounded-xl transition-all" title="Eliminar"><Trash2 size={18} /></button>
+                              <button
+                                onClick={() =>
+                                  handleStartEditOrderPractice(idx, p)
+                                }
+                                className="p-2 opacity-0 group-hover:opacity-100 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                title="Editar"
+                              >
+                                <Edit2 size={18} />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteOrderPractice(idx)}
+                                className="p-2 opacity-0 group-hover:opacity-100 text-red-400 hover:bg-red-50 rounded-xl transition-all"
+                                title="Eliminar"
+                              >
+                                <Trash2 size={18} />
+                              </button>
                             </>
                           )}
                         </div>
                       </Reorder.Item>
                     ))}
-                    {(orderSettings.practicesByType[selectedOrderCategory] || []).length === 0 && (
+                    {(
+                      orderSettings.practicesByType[selectedOrderCategory] || []
+                    ).length === 0 && (
                       <div className="text-center py-20 text-gray-400">
-                        <Database size={48} className="mx-auto mb-4 opacity-10" />
-                        <p className="text-sm font-bold uppercase tracking-widest">Sin estudios registrados</p>
+                        <Database
+                          size={48}
+                          className="mx-auto mb-4 opacity-10"
+                        />
+                        <p className="text-sm font-bold uppercase tracking-widest">
+                          Sin estudios registrados
+                        </p>
                       </div>
                     )}
                   </Reorder.Group>
@@ -1449,8 +2083,13 @@ const AdminPage = () => {
                     <ClipboardList size={48} />
                   </div>
                   <div>
-                    <h3 className="text-2xl font-black text-[var(--text-main)]">Seleccione una Categoría</h3>
-                    <p className="text-gray-400 max-w-xs mx-auto mt-2">Elija una categoría de la izquierda para gestionar sus estudios asociados o agregue una nueva.</p>
+                    <h3 className="text-2xl font-black text-[var(--text-main)]">
+                      Seleccione una CategorÃ­a
+                    </h3>
+                    <p className="text-gray-400 max-w-xs mx-auto mt-2">
+                      Elija una categorÃ­a de la izquierda para gestionar sus
+                      estudios asociados o agregue una nueva.
+                    </p>
                   </div>
                 </div>
               )}
@@ -1458,7 +2097,7 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === 'settings' && (
+        {activeTab === "settings" && (
           <div className="max-w-3xl mx-auto">
             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">
               <div className="flex items-center gap-4 border-b border-main pb-6">
@@ -1466,61 +2105,78 @@ const AdminPage = () => {
                   <Mail size={28} />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold">Configuración del Sistema</h3>
-                  <p className="text-gray-400">Parámetros globales de correo y servicios externos</p>
+                  <h3 className="text-2xl font-bold">
+                    ConfiguraciÃ³n del Sistema
+                  </h3>
+                  <p className="text-gray-400">
+                    ParÃ¡metros globales de correo y servicios externos
+                  </p>
                 </div>
               </div>
 
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
-                    <ExternalLink size={14} /> URL de Google Apps Script (Envío de Mails)
+                    <ExternalLink size={14} /> URL de Google Apps Script (EnvÃ­o
+                    de Mails)
                   </label>
-                  <input 
-                    type="text" 
-                    value={appsScriptUrl} 
-                    onChange={e => setAppsScriptUrl(e.target.value)} 
-                    className="input-field font-mono text-sm" 
+                  <input
+                    type="text"
+                    value={appsScriptUrl}
+                    onChange={(e) => setAppsScriptUrl(e.target.value)}
+                    className="input-field font-mono text-sm"
                     placeholder="https://script.google.com/macros/s/.../exec"
                   />
-                  <p className="text-[10px] text-gray-400 ml-1">Este enlace comunica la app con el servidor de correos de Google.</p>
+                  <p className="text-[10px] text-gray-400 ml-1">
+                    Este enlace comunica la app con el servidor de correos de
+                    Google.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
                     <Mail size={14} /> Email para Copias (Destinatario)
                   </label>
-                  <input 
-                    type="email" 
-                    value={adminEmail} 
-                    onChange={e => setAdminEmail(e.target.value)} 
-                    className="input-field" 
+                  <input
+                    type="email"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    className="input-field"
                     placeholder="consultas@coat.com.ar"
                   />
-                  <p className="text-[10px] text-gray-400 ml-1">Aquí llegará una copia automática de cada informe enviado por los médicos.</p>
+                  <p className="text-[10px] text-gray-400 ml-1">
+                    AquÃ­ llegarÃ¡ una copia automÃ¡tica de cada informe enviado
+                    por los mÃ©dicos.
+                  </p>
                 </div>
 
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
                     <Key size={14} /> Token de Seguridad
                   </label>
-                  <input 
-                    type="password" 
-                    value={token} 
-                    onChange={e => setToken(e.target.value)} 
-                    className="input-field" 
-                    placeholder="••••••••"
+                  <input
+                    type="password"
+                    value={token}
+                    onChange={(e) => setToken(e.target.value)}
+                    className="input-field"
+                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
                   />
                 </div>
 
                 <div className="pt-6">
-                  <button 
+                  <button
                     onClick={handleSaveSettings}
                     disabled={isSavingSettings}
                     className="btn-primary w-full py-5 flex items-center justify-center gap-3 shadow-xl shadow-blue-500/30"
                   >
-                    {isSavingSettings ? <Loader2 className="animate-spin" /> : <Save size={20} />}
-                    <span className="text-base uppercase tracking-widest">Guardar Cambios</span>
+                    {isSavingSettings ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Save size={20} />
+                    )}
+                    <span className="text-base uppercase tracking-widest">
+                      Guardar Cambios
+                    </span>
                   </button>
                 </div>
               </div>
@@ -1528,37 +2184,61 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === 'maintenance' && (
+        {activeTab === "maintenance" && (
           <div className="space-y-8 max-w-5xl mx-auto">
             {/* Monitor de Almacenamiento */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
                 <Database className="text-blue-500 mb-2" size={32} />
-                <h4 className="text-[10px] font-black uppercase text-gray-400">Firebase (Base de Datos)</h4>
-                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                <h4 className="text-[10px] font-black uppercase text-gray-400">
+                  Firebase (Base de Datos)
+                </h4>
+                {storageStats.loading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
                   <>
-                    <span className="text-3xl font-black">{storageStats.fbCount}</span>
-                    <span className="text-[10px] text-gray-500 italic">Registros ({storageStats.fbSize} KB aprox)</span>
+                    <span className="text-3xl font-black">
+                      {storageStats.fbCount}
+                    </span>
+                    <span className="text-[10px] text-gray-500 italic">
+                      Registros ({storageStats.fbSize} KB aprox)
+                    </span>
                   </>
                 )}
               </div>
               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
                 <FileUp className="text-purple-500 mb-2" size={32} />
-                <h4 className="text-[10px] font-black uppercase text-gray-400">Supabase (Archivos)</h4>
-                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                <h4 className="text-[10px] font-black uppercase text-gray-400">
+                  Supabase (Archivos)
+                </h4>
+                {storageStats.loading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
                   <>
-                    <span className="text-3xl font-black">{storageStats.sbCount}</span>
-                    <span className="text-[10px] text-gray-500 italic">Archivos (.pdf) en almacenamiento</span>
+                    <span className="text-3xl font-black">
+                      {storageStats.sbCount}
+                    </span>
+                    <span className="text-[10px] text-gray-500 italic">
+                      Archivos (.pdf) en almacenamiento
+                    </span>
                   </>
                 )}
               </div>
               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-center space-y-2">
                 <Trash2 className="text-orange-500 mb-2" size={32} />
-                <h4 className="text-[10px] font-black uppercase text-gray-400">Espacio Ocupado (Files)</h4>
-                {storageStats.loading ? <Loader2 className="animate-spin" /> : (
+                <h4 className="text-[10px] font-black uppercase text-gray-400">
+                  Espacio Ocupado (Files)
+                </h4>
+                {storageStats.loading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
                   <>
-                    <span className="text-3xl font-black text-orange-500">{storageStats.sbSize} MB</span>
-                    <span className="text-[10px] text-gray-500 italic">De 1024 MB disponibles (Tier Free)</span>
+                    <span className="text-3xl font-black text-orange-500">
+                      {storageStats.sbSize} MB
+                    </span>
+                    <span className="text-[10px] text-gray-500 italic">
+                      De 1024 MB disponibles (Tier Free)
+                    </span>
                   </>
                 )}
               </div>
@@ -1568,15 +2248,22 @@ const AdminPage = () => {
             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-2xl font-black">Limpieza Manual por Fecha</h3>
-                  <p className="text-gray-400 text-sm">Libere espacio eliminando informes o archivos antiguos.</p>
+                  <h3 className="text-2xl font-black">
+                    Limpieza Manual por Fecha
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    Libere espacio eliminando informes o archivos antiguos.
+                  </p>
                 </div>
-                <button 
-                  onClick={fetchStorageStats} 
+                <button
+                  onClick={fetchStorageStats}
                   className="p-3 bg-blue-500/5 hover:bg-blue-500/10 rounded-full text-blue-500 transition-colors"
-                  title="Recargar estadísticas"
+                  title="Recargar estadÃ­sticas"
                 >
-                  <RefreshCw size={20} className={storageStats.loading ? 'animate-spin' : ''} />
+                  <RefreshCw
+                    size={20}
+                    className={storageStats.loading ? "animate-spin" : ""}
+                  />
                 </button>
               </div>
 
@@ -1585,104 +2272,166 @@ const AdminPage = () => {
                 <div className="space-y-6">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Fecha Inicio</label>
-                      <input 
-                        type="date" 
-                        value={cleanRange.start} 
-                        onChange={e => setCleanRange({...cleanRange, start: e.target.value})}
-                        className="input-field" 
+                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">
+                        Fecha Inicio
+                      </label>
+                      <input
+                        type="date"
+                        value={cleanRange.start}
+                        onChange={(e) =>
+                          setCleanRange({
+                            ...cleanRange,
+                            start: e.target.value,
+                          })
+                        }
+                        className="input-field"
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">Fecha Fin</label>
-                      <input 
-                        type="date" 
-                        value={cleanRange.end} 
-                        onChange={e => setCleanRange({...cleanRange, end: e.target.value})}
-                        className="input-field" 
+                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">
+                        Fecha Fin
+                      </label>
+                      <input
+                        type="date"
+                        value={cleanRange.end}
+                        onChange={(e) =>
+                          setCleanRange({ ...cleanRange, end: e.target.value })
+                        }
+                        className="input-field"
                       />
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     <label className="flex items-center gap-3 p-4 bg-blue-500/5 rounded-2xl border border-blue-500/10 cursor-pointer hover:bg-blue-500/10 transition-colors">
-                      <input 
-                        type="checkbox" 
-                        checked={cleanOptions.pdfs} 
-                        onChange={e => setCleanOptions({...cleanOptions, pdfs: e.target.checked})}
+                      <input
+                        type="checkbox"
+                        checked={cleanOptions.pdfs}
+                        onChange={(e) =>
+                          setCleanOptions({
+                            ...cleanOptions,
+                            pdfs: e.target.checked,
+                          })
+                        }
                         className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
                       />
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold uppercase">Eliminar Archivos PDFs</span>
-                        <span className="text-[10px] text-gray-400">Libera espacio en Supabase pero mantiene el registro.</span>
+                        <span className="text-xs font-bold uppercase">
+                          Eliminar Archivos PDFs
+                        </span>
+                        <span className="text-[10px] text-gray-400">
+                          Libera espacio en Supabase pero mantiene el registro.
+                        </span>
                       </div>
                     </label>
 
                     <label className="flex items-center gap-3 p-4 bg-red-500/5 rounded-2xl border border-red-500/10 cursor-pointer hover:bg-red-500/10 transition-colors group">
-                      <input 
-                        type="checkbox" 
-                        checked={cleanOptions.records} 
-                        onChange={e => setCleanOptions({...cleanOptions, records: e.target.checked})}
+                      <input
+                        type="checkbox"
+                        checked={cleanOptions.records}
+                        onChange={(e) =>
+                          setCleanOptions({
+                            ...cleanOptions,
+                            records: e.target.checked,
+                          })
+                        }
                         className="w-5 h-5 rounded border-red-200 text-red-600 focus:ring-red-500"
                       />
                       <div className="flex flex-col">
-                        <span className="text-xs font-bold text-red-600 uppercase">Eliminar Registros de Base de Datos</span>
-                        <span className="text-[10px] text-red-400">CUIDADO: Borra el informe definitivamente del historial.</span>
+                        <span className="text-xs font-bold text-red-600 uppercase">
+                          Eliminar Registros de Base de Datos
+                        </span>
+                        <span className="text-[10px] text-red-400">
+                          CUIDADO: Borra el informe definitivamente del
+                          historial.
+                        </span>
                       </div>
                     </label>
                   </div>
 
-                  <button 
+                  <button
                     onClick={handleAnalyzeCleanup}
                     disabled={isCleaning}
                     className="w-full py-5 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl shadow-xl shadow-blue-500/20 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-sm"
                   >
-                    {isCleaning ? <Loader2 className="animate-spin" /> : <Search size={20} />}
+                    {isCleaning ? (
+                      <Loader2 className="animate-spin" />
+                    ) : (
+                      <Search size={20} />
+                    )}
                     Analizar Rango Seleccionado
                   </button>
                 </div>
 
-                {/* Resultado de Simulación */}
+                {/* Resultado de SimulaciÃ³n */}
                 <div className="bg-slate-500/5 rounded-3xl border border-main p-8 flex flex-col justify-center min-h-[300px]">
                   {cleanSummary ? (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
                       <div className="text-center">
-                        <CheckCircle2 className="mx-auto text-green-500 mb-4" size={48} />
-                        <h4 className="text-xl font-bold">Análisis Completo</h4>
+                        <CheckCircle2
+                          className="mx-auto text-green-500 mb-4"
+                          size={48}
+                        />
+                        <h4 className="text-xl font-bold">
+                          AnÃ¡lisis Completo
+                        </h4>
                       </div>
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main text-center">
-                          <p className="text-[10px] font-black text-gray-500 uppercase">Informes Totales</p>
-                          <p className="text-2xl font-black">{cleanSummary.total}</p>
+                          <p className="text-[10px] font-black text-gray-500 uppercase">
+                            Informes Totales
+                          </p>
+                          <p className="text-2xl font-black">
+                            {cleanSummary.total}
+                          </p>
                         </div>
                         <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main text-center font-bold">
-                          <p className="text-[10px] font-black text-gray-500 uppercase">Con Archivo Adjunto</p>
-                          <p className="text-2xl font-black text-blue-500">{cleanSummary.withFiles}</p>
+                          <p className="text-[10px] font-black text-gray-500 uppercase">
+                            Con Archivo Adjunto
+                          </p>
+                          <p className="text-2xl font-black text-blue-500">
+                            {cleanSummary.withFiles}
+                          </p>
                         </div>
                       </div>
 
                       <div className="p-5 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-center">
-                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">Espacio a recuperar estimado</p>
-                        <p className="text-3xl font-black text-blue-600">~ {cleanSummary.estimatedSize} MB</p>
+                        <p className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">
+                          Espacio a recuperar estimado
+                        </p>
+                        <p className="text-3xl font-black text-blue-600">
+                          ~ {cleanSummary.estimatedSize} MB
+                        </p>
                       </div>
 
-                      <button 
+                      <button
                         onClick={handleExecuteCleanup}
                         disabled={isCleaning}
                         className="w-full py-5 bg-red-600 hover:bg-red-700 text-white font-black rounded-[1.5rem] transition-all shadow-xl shadow-red-600/30 flex items-center justify-center gap-3 uppercase tracking-widest"
                       >
-                        {isCleaning ? <Loader2 className="animate-spin" size={20} /> : <Trash2 size={20} />}
+                        {isCleaning ? (
+                          <Loader2 className="animate-spin" size={20} />
+                        ) : (
+                          <Trash2 size={20} />
+                        )}
                         Confirmar y Ejecutar Limpieza
                       </button>
-                      <p className="text-[10px] text-center text-red-500/50 uppercase font-black">Esta acción es permanente e irreversible</p>
+                      <p className="text-[10px] text-center text-red-500/50 uppercase font-black">
+                        Esta acciÃ³n es permanente e irreversible
+                      </p>
                     </div>
                   ) : (
                     <div className="text-center space-y-4 opacity-30 text-gray-400">
                       <Search size={64} className="mx-auto" />
                       <div>
-                        <p className="font-bold text-lg">Sin análisis activo</p>
-                        <p className="text-xs">Seleccione un rango y presione "Analizar" para ver qué se liberará.</p>
+                        <p className="font-bold text-lg">
+                          Sin anÃ¡lisis activo
+                        </p>
+                        <p className="text-xs">
+                          Seleccione un rango y presione "Analizar" para ver
+                          quÃ© se liberarÃ¡.
+                        </p>
                       </div>
                     </div>
                   )}
@@ -1694,30 +2443,49 @@ const AdminPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
               <div className="p-8 bg-blue-500/5 rounded-[2.5rem] border border-blue-500/20 space-y-4">
                 <ShieldCheck size={40} className="text-blue-500" />
-                <h4 className="text-lg font-bold">Migración de IDs</h4>
-                <p className="text-xs text-slate-400 leading-relaxed italic">Convierte perfiles temporales basados en slugs de email a IDs definitivos de Firebase Auth.</p>
-                <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-blue-600/20">Ejecutar Migración</button>
+                <h4 className="text-lg font-bold">MigraciÃ³n de IDs</h4>
+                <p className="text-xs text-slate-400 leading-relaxed italic">
+                  Convierte perfiles temporales basados en slugs de email a IDs
+                  definitivos de Firebase Auth.
+                </p>
+                <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-blue-600/20">
+                  Ejecutar MigraciÃ³n
+                </button>
               </div>
 
               <div className="p-8 bg-purple-500/5 rounded-[2.5rem] border border-purple-500/20 space-y-4">
                 <FileUp size={40} className="text-purple-500" />
-                <h4 className="text-lg font-bold">Limpiar Archivos Huérfanos</h4>
-                <p className="text-xs text-slate-400 leading-relaxed italic">Elimina archivos en Supabase que no tienen un informe asociado en la base de datos.</p>
-                <button 
+                <h4 className="text-lg font-bold">
+                  Limpiar Archivos HuÃ©rfanos
+                </h4>
+                <p className="text-xs text-slate-400 leading-relaxed italic">
+                  Elimina archivos en Supabase que no tienen un informe asociado
+                  en la base de datos.
+                </p>
+                <button
                   onClick={handleCleanOrphans}
                   disabled={isCleaning}
                   className="w-full py-4 bg-purple-600 hover:bg-purple-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-purple-600/20 flex items-center justify-center gap-2"
                 >
-                  {isCleaning ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+                  {isCleaning ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <Trash2 size={18} />
+                  )}
                   Limpiar Almacenamiento
                 </button>
               </div>
-              
+
               <div className="p-8 bg-red-500/5 rounded-[2.5rem] border border-red-500/20 space-y-4">
                 <Trash2 size={40} className="text-red-500" />
                 <h4 className="text-lg font-bold">Nivela Base de Datos</h4>
-                <p className="text-xs text-slate-400 leading-relaxed italic">Elimina todos los perfiles excepto el administrador. Útil para re-importaciones masivas.</p>
-                <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-red-600/20">Wipe All (Except Admin)</button>
+                <p className="text-xs text-slate-400 leading-relaxed italic">
+                  Elimina todos los perfiles excepto el administrador. Ãštil
+                  para re-importaciones masivas.
+                </p>
+                <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-red-600/20">
+                  Wipe All (Except Admin)
+                </button>
               </div>
             </div>
           </div>
@@ -1728,9 +2496,11 @@ const AdminPage = () => {
       <AnimatePresence>
         {isManageProfessionalModalOpen && targetProf && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-md overflow-hidden">
-            <motion.div 
-               initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }}
-               className="bg-[var(--bg-card)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
+            <motion.div
+              initial={{ opacity: 0, y: 50 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 50 }}
+              className="bg-[var(--bg-card)] w-full max-w-5xl h-[85vh] rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)] flex flex-col"
             >
               <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-card)]">
                 <div className="flex items-center gap-3">
@@ -1738,18 +2508,25 @@ const AdminPage = () => {
                     <UserCog size={24} />
                   </div>
                   <div>
-                    <h3 className="font-bold text-lg text-[var(--text-main)]">Configurar Perfil: {targetProf.nombre}</h3>
-                    <p className="text-xs text-gray-500">Ajuste de membretes y datos oficiales</p>
+                    <h3 className="font-bold text-lg text-[var(--text-main)]">
+                      Configurar Perfil: {targetProf.nombre}
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Ajuste de membretes y datos oficiales
+                    </p>
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button 
+                  <button
                     onClick={() => setIsPreviewOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-xl font-bold text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/20"
                   >
                     <FileText size={16} /> Ver Vista Previa
                   </button>
-                  <button onClick={() => setIsManageProfessionalModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full text-gray-500">
+                  <button
+                    onClick={() => setIsManageProfessionalModalOpen(false)}
+                    className="p-2 hover:bg-gray-100 rounded-full text-gray-500"
+                  >
                     <X size={20} />
                   </button>
                 </div>
@@ -1759,113 +2536,208 @@ const AdminPage = () => {
                 {/* Basic Info */}
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Nombre</label>
-                    <input type="text" value={targetProf.nombre} onChange={e => setTargetProf({...targetProf, nombre: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      Nombre
+                    </label>
+                    <input
+                      type="text"
+                      value={targetProf.nombre}
+                      onChange={(e) =>
+                        setTargetProf({ ...targetProf, nombre: e.target.value })
+                      }
+                      className="input-field"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Especialidad</label>
-                    <input type="text" value={targetProf.especialidad} onChange={e => setTargetProf({...targetProf, especialidad: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      Especialidad
+                    </label>
+                    <input
+                      type="text"
+                      value={targetProf.especialidad}
+                      onChange={(e) =>
+                        setTargetProf({
+                          ...targetProf,
+                          especialidad: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">MP</label>
-                    <input type="text" value={targetProf.mp} onChange={e => setTargetProf({...targetProf, mp: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      MP
+                    </label>
+                    <input
+                      type="text"
+                      value={targetProf.mp}
+                      onChange={(e) =>
+                        setTargetProf({ ...targetProf, mp: e.target.value })
+                      }
+                      className="input-field"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">ME</label>
-                    <input type="text" value={targetProf.me} onChange={e => setTargetProf({...targetProf, me: e.target.value})} className="input-field" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      ME
+                    </label>
+                    <input
+                      type="text"
+                      value={targetProf.me}
+                      onChange={(e) =>
+                        setTargetProf({ ...targetProf, me: e.target.value })
+                      }
+                      className="input-field"
+                    />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-black text-blue-500">Rol de Acceso</label>
-                    <select 
-                      className="input-field" 
-                      value={targetProf.role || 'médico'} 
-                      onChange={e => setTargetProf({...targetProf, role: e.target.value})}
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1 font-black text-blue-500">
+                      Rol de Acceso
+                    </label>
+                    <select
+                      className="input-field"
+                      value={targetProf.role || "mÃ©dico"}
+                      onChange={(e) =>
+                        setTargetProf({ ...targetProf, role: e.target.value })
+                      }
                     >
-                      <option value="médico">Médico (Solo sus informes)</option>
-                      <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
-                      <option value="admin">Administrador (Acceso total)</option>
-                      <option value="secre">Secretaría (Carga datos)</option>
+                      <option value="mÃ©dico">
+                        MÃ©dico (Solo sus informes)
+                      </option>
+                      <option value="directora_medica">
+                        Directora MÃ©dica (Acceso total + Membretes)
+                      </option>
+                      <option value="admin">
+                        Administrador (Acceso total)
+                      </option>
+                      <option value="secre">SecretarÃ­a (Carga datos)</option>
                     </select>
                   </div>
                 </div>
 
                 {/* Signature Section in Admin */}
                 <div className="space-y-4 pt-4 border-t border-main">
-                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">Firma Digital (PNG)</label>
+                  <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                    Firma Digital (PNG)
+                  </label>
                   <div className="flex items-center gap-6">
                     <div className="w-40 h-24 bg-white rounded-xl border-2 border-dashed border-main flex items-center justify-center relative overflow-hidden group">
                       {isUploadingSignature ? (
                         <div className="flex flex-col items-center gap-1 text-blue-500">
-                           <Loader2 size={24} className="animate-spin" />
-                           <span className="text-[8px] font-bold uppercase">Subiendo</span>
+                          <Loader2 size={24} className="animate-spin" />
+                          <span className="text-[8px] font-bold uppercase">
+                            Subiendo
+                          </span>
                         </div>
                       ) : targetProf.signatureBase64 ? (
-                        <img src={targetProf.signatureBase64} alt="firma" className="max-w-full max-h-full object-contain" />
+                        <img
+                          src={targetProf.signatureBase64}
+                          alt="firma"
+                          className="max-w-full max-h-full object-contain"
+                        />
                       ) : (
                         <div className="text-gray-300 flex flex-col items-center">
                           <Upload size={20} />
-                          <span className="text-[8px] font-bold">Subir PNG</span>
+                          <span className="text-[8px] font-bold">
+                            Subir PNG
+                          </span>
                         </div>
                       )}
                       {!isUploadingSignature && (
-                        <input type="file" accept="image/*" onChange={handleSignatureUpload} className="absolute inset-0 opacity-0 cursor-pointer" />
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleSignatureUpload}
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                        />
                       )}
                     </div>
                     {targetProf.signatureBase64 && (
-                      <button 
-                        onClick={() => setTargetProf({...targetProf, signatureBase64: null})}
+                      <button
+                        onClick={() =>
+                          setTargetProf({
+                            ...targetProf,
+                            signatureBase64: null,
+                          })
+                        }
                         className="px-4 py-2 bg-red-50 text-red-600 rounded-xl text-[10px] font-black uppercase hover:bg-red-100 transition-colors"
                       >
                         Eliminar Firma
                       </button>
                     )}
                   </div>
-                  <p className="text-[9px] text-gray-400 italic">Esta firma se utilizará para generar los reportes en PDF del profesional.</p>
+                  <p className="text-[9px] text-gray-400 italic">
+                    Esta firma se utilizarÃ¡ para generar los reportes en PDF
+                    del profesional.
+                  </p>
                 </div>
 
                 {/* Headers */}
-                {targetProf.role === 'directora_medica' && (
+                {targetProf.role === "directora_medica" && (
                   <div className="space-y-4">
-                   <div className="flex gap-4 border-b border-main">
-                      <button 
-                        onClick={() => setPreviewType('general')}
-                        className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === 'general' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400'}`}
+                    <div className="flex gap-4 border-b border-main">
+                      <button
+                        onClick={() => setPreviewType("general")}
+                        className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === "general" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-400"}`}
                       >
                         Membrete General
                       </button>
-                      <button 
-                         onClick={() => setPreviewType('fibro')}
-                         className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === 'fibro' ? 'border-blue-500 text-blue-600' : 'border-transparent text-gray-400'}`}
+                      <button
+                        onClick={() => setPreviewType("fibro")}
+                        className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === "fibro" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-400"}`}
                       >
-                        Membrete Fibroscopía
+                        Membrete FibroscopÃ­a
                       </button>
-                   </div>
+                    </div>
 
-                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-secondary)] p-6 rounded-3xl border border-main">
-                      {Array(8).fill(0).map((_, i) => (
-                        <div key={i} className="space-y-1">
-                          <label className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tight">Línea {i+1} {i === 0 ? '(Principal)' : (i < 3 ? '(Secundaria)' : '(Pie)')}</label>
-                          <input 
-                            type="text" 
-                            className="input-field text-sm" 
-                            value={previewType === 'general' ? (targetProf.headerGeneral?.[i] || '') : (targetProf.headerFibro?.[i] || '')}
-                            onChange={(e) => updateTargetHeader(previewType, i, e.target.value)}
-                            placeholder={`Texto línea ${i+1}...`}
-                          />
-                        </div>
-                      ))}
-                   </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-secondary)] p-6 rounded-3xl border border-main">
+                      {Array(8)
+                        .fill(0)
+                        .map((_, i) => (
+                          <div key={i} className="space-y-1">
+                            <label className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tight">
+                              LÃ­nea {i + 1}{" "}
+                              {i === 0
+                                ? "(Principal)"
+                                : i < 3
+                                  ? "(Secundaria)"
+                                  : "(Pie)"}
+                            </label>
+                            <input
+                              type="text"
+                              className="input-field text-sm"
+                              value={
+                                previewType === "general"
+                                  ? targetProf.headerGeneral?.[i] || ""
+                                  : targetProf.headerFibro?.[i] || ""
+                              }
+                              onChange={(e) =>
+                                updateTargetHeader(
+                                  previewType,
+                                  i,
+                                  e.target.value,
+                                )
+                              }
+                              placeholder={`Texto lÃ­nea ${i + 1}...`}
+                            />
+                          </div>
+                        ))}
+                    </div>
                   </div>
                 )}
               </div>
 
               <div className="p-8 border-t border-main flex gap-4 bg-[var(--bg-card)]">
-                <button 
+                <button
                   onClick={handleSaveManagedUser}
                   disabled={isProfSaving}
                   className="btn-primary flex-1 py-4 font-black flex items-center justify-center gap-2"
                 >
-                  {isProfSaving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
+                  {isProfSaving ? (
+                    <Loader2 className="animate-spin" />
+                  ) : (
+                    <Save size={20} />
+                  )}
                   GUARDAR CAMBIOS EN PERFIL
                 </button>
               </div>
@@ -1878,54 +2750,76 @@ const AdminPage = () => {
       <AnimatePresence>
         {isPreviewOpen && targetProf && (
           <div className="fixed inset-0 z-[400] flex items-center justify-center p-12 bg-slate-900/90 backdrop-blur-md">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
               className="bg-white w-[210mm] min-h-[80mm] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden relative border border-gray-400 flex flex-col p-[15mm]"
             >
               <div className="flex border-b-2 border-slate-200 pb-[5mm] mb-[5mm]">
                 {/* Logo Area */}
                 <div className="w-[45mm] flex items-center justify-center pr-10 border-r border-slate-100">
-                   {targetProf.logoBase64 ? (
-                     <img src={targetProf.logoBase64} className="max-w-full max-h-full object-contain" alt="logo" />
-                   ) : (
-                     <div className="text-slate-200 text-[10pt] font-sans font-bold uppercase tracking-tighter text-center">Espacio para Logo</div>
-                   )}
+                  {targetProf.logoBase64 ? (
+                    <img
+                      src={targetProf.logoBase64}
+                      className="max-w-full max-h-full object-contain"
+                      alt="logo"
+                    />
+                  ) : (
+                    <div className="text-slate-200 text-[10pt] font-sans font-bold uppercase tracking-tighter text-center">
+                      Espacio para Logo
+                    </div>
+                  )}
                 </div>
 
                 {/* Header Text Area */}
                 <div className="flex-1 flex flex-col justify-center">
-                    {(previewType === 'general' ? (targetProf.headerGeneral || []) : (targetProf.headerFibro || [])).map((line, i) => {
-                      if (!line) return null;
-                      
-                      let fontSize = '9pt';
-                      let fontWeight = '400';
-                      let marginBottom = '1mm';
-                      if (i === 0) { fontSize = '16pt'; fontWeight = '700'; marginBottom = '3mm'; }
-                      else if (i < 3) { fontSize = '11pt'; fontWeight = '600'; }
+                  {(previewType === "general"
+                    ? targetProf.headerGeneral || []
+                    : targetProf.headerFibro || []
+                  ).map((line, i) => {
+                    if (!line) return null;
 
-                      return (
-                        <p key={i} style={{ 
-                          fontSize, 
-                          fontWeight, 
-                          textAlign: 'center', 
+                    let fontSize = "9pt";
+                    let fontWeight = "400";
+                    let marginBottom = "1mm";
+                    if (i === 0) {
+                      fontSize = "16pt";
+                      fontWeight = "700";
+                      marginBottom = "3mm";
+                    } else if (i < 3) {
+                      fontSize = "11pt";
+                      fontWeight = "600";
+                    }
+
+                    return (
+                      <p
+                        key={i}
+                        style={{
+                          fontSize,
+                          fontWeight,
+                          textAlign: "center",
                           margin: 0,
                           marginBottom,
-                          color: '#000000',
-                          fontFamily: 'sans-serif'
-                        }}>
-                          {line}
-                        </p>
-                      );
-                    })}
+                          color: "#000000",
+                          fontFamily: "sans-serif",
+                        }}
+                      >
+                        {line}
+                      </p>
+                    );
+                  })}
                 </div>
               </div>
 
               <div className="flex-1 flex flex-col items-center justify-center py-20 border-2 border-dashed border-slate-100 rounded-3xl">
-                <p className="text-slate-200 uppercase tracking-[0.5rem] font-bold text-sm">Contenido editable del informe</p>
+                <p className="text-slate-200 uppercase tracking-[0.5rem] font-bold text-sm">
+                  Contenido editable del informe
+                </p>
               </div>
 
               {/* Close Button UI */}
-              <button 
+              <button
                 onClick={() => setIsPreviewOpen(false)}
                 className="absolute top-6 right-6 w-12 h-12 bg-red-500 text-white rounded-full shadow-2xl hover:bg-red-600 transition-all flex items-center justify-center active:scale-90"
               >
@@ -1940,49 +2834,116 @@ const AdminPage = () => {
       <AnimatePresence>
         {isManualModalOpen && (
           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md">
-            <motion.div 
-               initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
-               className="bg-[var(--bg-card)] w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)]"
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[var(--bg-card)] w-full max-w-lg rounded-[2.5rem] shadow-2xl overflow-hidden border border-[var(--border-main)]"
             >
               <div className="p-6 border-b border-main flex items-center justify-between">
-                <h3 className="font-bold flex items-center gap-2"><UserPlus /> Nuevo Profesional</h3>
-                <button onClick={() => setIsManualModalOpen(false)} className="p-2 hover:bg-gray-100 rounded-full"><X size={20} /></button>
+                <h3 className="font-bold flex items-center gap-2">
+                  <UserPlus /> Nuevo Profesional
+                </h3>
+                <button
+                  onClick={() => setIsManualModalOpen(false)}
+                  className="p-2 hover:bg-gray-100 rounded-full"
+                >
+                  <X size={20} />
+                </button>
               </div>
               <div className="p-8 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                   <div className="col-span-2 space-y-1">
-                      <label className="text-xs font-bold uppercase opacity-40 ml-1">Nombre Completo</label>
-                      <input type="text" value={manualUserForm.nombre} onChange={e => setManualUserForm({...manualUserForm, nombre: e.target.value})} className="input-field" placeholder="Dr. Nome Apellido" />
-                   </div>
-                   <div className="col-span-1 space-y-1">
-                      <label className="text-xs font-bold uppercase opacity-40 ml-1">Usuario</label>
-                      <input type="text" value={manualUserForm.u} onChange={e => setManualUserForm({...manualUserForm, u: e.target.value})} className="input-field" placeholder="usuario_coat" />
-                   </div>
-                   <div className="col-span-1 space-y-1">
-                      <label className="text-xs font-bold uppercase opacity-40 ml-1">Contraseña</label>
-                      <input type="password" value={manualUserForm.password} onChange={e => setManualUserForm({...manualUserForm, password: e.target.value})} className="input-field" placeholder="******" />
-                   </div>
-                   <div className="col-span-2 space-y-1">
-                      <label className="text-xs font-bold uppercase opacity-40 ml-1">Rol de Acceso</label>
-                      <select 
-                        value={manualUserForm.role} 
-                        onChange={e => setManualUserForm({...manualUserForm, role: e.target.value})}
-                        className="input-field appearance-none cursor-pointer"
-                      >
-                        <option value="médico">Médico (Solo sus informes)</option>
-                        <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
-                        <option value="secretaría">Secretaría (Solo lectura)</option>
-                        <option value="admin">Administrador (Control Total)</option>
-                      </select>
-                   </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      Nombre Completo
+                    </label>
+                    <input
+                      type="text"
+                      value={manualUserForm.nombre}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          nombre: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                      placeholder="Dr. Nome Apellido"
+                    />
+                  </div>
+                  <div className="col-span-1 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      Usuario
+                    </label>
+                    <input
+                      type="text"
+                      value={manualUserForm.u}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          u: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                      placeholder="usuario_coat"
+                    />
+                  </div>
+                  <div className="col-span-1 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      ContraseÃ±a
+                    </label>
+                    <input
+                      type="password"
+                      value={manualUserForm.password}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          password: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                      placeholder="******"
+                    />
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      Rol de Acceso
+                    </label>
+                    <select
+                      value={manualUserForm.role}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          role: e.target.value,
+                        })
+                      }
+                      className="input-field appearance-none cursor-pointer"
+                    >
+                      <option value="mÃ©dico">
+                        MÃ©dico (Solo sus informes)
+                      </option>
+                      <option value="directora_medica">
+                        Directora MÃ©dica (Acceso total + Membretes)
+                      </option>
+                      <option value="secretarÃ­a">
+                        SecretarÃ­a (Solo lectura)
+                      </option>
+                      <option value="admin">
+                        Administrador (Control Total)
+                      </option>
+                    </select>
+                  </div>
                 </div>
-                <button onClick={handleManualUserCreate} className="btn-primary w-full py-4 mt-4 font-black">CREAR CUENTA PROFESIONAL</button>
+                <button
+                  onClick={handleManualUserCreate}
+                  className="btn-primary w-full py-4 mt-4 font-black"
+                >
+                  CREAR CUENTA PROFESIONAL
+                </button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
-
     </div>
   );
 };

@@ -171,9 +171,7 @@ function App() {
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
                   currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
 
-  const isDirectora = userProfile?.role === 'directora' || 
-                      userProfile?.role === 'directora medica' ||
-                      userProfile?.role === 'directora médica';
+
 
   const canSeeOrders = ordersEnabled || isAdmin || isDirectora;
 
