@@ -67,6 +67,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [loadingStatus, setLoadingStatus] = useState(''); // New state for descriptive messages
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [profile, setProfile] = useState(propProfile || null);
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
@@ -203,11 +204,14 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
       showToast('Complete los campos obligatorios', 'error');
       return;
     }
-    await savePatientToHistory();
-    await saveOrderToDB();
     
+    setLoadingStatus(mode === 'print' ? 'Preparando descarga...' : mode === 'preview' ? 'Generando vista previa...' : 'Guardando datos...');
     setIsGenerating(true);
+    
     try {
+      await savePatientToHistory();
+      await saveOrderToDB();
+      
       const orderData = { 
         ...patientData, 
         orderType: selectedType,
@@ -224,6 +228,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
       showToast('Error al procesar pedido', 'error');
     } finally {
       setIsGenerating(false);
+      setLoadingStatus('');
     }
   };
 
@@ -232,6 +237,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     if (!config.appsScriptUrl) { showToast('Apps Script no configurado', 'error'); return; }
     
     setIsSending(true);
+    setLoadingStatus('Enviando email al paciente...');
     try {
       const pdfDoc = await handleAction('instance');
       const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
@@ -249,7 +255,10 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
       });
       showToast('¡Pedido enviado con éxito!');
     } catch (err) { showToast('Error al enviar email.', 'error'); }
-    finally { setIsSending(false); }
+    finally { 
+      setIsSending(false);
+      setLoadingStatus('');
+    }
   };
 
   return (
@@ -573,7 +582,38 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
             )}
           </div>
         </div>
-      </div>
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {(isGenerating || isSending) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-[var(--bg-card)] border border-white/20 rounded-[40px] p-10 shadow-2xl flex flex-col items-center gap-6 max-w-sm w-full"
+            >
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
+                <div className="relative w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/40">
+                  <Loader2 className="text-white animate-spin" size={40} strokeWidth={2.5} />
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-[var(--text-main)]">Procesando...</h3>
+                <p className="text-blue-500 font-bold uppercase tracking-widest text-[10px] bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-full inline-block">
+                  {loadingStatus || 'Espere un momento'}
+                </p>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+        </div>
     </div>
   );
 };
