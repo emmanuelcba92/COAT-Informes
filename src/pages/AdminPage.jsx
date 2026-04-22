@@ -84,7 +84,7 @@ const AdminPage = () => {
     especialidad: "",
     u: "",
     password: "",
-    role: "mÃ©dico",
+    role: "médico",
   });
   const [loading, setLoading] = useState(true);
 
@@ -164,7 +164,7 @@ const AdminPage = () => {
 
           if (!isAuthorized) {
             console.warn(
-              "Acceso denegado a AdministraciÃ³n para:",
+              "Acceso denegado a Administración para:",
               email,
               "Rol:",
               role,
@@ -364,7 +364,7 @@ const AdminPage = () => {
 
   const handleAnalyzeCleanup = async () => {
     if (!cleanRange.start || !cleanRange.end) {
-      alert("Por favor seleccione un rango de fechas vÃ¡lido.");
+      alert("Por favor seleccione un rango de fechas válido.");
       return;
     }
     setIsCleaning(true);
@@ -401,7 +401,7 @@ const AdminPage = () => {
     if (!cleanSummary) return;
     if (
       !window.confirm(
-        `Â¿ESTÃ SEGURO? Esta acciÃ³n es irreversible.\nSe eliminarÃ¡n ${cleanOptions.records ? "REGISTROS Y ARCHIVOS" : "SOLO ARCHIVOS"} de ${cleanSummary.total} informes.`,
+        `¿ESTÁ SEGURO? Esta acción es irreversible.\nSe eliminarán ${cleanOptions.records ? "REGISTROS Y ARCHIVOS" : "SOLO ARCHIVOS"} de ${cleanSummary.total} informes.`,
       )
     )
       return;
@@ -451,7 +451,7 @@ const AdminPage = () => {
       fetchStorageStats();
     } catch (err) {
       console.error("Error in cleanup:", err);
-      alert("OcurriÃ³ un error parcial durante la limpieza.");
+      alert("Ocurrió un error parcial durante la limpieza.");
     } finally {
       setIsCleaning(false);
     }
@@ -460,18 +460,18 @@ const AdminPage = () => {
   const handleCleanOrphans = async () => {
     if (
       !window.confirm(
-        "Â¿Desea eliminar los archivos de ALMACENAMIENTO que NO tienen un informe asociado? (Esto NO borrarÃ¡ firmas)",
+        "¿Desea eliminar los archivos de ALMACENAMIENTO que NO tienen un informe asociado? (Esto NO borrará firmas)",
       )
     )
       return;
     setIsCleaning(true);
     try {
-      // 1. Obtener todos los archivos de Supabase (RaÃ­z)
+      // 1. Obtener todos los archivos de Supabase (Raíz)
       const { data: files } = await supabase.storage
         .from("informescoat")
         .list("", { limit: 1000 });
       if (!files || files.length === 0) {
-        alert("No hay archivos en la raÃ­z de Supabase.");
+        alert("No hay archivos en la raíz de Supabase.");
         return;
       }
 
@@ -487,27 +487,27 @@ const AdminPage = () => {
         .map((doc) => doc.data().signatureBase64)
         .filter(Boolean);
 
-      // 4. Identificar huÃ©rfanos con PROTECCIÃ“N
+      // 4. Identificar huérfanos con PROTECCIÓN
       const orphanedPaths = files
         .filter((f) => {
           const name = f.name;
-          // PROTECCIÃ“N 1: No borrar carpetas (metadata null en list suele ser carpeta)
+          // PROTECCIÓN 1: No borrar carpetas (metadata null en list suele ser carpeta)
           if (!f.metadata) return false;
-          // PROTECCIÃ“N 2: No borrar la carpeta de firmas ni archivos dentro de ella (aunque list root no deberÃ­a traerlos)
+          // PROTECCIÓN 2: No borrar la carpeta de firmas ni archivos dentro de ella (aunque list root no debería traerlos)
           if (name === "firmas" || name === ".emptyFolderPlaceholder")
             return false;
-          // PROTECCIÃ“N 3: Si es un reporte activo, ignorar
+          // PROTECCIÓN 3: Si es un reporte activo, ignorar
           if (activePaths.has(name)) return false;
-          // PROTECCIÃ“N 4: Si por alguna razÃ³n la URL de una firma coincide con el nombre del archivo, proteger
+          // PROTECCIÓN 4: Si por alguna razón la URL de una firma coincide con el nombre del archivo, proteger
           const isASignature = signatureUrls.some((url) => url.includes(name));
           if (isASignature) return false;
 
-          return true; // Es un huÃ©rfano real en la raÃ­z
+          return true; // Es un huérfano real en la raíz
         })
         .map((f) => f.name);
 
       if (orphanedPaths.length === 0) {
-        alert("No se encontraron archivos huÃ©rfanos en la raÃ­z.");
+        alert("No se encontraron archivos huérfanos en la raíz.");
       } else {
         const { error } = await supabase.storage
           .from("informescoat")
@@ -516,14 +516,14 @@ const AdminPage = () => {
           alert("Error de Supabase: " + error.message);
         } else {
           alert(
-            `Limpieza protegida finalizada. Se borraron ${orphanedPaths.length} archivos huÃ©rfanos.`,
+            `Limpieza protegida finalizada. Se borraron ${orphanedPaths.length} archivos huérfanos.`,
           );
         }
       }
 
       setTimeout(() => fetchStorageStats(), 1500);
     } catch (err) {
-      alert("Error crÃ­tico limpiando huÃ©rfanos: " + err.message);
+      alert("Error crítico limpiando huérfanos: " + err.message);
     } finally {
       setIsCleaning(false);
     }
@@ -534,31 +534,31 @@ const AdminPage = () => {
     { id: "stats", label: "Dashboard", icon: <Activity size={20} /> },
     {
       id: "practices",
-      label: "GestiÃ³n Informes",
+      label: "Gestión Informes",
       icon: <Stethoscope size={20} />,
     },
     {
       id: "orders",
-      label: "GestiÃ³n Pedidos",
+      label: "Gestión Pedidos",
       icon: <ClipboardList size={20} />,
     },
     {
       id: "settings",
-      label: "ConfiguraciÃ³n",
+      label: "Configuración",
       icon: <ShieldCheck size={20} />,
     },
   ];
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
-    const role = u.role || "mÃ©dico";
+    const role = u.role || "médico";
     const isStaff = role === "admin" || role === "secre";
     return {
       nombre: (u.nombre || u.n || u.u || "Sin nombre").toUpperCase().trim(),
       email: (u.email || u.e || u.u || "").toLowerCase().trim(),
       especialidad: isStaff
         ? ""
-        : u.especialidad || u.esp || "OtorrinolaringÃ³logo",
+        : u.especialidad || u.esp || "Otorrinolaringólogo",
       mp: isStaff ? "" : u.mp || u.m || "-",
       me: isStaff ? "" : u.me || "-",
       id: u.id,
@@ -571,7 +571,7 @@ const AdminPage = () => {
   const handleDeleteUser = async (id) => {
     if (
       window.confirm(
-        "Â¿Eliminar este perfil profesional? (No elimina su cuenta de acceso de Firebase Auth)",
+        "¿Eliminar este perfil profesional? (No elimina su cuenta de acceso de Firebase Auth)",
       )
     ) {
       try {
@@ -672,7 +672,7 @@ const AdminPage = () => {
   };
 
   const handleDeletePractice = async (id) => {
-    if (window.confirm("Â¿Eliminar modelo de informe?"))
+    if (window.confirm("¿Eliminar modelo de informe?"))
       await deleteDoc(doc(db, "practices", id));
   };
 
@@ -684,7 +684,7 @@ const AdminPage = () => {
         adminEmail,
         token,
       });
-      alert("ConfiguraciÃ³n guardada correctamente");
+      alert("Configuración guardada correctamente");
     } catch (err) {
       alert("Error al guardar: " + err.message);
     } finally {
@@ -697,7 +697,7 @@ const AdminPage = () => {
     try {
       await setDoc(doc(db, "config", "order_settings"), newData);
     } catch (err) {
-      alert("Error al guardar gestiÃ³n de pedidos: " + err.message);
+      alert("Error al guardar gestión de pedidos: " + err.message);
     } finally {
       setIsSavingOrderSettings(false);
     }
@@ -705,7 +705,7 @@ const AdminPage = () => {
 
   const handleAddOrderCategory = async () => {
     if (!newCategoryForm.id || !newCategoryForm.label)
-      return alert("Complete los datos de la categorÃ­a");
+      return alert("Complete los datos de la categoría");
     const updated = {
       ...orderSettings,
       categories: [...orderSettings.categories, newCategoryForm],
@@ -719,7 +719,7 @@ const AdminPage = () => {
   };
 
   const handleDeleteOrderCategory = async (catId) => {
-    if (!window.confirm("Â¿Eliminar categorÃ­a y todas sus prÃ¡cticas?"))
+    if (!window.confirm("¿Eliminar categoría y todas sus prácticas?"))
       return;
     const updated = {
       ...orderSettings,
@@ -733,7 +733,7 @@ const AdminPage = () => {
 
   const handleAddOrderPractice = async () => {
     if (!selectedOrderCategory || !newPracticeForm.n)
-      return alert("Complete nombre de la prÃ¡ctica");
+      return alert("Complete nombre de la práctica");
     const currentList =
       orderSettings.practicesByType[selectedOrderCategory] || [];
     const updated = {
@@ -882,7 +882,7 @@ const AdminPage = () => {
     if (!file || !targetProf) return;
 
     if (!file.type.startsWith("image/")) {
-      alert("Por favor, selecciona una imagen vÃ¡lida.");
+      alert("Por favor, selecciona una imagen válida.");
       return;
     }
 
@@ -937,7 +937,7 @@ const AdminPage = () => {
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-4 border-b border-main">
         <div>
           <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
-            AdministraciÃ³n
+            Administración
           </h1>
           <p className="text-gray-500 font-medium">
             Control centralizado de usuarios e informes
@@ -1014,7 +1014,7 @@ const AdminPage = () => {
                 <div className="flex items-center justify-between relative z-10">
                   <div>
                     <p className="text-[10px] font-black text-indigo-600 uppercase tracking-[0.2em] mb-1">
-                      Informes MÃ©dicos
+                      Informes Médicos
                     </p>
                     <h3 className="text-4xl font-black text-[var(--text-main)]">
                       {globalStats.loading ? (
@@ -1036,7 +1036,7 @@ const AdminPage = () => {
                     <div className="h-full bg-indigo-600 w-full opacity-20" />
                   </div>
                   <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">
-                    Registros clÃ­nicos
+                    Registros clínicos
                   </p>
                 </div>
               </motion.div>
@@ -1073,7 +1073,7 @@ const AdminPage = () => {
                     <div className="h-full bg-purple-600 w-full opacity-20" />
                   </div>
                   <p className="text-[9px] text-[var(--text-sub)] font-bold uppercase whitespace-nowrap">
-                    Historial dinÃ¡mico
+                    Historial dinámico
                   </p>
                 </div>
               </motion.div>
@@ -1117,9 +1117,9 @@ const AdminPage = () => {
                   </div>
                   <p className="text-sm text-gray-500 leading-relaxed">
                     La base de datos Firestore almacena los metadatos de los
-                    informes, pacientes y ahora tambiÃ©n los pedidos. Al
-                    regenerar los PDFs dinÃ¡micamente, mantenemos este consumo
-                    en niveles Ã³ptimos.
+                    informes, pacientes y ahora también los pedidos. Al
+                    regenerar los PDFs dinámicamente, mantenemos este consumo
+                    en niveles óptimos.
                   </p>
                 </div>
               </div>
@@ -1187,7 +1187,7 @@ const AdminPage = () => {
                   size={20}
                   className={globalStats.loading ? "animate-spin" : ""}
                 />
-                Actualizar MÃ©tricas
+                Actualizar Métricas
               </button>
             </div>
 
@@ -1284,7 +1284,7 @@ const AdminPage = () => {
                     <div className="flex justify-between items-center mb-4">
                       <div>
                         <p className="text-sm font-bold text-blue-900 dark:text-blue-300">
-                          AnÃ¡lisis completado
+                          Análisis completado
                         </p>
                         <p className="text-xs text-blue-600">
                           Se encontraron {cleanSummary.total} informes en este
@@ -1333,7 +1333,7 @@ const AdminPage = () => {
                   </div>
                   <p className="text-xs text-gray-500 mb-4 leading-relaxed">
                     Elimina archivos en Supabase que no tienen un informe
-                    asociado (huÃ©rfanos). Las firmas de profesionales estÃ¡n
+                    asociado (huérfanos). Las firmas de profesionales están
                     protegidas.
                   </p>
                   <button
@@ -1346,7 +1346,7 @@ const AdminPage = () => {
                     ) : (
                       <Trash2 size={16} />
                     )}
-                    Limpiar Archivos HuÃ©rfanos
+                    Limpiar Archivos Huérfanos
                   </button>
                 </div>
 
@@ -1358,9 +1358,9 @@ const AdminPage = () => {
                     </span>
                   </div>
                   <p className="text-[11px] text-amber-600/80 leading-relaxed italic">
-                    "La eliminaciÃ³n de registros es definitiva e irreversible.
+                    "La eliminación de registros es definitiva e irreversible.
                     Se recomienda realizar copias de seguridad de informes
-                    crÃ­ticos antes de proceder."
+                    críticos antes de proceder."
                   </p>
                 </div>
               </div>
@@ -1545,7 +1545,7 @@ const AdminPage = () => {
                 <div className="space-y-4">
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase text-gray-400 ml-1">
-                      CÃ³digo
+                      Código
                     </label>
                     <input
                       type="text"
@@ -1557,7 +1557,7 @@ const AdminPage = () => {
                         })
                       }
                       className="input-field"
-                      placeholder="CÃ³digo..."
+                      placeholder="Código..."
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -1585,7 +1585,7 @@ const AdminPage = () => {
                         setPracticeForm({ ...practiceForm, b: e.target.value })
                       }
                       className="input-field p-4 resize-none"
-                      placeholder="Texto que aparecerÃ¡ por defecto..."
+                      placeholder="Texto que aparecerá por defecto..."
                     />
                   </div>
 
@@ -1603,10 +1603,10 @@ const AdminPage = () => {
                     />
                     <div className="flex flex-col">
                       <span className="text-xs font-bold text-blue-900">
-                        Incluir tÃ­tulo "INFORME DE..."
+                        Incluir título "INFORME DE..."
                       </span>
                       <span className="text-[10px] text-blue-700/70">
-                        Si se desactiva, se podrÃ¡ poner un tÃ­tulo manual.
+                        Si se desactiva, se podrá poner un título manual.
                       </span>
                     </div>
                   </label>
@@ -1627,7 +1627,7 @@ const AdminPage = () => {
                 <div className="p-6 border-b border-main flex items-center justify-between">
                   <h3 className="font-bold flex items-center gap-2">
                     <ClipboardList size={20} className="text-blue-500" />{" "}
-                    CatÃ¡logo de Modelos
+                    Catálogo de Modelos
                   </h3>
                   <div className="relative w-48">
                     <SearchIcon
@@ -1647,8 +1647,8 @@ const AdminPage = () => {
                   <table className="w-full text-left">
                     <thead>
                       <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-widest text-[var(--text-sub)] border-b border-main">
-                        <th className="px-6 py-4">CÃ³d.</th>
-                        <th className="px-6 py-4">Modelo / PrÃ¡ctica</th>
+                        <th className="px-6 py-4">Cód.</th>
+                        <th className="px-6 py-4">Modelo / Práctica</th>
                         <th className="px-6 py-4 text-right">Acciones</th>
                       </tr>
                     </thead>
@@ -1693,7 +1693,7 @@ const AdminPage = () => {
             <div className="lg:col-span-1 space-y-6">
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
                 <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--text-main)]">
-                  <Settings2 size={20} className="text-blue-600" /> ParÃ¡metros
+                  <Settings2 size={20} className="text-blue-600" /> Parámetros
                   de Pedidos
                 </h3>
                 <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all">
@@ -1729,7 +1729,7 @@ const AdminPage = () => {
                 <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-4">
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-[var(--text-main)]">
-                      Habilitar MÃ³dulo Pedidos
+                      Habilitar Módulo Pedidos
                     </span>
                     <span className="text-[10px] text-gray-400 uppercase font-black">
                       Si se apaga, solo admins lo ven
@@ -1745,7 +1745,7 @@ const AdminPage = () => {
                         const action = newValue ? "habilitar" : "deshabilitar";
                         if (
                           window.confirm(
-                            `Â¿EstÃ¡ seguro que desea ${action} el mÃ³dulo de pedidos para todos los usuarios?`,
+                            `¿Está seguro que desea ${action} el módulo de pedidos para todos los usuarios?`,
                           )
                         ) {
                           handleSaveOrderSettings({
@@ -1768,12 +1768,12 @@ const AdminPage = () => {
 
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                  <Plus size={20} className="text-blue-600" /> Nueva CategorÃ­a
+                  <Plus size={20} className="text-blue-600" /> Nueva Categoría
                 </h3>
                 <div className="space-y-4">
                   <div className="space-y-1">
                     <label className="text-xs font-bold text-gray-400 uppercase ml-1">
-                      ID Ãšnico
+                      ID Único
                     </label>
                     <input
                       type="text"
@@ -1802,7 +1802,7 @@ const AdminPage = () => {
                           label: e.target.value,
                         })
                       }
-                      placeholder="Nombre de categorÃ­a"
+                      placeholder="Nombre de categoría"
                     />
                   </div>
                   <div className="space-y-1">
@@ -1824,7 +1824,7 @@ const AdminPage = () => {
                       <option value="Activity">Actividad/Onda</option>
                       <option value="Search">Lupa</option>
                       <option value="Eye">Ojo</option>
-                      <option value="Heart">CorazÃ³n</option>
+                      <option value="Heart">Corazón</option>
                     </select>
                   </div>
                   <button
@@ -1836,7 +1836,7 @@ const AdminPage = () => {
                     ) : (
                       <Plus size={18} />
                     )}{" "}
-                    AGREGAR CATEGORÃA
+                    AGREGAR CATEGORÍA
                   </button>
                 </div>
               </div>
@@ -1844,7 +1844,7 @@ const AdminPage = () => {
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm overflow-hidden">
                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2 text-[var(--text-main)]">
                   <ClipboardList size={20} className="text-blue-600" />{" "}
-                  CategorÃ­as Activas
+                  Categorías Activas
                 </h3>
                 <div className="space-y-2">
                   {orderSettings.categories.map((cat) => (
@@ -1871,7 +1871,7 @@ const AdminPage = () => {
                   ))}
                   {orderSettings.categories.length === 0 && (
                     <p className="text-center py-8 text-gray-400 text-sm italic">
-                      No hay categorÃ­as configuradas.
+                      No hay categorías configuradas.
                     </p>
                   )}
                 </div>
@@ -1892,7 +1892,7 @@ const AdminPage = () => {
                         }
                       </h3>
                       <p className="text-xs text-gray-400 font-bold uppercase tracking-widest mt-1">
-                        Gestionar lista de estudios para esta categorÃ­a
+                        Gestionar lista de estudios para esta categoría
                       </p>
                     </div>
                   </div>
@@ -1918,7 +1918,7 @@ const AdminPage = () => {
                       </div>
                       <div className="md:col-span-1 space-y-1">
                         <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
-                          CÃ³digo
+                          Código
                         </label>
                         <input
                           type="text"
@@ -1930,7 +1930,7 @@ const AdminPage = () => {
                               c: e.target.value,
                             })
                           }
-                          placeholder="CÃ³digo..."
+                          placeholder="Código..."
                         />
                       </div>
                       <div className="md:col-span-1 flex items-end">
@@ -2000,7 +2000,7 @@ const AdminPage = () => {
                                     c: e.target.value.toUpperCase(),
                                   })
                                 }
-                                placeholder="CÃ³d."
+                                placeholder="Cód."
                               />
                             </div>
                           ) : (
@@ -2009,7 +2009,7 @@ const AdminPage = () => {
                                 {p.n}
                               </p>
                               <p className="text-[10px] font-black text-gray-400 uppercase">
-                                CÃ“DIGO: {p.c || "--"}
+                                CÓDIGO: {p.c || "--"}
                               </p>
                             </div>
                           )}
@@ -2078,10 +2078,10 @@ const AdminPage = () => {
                   </div>
                   <div>
                     <h3 className="text-2xl font-black text-[var(--text-main)]">
-                      Seleccione una CategorÃ­a
+                      Seleccione una Categoría
                     </h3>
                     <p className="text-gray-400 max-w-xs mx-auto mt-2">
-                      Elija una categorÃ­a de la izquierda para gestionar sus
+                      Elija una categoría de la izquierda para gestionar sus
                       estudios asociados o agregue una nueva.
                     </p>
                   </div>
@@ -2100,10 +2100,10 @@ const AdminPage = () => {
                 </div>
                 <div>
                   <h3 className="text-2xl font-bold">
-                    ConfiguraciÃ³n del Sistema
+                    Configuración del Sistema
                   </h3>
                   <p className="text-gray-400">
-                    ParÃ¡metros globales de correo y servicios externos
+                    Parámetros globales de correo y servicios externos
                   </p>
                 </div>
               </div>
@@ -2111,7 +2111,7 @@ const AdminPage = () => {
               <div className="space-y-6">
                 <div className="space-y-2">
                   <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
-                    <ExternalLink size={14} /> URL de Google Apps Script (EnvÃ­o
+                    <ExternalLink size={14} /> URL de Google Apps Script (Envío
                     de Mails)
                   </label>
                   <input
@@ -2139,8 +2139,8 @@ const AdminPage = () => {
                     placeholder="consultas@coat.com.ar"
                   />
                   <p className="text-[10px] text-gray-400 ml-1">
-                    AquÃ­ llegarÃ¡ una copia automÃ¡tica de cada informe enviado
-                    por los mÃ©dicos.
+                    Aquí llegará una copia automática de cada informe enviado
+                    por los médicos.
                   </p>
                 </div>
 
@@ -2153,7 +2153,7 @@ const AdminPage = () => {
                     value={token}
                     onChange={(e) => setToken(e.target.value)}
                     className="input-field"
-                    placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
+                    placeholder="••••••••"
                   />
                 </div>
 
@@ -2252,7 +2252,7 @@ const AdminPage = () => {
                 <button
                   onClick={fetchStorageStats}
                   className="p-3 bg-blue-500/5 hover:bg-blue-500/10 rounded-full text-blue-500 transition-colors"
-                  title="Recargar estadÃ­sticas"
+                  title="Recargar estadísticas"
                 >
                   <RefreshCw
                     size={20}
@@ -2357,7 +2357,7 @@ const AdminPage = () => {
                   </button>
                 </div>
 
-                {/* Resultado de SimulaciÃ³n */}
+                {/* Resultado de Simulación */}
                 <div className="bg-slate-500/5 rounded-3xl border border-main p-8 flex flex-col justify-center min-h-[300px]">
                   {cleanSummary ? (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">
@@ -2367,7 +2367,7 @@ const AdminPage = () => {
                           size={48}
                         />
                         <h4 className="text-xl font-bold">
-                          AnÃ¡lisis Completo
+                          Análisis Completo
                         </h4>
                       </div>
 
@@ -2412,7 +2412,7 @@ const AdminPage = () => {
                         Confirmar y Ejecutar Limpieza
                       </button>
                       <p className="text-[10px] text-center text-red-500/50 uppercase font-black">
-                        Esta acciÃ³n es permanente e irreversible
+                        Esta acción es permanente e irreversible
                       </p>
                     </div>
                   ) : (
@@ -2420,11 +2420,11 @@ const AdminPage = () => {
                       <Search size={64} className="mx-auto" />
                       <div>
                         <p className="font-bold text-lg">
-                          Sin anÃ¡lisis activo
+                          Sin análisis activo
                         </p>
                         <p className="text-xs">
                           Seleccione un rango y presione "Analizar" para ver
-                          quÃ© se liberarÃ¡.
+                          qué se liberará.
                         </p>
                       </div>
                     </div>
@@ -2437,20 +2437,20 @@ const AdminPage = () => {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">
               <div className="p-8 bg-blue-500/5 rounded-[2.5rem] border border-blue-500/20 space-y-4">
                 <ShieldCheck size={40} className="text-blue-500" />
-                <h4 className="text-lg font-bold">MigraciÃ³n de IDs</h4>
+                <h4 className="text-lg font-bold">Migración de IDs</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">
                   Convierte perfiles temporales basados en slugs de email a IDs
                   definitivos de Firebase Auth.
                 </p>
                 <button className="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-blue-600/20">
-                  Ejecutar MigraciÃ³n
+                  Ejecutar Migración
                 </button>
               </div>
 
               <div className="p-8 bg-purple-500/5 rounded-[2.5rem] border border-purple-500/20 space-y-4">
                 <FileUp size={40} className="text-purple-500" />
                 <h4 className="text-lg font-bold">
-                  Limpiar Archivos HuÃ©rfanos
+                  Limpiar Archivos Huérfanos
                 </h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">
                   Elimina archivos en Supabase que no tienen un informe asociado
@@ -2474,7 +2474,7 @@ const AdminPage = () => {
                 <Trash2 size={40} className="text-red-500" />
                 <h4 className="text-lg font-bold">Nivela Base de Datos</h4>
                 <p className="text-xs text-slate-400 leading-relaxed italic">
-                  Elimina todos los perfiles excepto el administrador. Ãštil
+                  Elimina todos los perfiles excepto el administrador. Útil
                   para re-importaciones masivas.
                 </p>
                 <button className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl transition-all shadow-lg shadow-red-600/20">
@@ -2590,21 +2590,21 @@ const AdminPage = () => {
                     </label>
                     <select
                       className="input-field"
-                      value={targetProf.role || "mÃ©dico"}
+                      value={targetProf.role || "médico"}
                       onChange={(e) =>
                         setTargetProf({ ...targetProf, role: e.target.value })
                       }
                     >
-                      <option value="mÃ©dico">
-                        MÃ©dico (Solo sus informes)
+                      <option value="médico">
+                        Médico (Solo sus informes)
                       </option>
                       <option value="directora_medica">
-                        Directora MÃ©dica (Acceso total + Membretes)
+                        Directora Médica (Acceso total + Membretes)
                       </option>
                       <option value="admin">
                         Administrador (Acceso total)
                       </option>
-                      <option value="secre">SecretarÃ­a (Carga datos)</option>
+                      <option value="secre">Secretaría (Carga datos)</option>
                     </select>
                   </div>
                 </div>
@@ -2661,7 +2661,7 @@ const AdminPage = () => {
                     )}
                   </div>
                   <p className="text-[9px] text-gray-400 italic">
-                    Esta firma se utilizarÃ¡ para generar los reportes en PDF
+                    Esta firma se utilizará para generar los reportes en PDF
                     del profesional.
                   </p>
                 </div>
@@ -2680,7 +2680,7 @@ const AdminPage = () => {
                         onClick={() => setPreviewType("fibro")}
                         className={`px-6 py-3 font-bold text-sm transition-all border-b-2 ${previewType === "fibro" ? "border-blue-500 text-blue-600" : "border-transparent text-gray-400"}`}
                       >
-                        Membrete FibroscopÃ­a
+                        Membrete Fibroscopía
                       </button>
                     </div>
 
@@ -2690,7 +2690,7 @@ const AdminPage = () => {
                         .map((_, i) => (
                           <div key={i} className="space-y-1">
                             <label className="text-[9px] font-bold text-gray-400 ml-1 uppercase tracking-tight">
-                              LÃ­nea {i + 1}{" "}
+                              Línea {i + 1}{" "}
                               {i === 0
                                 ? "(Principal)"
                                 : i < 3
@@ -2712,7 +2712,7 @@ const AdminPage = () => {
                                   e.target.value,
                                 )
                               }
-                              placeholder={`Texto lÃ­nea ${i + 1}...`}
+                              placeholder={`Texto línea ${i + 1}...`}
                             />
                           </div>
                         ))}
@@ -2883,7 +2883,7 @@ const AdminPage = () => {
                   </div>
                   <div className="col-span-1 space-y-1">
                     <label className="text-xs font-bold uppercase opacity-40 ml-1">
-                      ContraseÃ±a
+                      Contraseña
                     </label>
                     <input
                       type="password"
@@ -2912,14 +2912,14 @@ const AdminPage = () => {
                       }
                       className="input-field appearance-none cursor-pointer"
                     >
-                      <option value="mÃ©dico">
-                        MÃ©dico (Solo sus informes)
+                      <option value="médico">
+                        Médico (Solo sus informes)
                       </option>
                       <option value="directora_medica">
-                        Directora MÃ©dica (Acceso total + Membretes)
+                        Directora Médica (Acceso total + Membretes)
                       </option>
-                      <option value="secretarÃ­a">
-                        SecretarÃ­a (Solo lectura)
+                      <option value="secretaría">
+                        Secretaría (Solo lectura)
                       </option>
                       <option value="admin">
                         Administrador (Control Total)

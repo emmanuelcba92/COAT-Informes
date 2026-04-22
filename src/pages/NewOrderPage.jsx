@@ -65,6 +65,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   const [newCustomPractice, setNewCustomPractice] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isCleaning, setIsCleaning] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [profile, setProfile] = useState(propProfile || null);
@@ -114,20 +115,30 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     } catch (err) {}
   };
 
+  const [currentOrderId, setCurrentOrderId] = useState(null);
+
   const saveOrderToDB = async () => {
+    if (currentOrderId) return currentOrderId;
     try {
-      await addDoc(collection(db, 'orders'), {
+      const docRef = await addDoc(collection(db, 'orders'), {
         ...patientData,
+        orderType: selectedType,
         practices: selectedPractices,
         quantities,
         indications,
         customPractices,
+        allPracticesInCategory: practicesByType[selectedType] || [],
         profesionalId: auth.currentUser?.uid,
         profesionalName: profile?.nombre || profile?.n || auth.currentUser?.email,
         createdAt: serverTimestamp(),
         timestamp: new Date().toISOString()
       });
-    } catch (err) {}
+      setCurrentOrderId(docRef.id);
+      return docRef.id;
+    } catch (err) {
+      console.error("Error saving order:", err);
+      return null;
+    }
   };
 
   useEffect(() => {
@@ -179,6 +190,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   };
 
   const togglePractice = (name) => {
+    setCurrentOrderId(null); // Reset save flag if form changes
     setSelectedPractices(prev => {
       if (prev.includes(name)) return prev.filter(p => p !== name);
       setQuantities(q => ({ ...q, [name]: q[name] || 1 }));
@@ -306,6 +318,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         } else if (['name', 'insurance', 'diagnosis'].includes(f.key)) {
                           val = toTitleCase(val);
                         }
+                        setCurrentOrderId(null);
                         setPatientData({...patientData, [f.key]: val});
                       }} 
                     />
@@ -316,7 +329,15 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observaciones</label>
                 <div className="relative">
                   <Clipboard className="absolute left-3 top-3.5 text-slate-400" size={16} />
-                  <textarea className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-secondary)] border border-main rounded-2xl text-xs focus:border-blue-500 outline-none transition-all text-[var(--text-main)] min-h-[80px] resize-none" placeholder="" value={patientData.observations} onChange={e => setPatientData({...patientData, observations: e.target.value})} />
+                  <textarea 
+                    className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-secondary)] border border-main rounded-2xl text-xs focus:border-blue-500 outline-none transition-all text-[var(--text-main)] min-h-[80px] resize-none" 
+                    placeholder="" 
+                    value={patientData.observations} 
+                    onChange={e => {
+                      setCurrentOrderId(null);
+                      setPatientData({...patientData, observations: e.target.value});
+                    }} 
+                  />
                 </div>
               </div>
             </div>
@@ -331,7 +352,11 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                 return (
                   <button
                     key={type.id}
-                    onClick={() => { setSelectedType(type.id); setSelectedPractices([]); }}
+                    onClick={() => { 
+                      setSelectedType(type.id); 
+                      setSelectedPractices([]); 
+                      setCurrentOrderId(null);
+                    }}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                       selectedType === type.id
                         ? 'bg-blue-600 text-white shadow-lg'
@@ -452,16 +477,35 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                             placeholder="Indicación particular..." 
                             className="mt-1.5 text-[11px] bg-transparent border-b border-blue-200 focus:border-blue-500 outline-none text-blue-600 pb-0.5" 
                             value={indications[p.n] || ''} 
-                            onChange={e => setIndications({...indications, [p.n]: e.target.value})} 
+                            onChange={e => {
+                              setCurrentOrderId(null);
+                              setIndications({...indications, [p.n]: e.target.value});
+                            }} 
                             onClick={e => e.stopPropagation()} 
                           />
                         )}
                       </div>
                     </div>
                     <div className="flex items-center gap-3 ml-4">
-                      <button onClick={() => setQuantities(q => ({...q, [p.n]: Math.max(1, (q[p.n] || 1) - 1)}))} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Minus size={14} /></button>
+                      <button 
+                        onClick={() => {
+                          setCurrentOrderId(null);
+                          setQuantities(q => ({...q, [p.n]: Math.max(1, (q[p.n] || 1) - 1)}));
+                        }} 
+                        className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                      >
+                        <Minus size={14} />
+                      </button>
                       <span className="w-4 text-center text-xs font-bold text-blue-600">{quantities[p.n] || 1}</span>
-                      <button onClick={() => setQuantities(q => ({...q, [p.n]: (q[p.n] || 1) + 1}))} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"><Plus size={14} /></button>
+                      <button 
+                        onClick={() => {
+                          setCurrentOrderId(null);
+                          setQuantities(q => ({...q, [p.n]: (q[p.n] || 1) + 1}));
+                        }} 
+                        className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                      >
+                        <Plus size={14} />
+                      </button>
                     </div>
                   </div>
                 ))
@@ -485,6 +529,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         setSelectedPractices([...selectedPractices, p]);
                         setQuantities({...quantities, [p]: 1});
                         setNewCustomPractice('');
+                        setCurrentOrderId(null);
                       }
                     }}
                   />
@@ -496,6 +541,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         setSelectedPractices([...selectedPractices, p]);
                         setQuantities({...quantities, [p]: 1});
                         setNewCustomPractice('');
+                        setCurrentOrderId(null);
                       }
                     }} 
                     className="w-12 h-12 flex items-center justify-center bg-blue-600 text-white rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-500/30 active:scale-95"
