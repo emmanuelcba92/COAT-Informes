@@ -55,6 +55,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSecretaria, setIsSecretaria] = useState(false);
+  const [isDirectora, setIsDirectora] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const [ordersEnabled, setOrdersEnabled] = useState(true);
