@@ -9,13 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { doc, getDoc, updateDoc, setDoc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from './services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { createClient } from '@supabase/supabase-js';
-
-// Inicializar Supabase para el heartbeat (evitar pausa por inactividad)
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+import { supabase } from './services/supabase';
 
 import AuthPage from './pages/AuthPage.jsx';
 const ReportsMain = React.lazy(() => import('./pages/ReportsMain'));

@@ -1,0 +1,407 @@
+﻿
+LineNumber Line                                                                                                        
+---------- ----                                                                                                        
+       779     <div className="max-w-7xl mx-auto space-y-8 animate-fade-in p-4 pb-20">                                 
+       780       <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-4 border-b border-m...
+       781         <div>                                                                                               
+       784         </div>                                                                                              
+       787         <div className="flex flex-wrap gap-2">                                                              
+       802         </div>                                                                                              
+       803       </div>                                                                                                
+       805       <div className="animate-slide-up">                                                                    
+       807           <div className="space-y-8">                                                                       
+       809             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">                                         
+       815                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full -mr-16 -mt-16...
+       816                 <div className="flex items-center justify-between relative z-10">                           
+       817                   <div>                                                                                     
+       822                   </div>                                                                                    
+       823                   <div className="w-16 h-16 bg-blue-600 text-white rounded-2xl flex items-center justify-...
+       825                   </div>                                                                                    
+       826                 </div>                                                                                      
+       827                 <div className="mt-6 flex items-center gap-2">                                              
+       828                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">      
+       829                     <div className="h-full bg-blue-600 w-full opacity-20" />                                
+       830                   </div>                                                                                    
+       832                 </div>                                                                                      
+       841                 <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full -mr-16 -mt-...
+       842                 <div className="flex items-center justify-between relative z-10">                           
+       843                   <div>                                                                                     
+       848                   </div>                                                                                    
+       849                   <div className="w-16 h-16 bg-indigo-600 text-white rounded-2xl flex items-center justif...
+       851                   </div>                                                                                    
+       852                 </div>                                                                                      
+       853                 <div className="mt-6 flex items-center gap-2">                                              
+       854                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">      
+       855                     <div className="h-full bg-indigo-600 w-full opacity-20" />                              
+       856                   </div>                                                                                    
+       858                 </div>                                                                                      
+       867                 <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/5 rounded-full -mr-16 -mt-...
+       868                 <div className="flex items-center justify-between relative z-10">                           
+       869                   <div>                                                                                     
+       874                   </div>                                                                                    
+       875                   <div className="w-16 h-16 bg-purple-600 text-white rounded-2xl flex items-center justif...
+       877                   </div>                                                                                    
+       878                 </div>                                                                                      
+       879                 <div className="mt-6 flex items-center gap-2">                                              
+       880                   <div className="h-1.5 flex-1 bg-[var(--bg-secondary)] rounded-full overflow-hidden">      
+       881                     <div className="h-full bg-purple-600 w-full opacity-20" />                              
+       882                   </div>                                                                                    
+       884                 </div>                                                                                      
+       886             </div>                                                                                          
+       889             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">                                         
+       890               <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)]...
+       891                 <div className="flex items-center gap-3 mb-6">                                              
+       892                   <div className="p-2.5 bg-orange-100 dark:bg-orange-900/20 text-orange-600 rounded-xl">    
+       894                   </div>                                                                                    
+       896                 </div>                                                                                      
+       898                 <div className="space-y-6">                                                                 
+       899                   <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">             
+       900                     <div className="flex justify-between items-end mb-4">                                   
+       901                       <div>                                                                                 
+       904                       </div>                                                                                
+       905                     </div>                                                                                  
+       906                     <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidde...
+       907                       <div                                                                                  
+       910                       ></div>                                                                               
+       911                     </div>                                                                                  
+       912                   </div>                                                                                    
+       917                 </div>                                                                                      
+       918               </div>                                                                                        
+       920               <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)]...
+       921                 <div className="flex items-center gap-3 mb-6">                                              
+       922                   <div className="p-2.5 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-600 rounded-xl"> 
+       924                   </div>                                                                                    
+       926                 </div>                                                                                      
+       928                 <div className="space-y-6">                                                                 
+       929                   <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">             
+       930                     <div className="flex justify-between items-end mb-4">                                   
+       931                       <div>                                                                                 
+       934                       </div>                                                                                
+       935                       <div className="text-right">                                                          
+       938                       </div>                                                                                
+       939                     </div>                                                                                  
+       940                     <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidde...
+       941                       <div                                                                                  
+       944                       ></div>                                                                               
+       945                     </div>                                                                                  
+       946                   </div>                                                                                    
+       951                 </div>                                                                                      
+       952               </div>                                                                                        
+       953             </div>                                                                                          
+       955             <div className="flex justify-center">                                                           
+       963             </div>                                                                                          
+       966             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 pt-8 border-t border-main">               
+       967               <div className="lg:col-span-2 bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(-...
+       968                 <div className="flex items-center justify-between">                                         
+       969                   <div className="flex items-center gap-3">                                                 
+       970                     <div className="p-2.5 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-xl">           
+       972                     </div>                                                                                  
+       974                   </div>                                                                                    
+       978                 </div>                                                                                      
+       980                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">                                     
+       981                   <div className="space-y-1.5">                                                             
+       984                   </div>                                                                                    
+       985                   <div className="space-y-1.5">                                                             
+       988                   </div>                                                                                    
+       989                 </div>                                                                                      
+       991                 <div className="flex flex-wrap gap-4 p-4 bg-slate-50 dark:bg-slate-800/50 rounded-2xl bor...
+      1000                 </div>                                                                                      
+      1004                     <div className="flex justify-between items-center mb-4">                                
+      1005                       <div>                                                                                 
+      1008                       </div>                                                                                
+      1013                     </div>                                                                                  
+      1025               </div>                                                                                        
+      1027               <div className="lg:col-span-1 space-y-6">                                                     
+      1028                 <div className="bg-[var(--bg-card)] p-6 rounded-[2rem] border border-[var(--border-main)]...
+      1029                   <div className="flex items-center gap-3 mb-4">                                            
+      1030                     <div className="p-2 bg-indigo-100 dark:bg-indigo-900/20 text-indigo-600 rounded-lg">    
+      1032                     </div>                                                                                  
+      1034                   </div>                                                                                    
+      1046                 </div>                                                                                      
+      1048                 <div className="bg-amber-50 dark:bg-amber-900/10 p-6 rounded-[2rem] border border-amber-1...
+      1049                   <div className="flex items-center gap-2 text-amber-700 dark:text-amber-500 mb-2">         
+      1052                   </div>                                                                                    
+      1056                 </div>                                                                                      
+      1057               </div>                                                                                        
+      1058             </div>                                                                                          
+      1059           </div>                                                                                            
+      1063           <div className="space-y-6">                                                                       
+      1064             <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[var(--bg-car...
+      1065               <div className="relative w-full md:w-96">                                                     
+      1074               </div>                                                                                        
+      1075               <div className="flex gap-2">                                                                  
+      1085               </div>                                                                                        
+      1086             </div>                                                                                          
+      1089             <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border-main)] overf...
+      1090               <div className="overflow-x-auto">                                                             
+      1105                           <div className="flex items-center gap-4">                                         
+      1106                             <div className="w-10 h-10 bg-blue-100/30 text-blue-600 rounded-xl flex items-...
+      1108                             </div>                                                                          
+      1109                             <div className="min-w-0">                                                       
+      1112                             </div>                                                                          
+      1113                           </div>                                                                            
+      1117                           <div className="flex gap-2 mt-1">                                                 
+      1120                           </div>                                                                            
+      1130                           <div className="flex flex-col">                                                   
+      1146                           </div>                                                                            
+      1149                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transi...
+      1164                           </div>                                                                            
+      1170               </div>                                                                                        
+      1171             </div>                                                                                          
+      1172           </div>                                                                                            
+      1176           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">                                           
+      1177             <div className="lg:col-span-1">                                                                 
+      1178               <div className="card p-8 bg-[var(--bg-card)] sticky top-8">                                   
+      1183                 <div className="space-y-4">                                                                 
+      1184                   <div className="space-y-1.5">                                                             
+      1187                   </div>                                                                                    
+      1188                   <div className="space-y-1.5">                                                             
+      1191                   </div>                                                                                    
+      1192                   <div className="space-y-1.5">                                                             
+      1195                   </div>                                                                                    
+      1204                     <div className="flex flex-col">                                                         
+      1207                     </div>                                                                                  
+      1212                 </div>                                                                                      
+      1213               </div>                                                                                        
+      1214             </div>                                                                                          
+      1216             <div className="lg:col-span-2">                                                                 
+      1217               <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-main overflow-hidden">     
+      1218                 <div className="p-6 border-b border-main flex items-center justify-between">                
+      1220                   <div className="relative w-48">                                                           
+      1223                   </div>                                                                                    
+      1224                 </div>                                                                                      
+      1225                 <div className="overflow-x-auto">                                                           
+      1247                 </div>                                                                                      
+      1248               </div>                                                                                        
+      1249             </div>                                                                                          
+      1250           </div>                                                                                            
+      1254           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">                                           
+      1255             <div className="lg:col-span-1 space-y-6">                                                       
+      1256               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">       
+      1259                   <div className="flex flex-col">                                                           
+      1262                   </div>                                                                                    
+      1263                   <div className="relative">                                                                
+      1270                     <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.patientEmailReq...
+      1271                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition...
+      1272                     </div>                                                                                  
+      1273                   </div>                                                                                    
+      1276                   <div className="flex flex-col">                                                           
+      1279                   </div>                                                                                    
+      1280                   <div className="relative">                                                                
+      1293                     <div className={`w-10 h-5 rounded-full transition-all ${orderSettings.ordersEnabled !...
+      1294                       <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition...
+      1295                     </div>                                                                                  
+      1296                   </div>                                                                                    
+      1298               </div>                                                                                        
+      1300               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">       
+      1302                 <div className="space-y-4">                                                                 
+      1303                   <div className="space-y-1">                                                               
+      1306                   </div>                                                                                    
+      1307                   <div className="space-y-1">                                                               
+      1310                   </div>                                                                                    
+      1311                   <div className="space-y-1">                                                               
+      1321                   </div>                                                                                    
+      1325                 </div>                                                                                      
+      1326               </div>                                                                                        
+      1328               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm overf...
+      1330                 <div className="space-y-2">                                                                 
+      1332                     <div                                                                                    
+      1337                       <div className="flex items-center gap-3">                                             
+      1339                       </div>                                                                                
+      1341                     </div>                                                                                  
+      1344                 </div>                                                                                      
+      1345               </div>                                                                                        
+      1346             </div>                                                                                          
+      1348             <div className="lg:col-span-2 space-y-6">                                                       
+      1350                 <div className="card bg-[var(--bg-card)] border border-main rounded-[2.5rem] shadow-sm ov...
+      1351                   <div className="p-8 border-b border-main bg-[var(--bg-secondary)]/50 flex items-center ...
+      1352                     <div>                                                                                   
+      1355                     </div>                                                                                  
+      1356                   </div>                                                                                    
+      1358                   <div className="p-8 border-b border-main bg-[var(--bg-card)]">                            
+      1359                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4">                                 
+      1360                       <div className="md:col-span-2 space-y-1">                                             
+      1363                       </div>                                                                                
+      1364                       <div className="md:col-span-1 space-y-1">                                             
+      1367                       </div>                                                                                
+      1368                       <div className="md:col-span-1 flex items-end">                                        
+      1372                       </div>                                                                                
+      1373                     </div>                                                                                  
+      1374                   </div>                                                                                    
+      1392                         <div className="flex items-center gap-4 flex-1">                                    
+      1393                           <div className="flex items-center gap-2">                                         
+      1395                             <div className="w-8 h-8 rounded-lg bg-blue-100 dark:bg-blue-900/30 text-blue-...
+      1396                           </div>                                                                            
+      1399                             <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 pr-4">             
+      1414                             </div>                                                                          
+      1416                             <div className="flex-1">                                                        
+      1419                             </div>                                                                          
+      1421                         </div>                                                                              
+      1423                         <div className="flex items-center gap-1">                                           
+      1435                         </div>                                                                              
+      1439                       <div className="text-center py-20 text-gray-400">                                     
+      1442                       </div>                                                                                
+      1445                 </div>                                                                                      
+      1447                 <div className="card bg-[var(--bg-card)] border border-main rounded-[2.5rem] border-dashe...
+      1448                   <div className="w-24 h-24 bg-blue-50 dark:bg-blue-900/10 rounded-full flex items-center...
+      1450                   </div>                                                                                    
+      1451                   <div>                                                                                     
+      1454                   </div>                                                                                    
+      1455                 </div>                                                                                      
+      1457             </div>                                                                                          
+      1458           </div>                                                                                            
+      1462           <div className="max-w-3xl mx-auto">                                                               
+      1463             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">                 
+      1464               <div className="flex items-center gap-4 border-b border-main pb-6">                           
+      1465                 <div className="w-14 h-14 rounded-2xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex ...
+      1467                 </div>                                                                                      
+      1468                 <div>                                                                                       
+      1471                 </div>                                                                                      
+      1472               </div>                                                                                        
+      1474               <div className="space-y-6">                                                                   
+      1475                 <div className="space-y-2">                                                                 
+      1487                 </div>                                                                                      
+      1489                 <div className="space-y-2">                                                                 
+      1501                 </div>                                                                                      
+      1503                 <div className="space-y-2">                                                                 
+      1514                 </div>                                                                                      
+      1516                 <div className="pt-6">                                                                      
+      1525                 </div>                                                                                      
+      1526               </div>                                                                                        
+      1527             </div>                                                                                          
+      1528           </div>                                                                                            
+      1532           <div className="space-y-8 max-w-5xl mx-auto">                                                     
+      1534             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">                                         
+      1535               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-ce...
+      1544               </div>                                                                                        
+      1545               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-ce...
+      1554               </div>                                                                                        
+      1555               <div className="card p-6 bg-[var(--bg-card)] border-main flex flex-col items-center text-ce...
+      1564               </div>                                                                                        
+      1565             </div>                                                                                          
+      1568             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">                 
+      1569               <div className="flex items-center justify-between">                                           
+      1570                 <div>                                                                                       
+      1573                 </div>                                                                                      
+      1581               </div>                                                                                        
+      1583               <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">                                      
+      1585                 <div className="space-y-6">                                                                 
+      1586                   <div className="grid grid-cols-2 gap-4">                                                  
+      1587                     <div className="space-y-1">                                                             
+      1595                     </div>                                                                                  
+      1596                     <div className="space-y-1">                                                             
+      1604                     </div>                                                                                  
+      1605                   </div>                                                                                    
+      1607                   <div className="space-y-4">                                                               
+      1615                       <div className="flex flex-col">                                                       
+      1618                       </div>                                                                                
+      1628                       <div className="flex flex-col">                                                       
+      1631                       </div>                                                                                
+      1633                   </div>                                                                                    
+      1643                 </div>                                                                                      
+      1646                 <div className="bg-slate-500/5 rounded-3xl border border-main p-8 flex flex-col justify-c...
+      1648                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-500">       
+      1649                       <div className="text-center">                                                         
+      1652                       </div>                                                                                
+      1654                       <div className="grid grid-cols-2 gap-4">                                              
+      1655                         <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main t...
+      1658                         </div>                                                                              
+      1659                         <div className="p-4 bg-white/50 dark:bg-black/20 rounded-2xl border border-main t...
+      1662                         </div>                                                                              
+      1663                       </div>                                                                                
+      1665                       <div className="p-5 bg-blue-500/10 rounded-2xl border border-blue-500/20 text-center">
+      1668                       </div>                                                                                
+      1679                     </div>                                                                                  
+      1681                     <div className="text-center space-y-4 opacity-30 text-gray-400">                        
+      1683                       <div>                                                                                 
+      1686                       </div>                                                                                
+      1687                     </div>                                                                                  
+      1689                 </div>                                                                                      
+      1690               </div>                                                                                        
+      1691             </div>                                                                                          
+      1694             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 pt-4">                                    
+      1695               <div className="p-8 bg-blue-500/5 rounded-[2.5rem] border border-blue-500/20 space-y-4">      
+      1700               </div>                                                                                        
+      1702               <div className="p-8 bg-purple-500/5 rounded-[2.5rem] border border-purple-500/20 space-y-4">  
+      1714               </div>                                                                                        
+      1716               <div className="p-8 bg-red-500/5 rounded-[2.5rem] border border-red-500/20 space-y-4">        
+      1721               </div>                                                                                        
+      1722             </div>                                                                                          
+      1723           </div>                                                                                            
+      1725       </div>                                                                                                
+      1730           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 back...
+      1735               <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-car...
+      1736                 <div className="flex items-center gap-3">                                                   
+      1737                   <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-xl flex items-center justif...
+      1739                   </div>                                                                                    
+      1740                   <div>                                                                                     
+      1743                   </div>                                                                                    
+      1744                 </div>                                                                                      
+      1745                 <div className="flex gap-2">                                                                
+      1755                 </div>                                                                                      
+      1756               </div>                                                                                        
+      1758               <div className="flex-1 overflow-y-auto p-8 space-y-8">                                        
+      1760                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">                                     
+      1761                   <div className="space-y-1">                                                               
+      1764                   </div>                                                                                    
+      1765                   <div className="space-y-1">                                                               
+      1768                   </div>                                                                                    
+      1769                   <div className="space-y-1">                                                               
+      1772                   </div>                                                                                    
+      1773                   <div className="space-y-1">                                                               
+      1776                   </div>                                                                                    
+      1777                   <div className="space-y-1">                                                               
+      1789                   </div>                                                                                    
+      1790                 </div>                                                                                      
+      1793                 <div className="space-y-4 pt-4 border-t border-main">                                       
+      1795                   <div className="flex items-center gap-6">                                                 
+      1796                     <div className="w-40 h-24 bg-white rounded-xl border-2 border-dashed border-main flex...
+      1798                         <div className="flex flex-col items-center gap-1 text-blue-500">                    
+      1801                         </div>                                                                              
+      1805                         <div className="text-gray-300 flex flex-col items-center">                          
+      1808                         </div>                                                                              
+      1813                     </div>                                                                                  
+      1822                   </div>                                                                                    
+      1824                 </div>                                                                                      
+      1828                   <div className="space-y-4">                                                               
+      1829                    <div className="flex gap-4 border-b border-main">                                        
+      1842                    </div>                                                                                   
+      1844                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-[var(--bg-secondary)] p-6 rou...
+      1846                         <div key={i} className="space-y-1">                                                 
+      1855                         </div>                                                                              
+      1857                    </div>                                                                                   
+      1858                   </div>                                                                                    
+      1860               </div>                                                                                        
+      1862               <div className="p-8 border-t border-main flex gap-4 bg-[var(--bg-card)]">                     
+      1871               </div>                                                                                        
+      1873           </div>                                                                                            
+      1880           <div className="fixed inset-0 z-[400] flex items-center justify-center p-12 bg-slate-900/90 bac...
+      1885               <div className="flex border-b-2 border-slate-200 pb-[5mm] mb-[5mm]">                          
+      1887                 <div className="w-[45mm] flex items-center justify-center pr-10 border-r border-slate-100"> 
+      1891                      <div className="text-slate-200 text-[10pt] font-sans font-bold uppercase tracking-ti...
+      1893                 </div>                                                                                      
+      1896                 <div className="flex-1 flex flex-col justify-center">                                       
+      1920                 </div>                                                                                      
+      1921               </div>                                                                                        
+      1923               <div className="flex-1 flex flex-col items-center justify-center py-20 border-2 border-dash...
+      1925               </div>                                                                                        
+      1935           </div>                                                                                            
+      1942           <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/60 backdrop...
+      1947               <div className="p-6 border-b border-main flex items-center justify-between">                  
+      1950               </div>                                                                                        
+      1951               <div className="p-8 space-y-4">                                                               
+      1952                 <div className="grid grid-cols-2 gap-4">                                                    
+      1953                    <div className="col-span-2 space-y-1">                                                   
+      1956                    </div>                                                                                   
+      1957                    <div className="col-span-1 space-y-1">                                                   
+      1960                    </div>                                                                                   
+      1961                    <div className="col-span-1 space-y-1">                                                   
+      1964                    </div>                                                                                   
+      1965                    <div className="col-span-2 space-y-1">                                                   
+      1977                    </div>                                                                                   
+      1978                 </div>                                                                                      
+      1980               </div>                                                                                        
+      1982           </div>                                                                                            
+      1986     </div>                                                                                                  
+
+

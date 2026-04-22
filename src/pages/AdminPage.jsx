@@ -58,13 +58,7 @@ import {
   getCountFromServer,
   writeBatch,
 } from "firebase/firestore";
-import { createClient } from "@supabase/supabase-js";
-
-// Inicializar Supabase para gestiÃ³n de archivos
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY,
-);
+import { supabase } from '../services/supabase';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,

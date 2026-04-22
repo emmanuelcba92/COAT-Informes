@@ -39,14 +39,10 @@ import {
   startAfter,
   addDoc 
 } from 'firebase/firestore';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase';
 import { db, auth } from '../services/firebase';
 
-// Inicializar Supabase
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
+
 
 const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) => {
   const navigate = useNavigate();

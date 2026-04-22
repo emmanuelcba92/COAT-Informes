@@ -22,16 +22,11 @@ import {
   Loader2,
   Search
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '../services/supabase';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, query, where, getDocs, limit, deleteDoc } from 'firebase/firestore';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
-// Inicializar Supabase
-const supabase = createClient(
-  import.meta.env.VITE_SUPABASE_URL,
-  import.meta.env.VITE_SUPABASE_ANON_KEY
-);
 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
