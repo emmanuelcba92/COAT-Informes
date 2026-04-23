@@ -36,6 +36,7 @@ const ReportsMain = ({ currentUser, userProfile, isSecretaria = false, canCustom
             <Route path="new" element={!isSecretaria ? <ReportsPage isSecretaria={isSecretaria} userProfile={userProfile} /> : <Navigate to="/reports/history" replace />} />
             <Route path="history" element={<MyReportsPage user={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} />} />
             <Route path="models" element={canCustomizeModels && !isSecretaria ? <PracticesPage /> : <Navigate to="/reports/history" replace />} />
+            <Route index element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
             <Route path="*" element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
           </Routes>
         </Suspense>

@@ -28,6 +28,7 @@ const OrdersMain = ({ userProfile, isSecretaria = false }) => {
           <Routes>
             <Route path="new" element={!isSecretaria ? <NewOrderPage userProfile={userProfile} /> : <Navigate to="/orders/history" replace />} />
             <Route path="history" element={<MyOrdersPage userProfile={userProfile} isSecretaria={isSecretaria} />} />
+            <Route index element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
             <Route path="*" element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
           </Routes>
         </Suspense>
