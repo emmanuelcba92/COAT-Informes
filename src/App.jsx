@@ -115,17 +115,25 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubscribeSettings = () => {};
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
         setCurrentUser(user);
         
-        // Heartbeat de Supabase: Evita que el proyecto se pause por falta de uso
-        // Se ejecuta una sola vez al detectar al usuario logueado
+        // Listener de configuración (solo si hay usuario)
+        unsubscribeSettings = onSnapshot(doc(db, 'config', 'order_settings'), (snap) => {
+          if (snap.exists()) {
+            setOrdersEnabled(snap.data().ordersEnabled ?? true);
+          }
+        });
+
+        // Heartbeat de Supabase
         try {
           await supabase.storage.from('informescoat').list('', { limit: 1 });
           console.log("Supabase heartbeat sent");
         } catch (e) {
-          console.warn("Supabase Heartbeat error (normal si el proyecto está pausado):", e.message);
+          console.warn("Supabase Heartbeat error:", e.message);
         }
 
         try {
@@ -146,19 +154,15 @@ function App() {
         setUserProfile(null);
         setIsSecretaria(false);
         setIsDirectora(false);
+        unsubscribeSettings(); // Detener listener si se desloguea
       }
       setLoading(false);
     });
-    return () => unsubscribe();
-  }, []);
 
-  useEffect(() => {
-    const unsubscribe = onSnapshot(doc(db, 'config', 'order_settings'), (snap) => {
-      if (snap.exists()) {
-        setOrdersEnabled(snap.data().ordersEnabled ?? true);
-      }
-    });
-    return () => unsubscribe();
+    return () => {
+      unsubscribeAuth();
+      unsubscribeSettings();
+    };
   }, []);
 
   const isAdmin = userProfile?.role === 'admin' || 
@@ -168,6 +172,7 @@ function App() {
 
 
   const canSeeOrders = ordersEnabled || isAdmin || isDirectora;
+  const canCustomizeModels = userProfile?.canCustomizeModels || isDirectora || isAdmin;
 
   const navItems = [
     { id: 'reports', label: 'Informes', icon: <Layout size={24} />, path: '/reports', show: true },
@@ -283,7 +288,7 @@ function App() {
                 {(location.pathname.startsWith('/reports') ? [
                   { id: 'new', label: 'Generar Informe', icon: FilePlus, path: '/reports/new', show: !isSecretaria },
                   { id: 'history', label: isSecretaria ? 'Ver Informes' : 'Historial', icon: History, path: '/reports/history', show: true },
-                  { id: 'models', label: 'Mis Modelos', icon: BookTemplate, path: '/reports/models', show: !isSecretaria }
+                  { id: 'models', label: 'Mis Modelos', icon: BookTemplate, path: '/reports/models', show: canCustomizeModels && !isSecretaria }
                 ] : [
                   { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria },
                   { id: 'history', label: isSecretaria ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
@@ -334,7 +339,7 @@ function App() {
             >
               <Routes>
                 <Route path="/" element={<Navigate to="/reports" replace />} />
-                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} />} />
+                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} />} />
                 <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isSecretaria={isSecretaria} />} />
                 <Route path="/patients" element={isAdmin || isDirectora || isSecretaria ? <PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} /> : <Navigate to="/reports" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />

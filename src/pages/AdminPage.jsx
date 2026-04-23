@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import {
   Activity,
   Users,
@@ -17,7 +19,8 @@ import {
   Key,
   ShieldCheck,
   ClipboardList,
-  Search,
+  Search as SearchIcon,
+  CheckCircle2,
   Loader2,
   Save,
   UserCog,
@@ -26,10 +29,8 @@ import {
   FileText,
   BookOpen,
   User as UserIcon,
-  Search as SearchIcon,
   Database,
   RefreshCw,
-  CheckCircle2,
   GripVertical,
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
@@ -73,6 +74,8 @@ const AdminPage = () => {
   const [appsScriptUrl, setAppsScriptUrl] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [token, setToken] = useState("");
+  // Full config/settings object — used for report required-fields toggles
+  const [config, setConfig] = useState({});
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
@@ -243,6 +246,7 @@ const AdminPage = () => {
           setAppsScriptUrl(data.appsScriptUrl || "");
           setAdminEmail(data.adminEmail || "");
           setToken(data.token || "");
+          setConfig(data); // full config object for feature toggles
         }
       },
     );
@@ -662,13 +666,16 @@ const AdminPage = () => {
   };
 
   const handleEditPractice = (p) => {
+    console.log("Editing Practice:", p);
     setSelectedPractice(p);
-    setPracticeForm({
-      c: p.c,
-      n: p.n,
-      b: p.b,
+    const newData = {
+      c: p.c || "",
+      n: p.n || "",
+      b: p.b || "",
       st: p.st !== undefined ? p.st : true,
-    });
+    };
+    console.log("Setting practiceForm to:", newData);
+    setPracticeForm(newData);
   };
 
   const handleDeletePractice = async (id) => {
@@ -689,6 +696,16 @@ const AdminPage = () => {
       alert("Error al guardar: " + err.message);
     } finally {
       setIsSavingSettings(false);
+    }
+  };
+
+  // Generic config/settings saver (merge) — used by report required-fields panel
+  const handleSaveConfig = async (newConfigData) => {
+    try {
+      await setDoc(doc(db, "config", "settings"), newConfigData, { merge: true });
+      setConfig(newConfigData);
+    } catch (err) {
+      alert("Error al guardar configuración: " + err.message);
     }
   };
 
@@ -805,6 +822,8 @@ const AdminPage = () => {
       headerGeneral: user.headerGeneral || Array(8).fill(""),
       headerFibro: user.headerFibro || Array(8).fill(""),
       signatureBase64: user.signatureBase64 || null,
+      hasLetterhead: user.hasLetterhead || false,
+      canCustomizeModels: user.canCustomizeModels || user.role === 'directora_medica' || false,
     });
     setIsManageProfessionalModalOpen(true);
   };
@@ -856,6 +875,8 @@ const AdminPage = () => {
           me: "-",
           isOfficial: true,
           role: manualUserForm.role || "médico",
+          hasLetterhead: (manualUserForm.role || "médico") === "directora_medica" ? true : false,
+          canCustomizeModels: (manualUserForm.role || "médico") === "directora_medica" ? true : false,
         },
         { merge: true },
       );
@@ -1316,7 +1337,7 @@ const AdminPage = () => {
                     {isCleaning ? (
                       <Loader2 className="animate-spin" />
                     ) : (
-                      <Search size={22} />
+                      <SearchIcon size={22} />
                     )}
                     ANALIZAR RANGO SELECCIONADO
                   </button>
@@ -1531,161 +1552,246 @@ const AdminPage = () => {
         )}
 
         {activeTab === "practices" && (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            <div className="lg:col-span-1">
-              <div className="card p-8 bg-[var(--bg-card)] sticky top-8">
-                <h3 className="text-xl font-bold flex items-center gap-2 mb-6">
-                  {selectedPractice ? (
-                    <Edit2 className="text-blue-500" />
-                  ) : (
-                    <Plus className="text-green-500" />
-                  )}
-                  {selectedPractice ? "Editar Modelo" : "Nuevo Modelo"}
-                </h3>
-                <div className="space-y-4">
+          <>
+          <div className="flex h-[calc(100vh-280px)] gap-6 overflow-hidden">
+            {/* Left Sidebar: List of Models */}
+            <div className="w-80 flex-shrink-0 flex flex-col gap-4">
+              <div className="relative">
+                <SearchIcon size={18} className="absolute left-3 top-2.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Buscar modelos..."
+                  className="input-field pl-10"
+                  value={practiceSearch}
+                  onChange={(e) => setPracticeSearch(e.target.value)}
+                />
+              </div>
+
+              <div className="flex-1 overflow-auto space-y-2 pr-2 custom-scrollbar">
+                {filteredPractices.length > 0 ? (
+                  filteredPractices.map((p) => (
+                    <motion.div
+                      key={p.id}
+                      whileHover={{ x: 5 }}
+                      onClick={() => handleEditPractice(p)}
+                      className={`p-4 rounded-2xl cursor-pointer border transition-all ${
+                        selectedPractice?.id === p.id 
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-lg' 
+                          : 'bg-[var(--bg-card)] border-main hover:border-blue-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-sm truncate pr-2">{p.n}</span>
+                        <div className="flex gap-1 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePractice(p.id);
+                            }}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                              selectedPractice?.id === p.id 
+                                ? 'hover:bg-white/20 text-white/80' 
+                                : 'hover:bg-red-50 text-red-500'
+                            }`}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex justify-between items-center mt-1">
+                        <p className={`text-[10px] uppercase font-black tracking-widest ${
+                          selectedPractice?.id === p.id ? 'text-blue-100' : 'text-gray-400'
+                        }`}>
+                          Cód: {p.c || '--'}
+                        </p>
+                      </div>
+                    </motion.div>
+                  ))
+                ) : (
+                  <div className="p-10 text-center text-xs text-gray-400 italic bg-[var(--bg-card)] rounded-2xl border border-dashed border-main">
+                    No se encontraron modelos.
+                  </div>
+                )}
+                
+                {/* Add New Button at bottom of list */}
+                <button 
+                  onClick={() => {
+                    setSelectedPractice(null);
+                    setPracticeForm({ c: "", n: "", b: "", st: true });
+                  }}
+                  className="w-full p-4 rounded-2xl border-2 border-dashed border-gray-200 hover:border-blue-400 hover:bg-blue-50/30 text-gray-400 hover:text-blue-600 transition-all flex flex-col items-center gap-1 group"
+                >
+                  <Plus size={20} className="group-hover:scale-110 transition-transform" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Nuevo Modelo</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Right Side: Editor and Configuration */}
+            <div className="flex-1 flex flex-col bg-[var(--bg-card)] rounded-[2.5rem] shadow-sm border border-main overflow-hidden">
+              <div className="p-6 border-b border-main bg-[var(--bg-page)]/30">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center gap-3">
+                    <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                      selectedPractice ? 'bg-blue-100 text-blue-600' : 'bg-emerald-100 text-emerald-600'
+                    }`}>
+                      {selectedPractice ? <Edit2 size={24} /> : <Plus size={24} />}
+                    </div>
+                    <div>
+                      <h3 className="font-black text-xl tracking-tight">
+                        {selectedPractice ? "Editar Modelo" : "Crear Nuevo Modelo"}
+                      </h3>
+                      <p className="text-xs text-gray-400 font-medium">
+                        {selectedPractice ? `Modificando: ${selectedPractice.n}` : "Define una nueva plantilla base para informes"}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-3">
+                    {selectedPractice && (
+                      <button 
+                        onClick={() => {
+                          setSelectedPractice(null);
+                          setPracticeForm({ c: "", n: "", b: "", st: true });
+                        }}
+                        className="px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl text-xs font-black uppercase tracking-widest transition-all active:scale-95"
+                      >
+                        Cancelar
+                      </button>
+                    )}
+                    <button 
+                      onClick={handleSavePractice}
+                      className="px-8 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-xs font-black uppercase tracking-widest transition-all active:scale-95 shadow-lg shadow-blue-600/20"
+                    >
+                      {selectedPractice ? "Guardar Cambios" : "Crear Modelo"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
-                      Código
+                    <label className="text-[10px] font-black uppercase text-blue-600/70 tracking-widest ml-2">
+                      Código de Práctica
                     </label>
                     <input
                       type="text"
                       value={practiceForm.c}
-                      onChange={(e) =>
-                        setPracticeForm({
-                          ...practiceForm,
-                          c: e.target.value.toUpperCase(),
-                        })
-                      }
-                      className="input-field"
-                      placeholder="Código..."
+                      onChange={(e) => setPracticeForm({ ...practiceForm, c: e.target.value.toUpperCase() })}
+                      className="w-full px-5 py-3 bg-white border border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-bold text-blue-700 placeholder:text-blue-200"
+                      placeholder="Ej: 310124"
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
-                      Nombre
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">
+                      Nombre del Modelo
                     </label>
                     <input
                       type="text"
                       value={practiceForm.n}
-                      onChange={(e) =>
-                        setPracticeForm({ ...practiceForm, n: e.target.value })
-                      }
-                      className="input-field"
-                      placeholder="Nombre..."
+                      onChange={(e) => setPracticeForm({ ...practiceForm, n: e.target.value })}
+                      className="w-full px-5 py-3 bg-white border border-main rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-bold placeholder:text-gray-200"
+                      placeholder="Ej: Rinofaringolaringofibroscopia"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase text-gray-400 ml-1">
-                      Informe Base (Template)
-                    </label>
-                    <textarea
-                      rows="8"
-                      value={practiceForm.b}
-                      onChange={(e) =>
-                        setPracticeForm({ ...practiceForm, b: e.target.value })
-                      }
-                      className="input-field p-4 resize-none"
-                      placeholder="Texto que aparecerá por defecto..."
-                    />
-                  </div>
-
-                  <label className="flex items-center gap-3 p-4 bg-blue-50/50 rounded-2xl border border-blue-100 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={practiceForm.st}
-                      onChange={(e) =>
-                        setPracticeForm({
-                          ...practiceForm,
-                          st: e.target.checked,
-                        })
-                      }
-                      className="w-5 h-5 rounded border-blue-200 text-blue-600 focus:ring-blue-500"
-                    />
-                    <div className="flex flex-col">
-                      <span className="text-xs font-bold text-blue-900">
-                        Incluir título "INFORME DE..."
-                      </span>
-                      <span className="text-[10px] text-blue-700/70">
-                        Si se desactiva, se podrá poner un título manual.
-                      </span>
-                    </div>
-                  </label>
-                  <button
-                    onClick={handleSavePractice}
-                    className="btn-primary w-full py-4 mt-2 font-black uppercase tracking-widest text-xs"
-                  >
-                    {selectedPractice
-                      ? "Actualizar Modelo"
-                      : "Guardar Nuevo Modelo"}
-                  </button>
                 </div>
               </div>
-            </div>
 
-            <div className="lg:col-span-2">
-              <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-main overflow-hidden">
-                <div className="p-6 border-b border-main flex items-center justify-between">
-                  <h3 className="font-bold flex items-center gap-2">
-                    <ClipboardList size={20} className="text-blue-500" />{" "}
-                    Catálogo de Modelos
-                  </h3>
-                  <div className="relative w-48">
-                    <SearchIcon
-                      size={14}
-                      className="absolute left-3 top-2.5 text-gray-400"
-                    />
-                    <input
-                      type="text"
-                      placeholder="Filtrar..."
-                      className="input-field pl-9 py-1.5 text-xs"
-                      value={practiceSearch}
-                      onChange={(e) => setPracticeSearch(e.target.value)}
+              <div className="flex-1 overflow-auto p-8 custom-scrollbar">
+
+                <div className="space-y-2 mb-8">
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">
+                    Informe Base (Plantilla HTML)
+                  </label>
+                  <div className="bg-white rounded-3xl overflow-hidden border border-main min-h-[400px] flex flex-col">
+                    <ReactQuill
+                      key={selectedPractice?.id || "new"}
+                      theme="snow"
+                      value={practiceForm.b}
+                      onChange={(val) => setPracticeForm({ ...practiceForm, b: val })}
+                      modules={{
+                        toolbar: [
+                          [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
+                          ['bold', 'italic', 'underline', 'strike'],
+                          [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                          [{ 'color': [] }, { 'background': [] }],
+                          ['clean']
+                        ],
+                      }}
+                      className="flex-1 border-none"
+                      placeholder="Escribe el contenido base del informe..."
                     />
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-widest text-[var(--text-sub)] border-b border-main">
-                        <th className="px-6 py-4">Cód.</th>
-                        <th className="px-6 py-4">Modelo / Práctica</th>
-                        <th className="px-6 py-4 text-right">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredPractices.map((p) => (
-                        <tr
-                          key={p.id}
-                          className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors"
-                        >
-                          <td className="px-6 py-4 font-mono font-bold text-blue-600 text-xs">
-                            {p.c}
-                          </td>
-                          <td className="px-6 py-4 font-medium text-sm">
-                            {p.n}
-                          </td>
-                          <td className="px-6 py-4 text-right space-x-1">
-                            <button
-                              onClick={() => handleEditPractice(p)}
-                              className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
-                            >
-                              <Edit2 size={16} />
-                            </button>
-                            <button
-                              onClick={() => handleDeletePractice(p.id)}
-                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                            >
-                              <Trash2 size={16} />
-                            </button>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+
+                <label className="flex items-center gap-4 p-6 bg-blue-50/50 rounded-3xl border border-blue-100 cursor-pointer group hover:bg-blue-50 transition-colors">
+                  <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                    practiceForm.st ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-blue-200'
+                  }`}>
+                    {practiceForm.st && <Check size={14} />}
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={practiceForm.st}
+                      onChange={(e) => setPracticeForm({ ...practiceForm, st: e.target.checked })}
+                    />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-blue-900">Incluir título automático</span>
+                    <span className="text-xs text-blue-700/60 font-medium">El sistema generará el título "INFORME DE [NOMBRE]" al inicio del PDF</span>
+                  </div>
+                </label>
               </div>
             </div>
           </div>
+
+
+          {/* Required Fields Config for Reports */}
+          <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm mt-8">
+            <h3 className="text-xl font-bold mb-4 flex items-center gap-2 text-[var(--text-main)]">
+              <Settings2 size={20} className="text-green-600" /> Campos Obligatorios
+              <span className="text-xs font-normal text-gray-400 ml-1">(Informes)</span>
+            </h3>
+            {[
+              { key: 'reportRequiredPatient',    label: 'Nombre del Paciente',  defaultOn: true },
+              { key: 'reportRequiredDate',       label: 'Fecha',                defaultOn: true },
+              { key: 'reportRequiredSocialWork', label: 'Obra Social',          defaultOn: true },
+              { key: 'reportRequiredDni',        label: 'DNI',                  defaultOn: false },
+              { key: 'reportRequiredRequester',  label: 'Solicitante',          defaultOn: false },
+              { key: 'reportRequiredReason',     label: 'Motivo / Descripción', defaultOn: false },
+              { key: 'reportRequiredEmail',      label: 'Email del Paciente',   defaultOn: false },
+            ].map(field => {
+              const isOn = field.key in config
+                ? config[field.key]
+                : field.defaultOn;
+              return (
+                <label key={field.key} className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-2 first:mt-0">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--text-main)]">{field.label}</span>
+                    <span className={`text-[10px] uppercase font-black ${isOn ? 'text-green-500' : 'text-gray-400'}`}>
+                      {isOn ? 'Obligatorio' : 'Opcional'}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={!!isOn}
+                      onChange={(e) => {
+                        const newVal = e.target.checked;
+                        const action = newVal ? 'obligatorio' : 'opcional';
+                        if (window.confirm(`¿Confirma que desea marcar "${field.label}" como ${action} en los informes?`)) {
+                          handleSaveConfig({ ...config, [field.key]: newVal });
+                        }
+                      }}
+                    />
+                    <div className={`w-10 h-5 rounded-full transition-all ${isOn ? 'bg-green-600' : 'bg-gray-300'}`}>
+                      <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${isOn ? 'translate-x-5' : ''}`} />
+                    </div>
+                  </div>
+                </label>
+              );
+            })}
+          </div>
+          </>
         )}
 
         {activeTab === "orders" && (
@@ -1696,36 +1802,47 @@ const AdminPage = () => {
                   <Settings2 size={20} className="text-blue-600" /> Parámetros
                   de Pedidos
                 </h3>
-                <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-bold text-[var(--text-main)]">
-                      Email de Paciente Obligatorio
-                    </span>
-                    <span className="text-[10px] text-gray-400 uppercase font-black">
-                      Controla si el campo es requerido
-                    </span>
-                  </div>
-                  <div className="relative">
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={orderSettings.patientEmailRequired || false}
-                      onChange={(e) =>
-                        handleSaveOrderSettings({
-                          ...orderSettings,
-                          patientEmailRequired: e.target.checked,
-                        })
-                      }
-                    />
-                    <div
-                      className={`w-10 h-5 rounded-full transition-all ${orderSettings.patientEmailRequired ? "bg-blue-600" : "bg-gray-300"}`}
-                    >
-                      <div
-                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.patientEmailRequired ? "translate-x-5" : ""}`}
-                      />
-                    </div>
-                  </div>
-                </label>
+                {/* Required Fields Config */}
+                {[
+                  { key: 'requiredDni',             label: 'DNI / Pasaporte',     defaultOn: true },
+                  { key: 'requiredName',            label: 'Nombre Completo',     defaultOn: true },
+                  { key: 'requiredInsurance',       label: 'Obra Social',         defaultOn: true },
+                  { key: 'requiredAffiliateNumber', label: 'Nro. Afiliado',       defaultOn: true },
+                  { key: 'requiredDiagnosis',       label: 'Diagnóstico',         defaultOn: true },
+                  { key: 'patientEmailRequired',    label: 'Email del Paciente',  defaultOn: false },
+                ].map(field => {
+                  const isOn = field.key === 'patientEmailRequired'
+                    ? (orderSettings.patientEmailRequired || false)
+                    : (orderSettings[field.key] !== false ? field.defaultOn : false);
+
+                  return (
+                    <label key={field.key} className="flex items-center justify-between p-3 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-2 first:mt-0">
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-[var(--text-main)]">{field.label}</span>
+                        <span className={`text-[10px] uppercase font-black ${isOn ? 'text-blue-500' : 'text-gray-400'}`}>
+                          {isOn ? 'Obligatorio' : 'Opcional'}
+                        </span>
+                      </div>
+                      <div className="relative">
+                        <input
+                          type="checkbox"
+                          className="sr-only"
+                          checked={isOn}
+                          onChange={(e) => {
+                            const newVal = e.target.checked;
+                            const action = newVal ? 'obligatorio' : 'opcional';
+                            if (window.confirm(`¿Confirma que desea marcar "${field.label}" como ${action}?`)) {
+                              handleSaveOrderSettings({ ...orderSettings, [field.key]: newVal });
+                            }
+                          }}
+                        />
+                        <div className={`w-10 h-5 rounded-full transition-all ${isOn ? 'bg-blue-600' : 'bg-gray-300'}`}>
+                          <div className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${isOn ? 'translate-x-5' : ''}`} />
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
                 <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-4">
                   <div className="flex flex-col">
                     <span className="text-sm font-bold text-[var(--text-main)]">
@@ -2591,9 +2708,10 @@ const AdminPage = () => {
                     <select
                       className="input-field"
                       value={targetProf.role || "médico"}
-                      onChange={(e) =>
-                        setTargetProf({ ...targetProf, role: e.target.value })
-                      }
+                      onChange={(e) => {
+                        const newRole = e.target.value;
+                        setTargetProf({ ...targetProf, role: newRole });
+                      }}
                     >
                       <option value="médico">
                         Médico (Solo sus informes)
@@ -2606,6 +2724,54 @@ const AdminPage = () => {
                       </option>
                       <option value="secre">Secretaría (Carga datos)</option>
                     </select>
+                  </div>
+
+                  {/* Toggle Membrete COAT */}
+                  <div className="md:col-span-5 pt-4 border-t border-main">
+
+                    <label className="flex items-center gap-3 p-4 bg-indigo-50/50 dark:bg-indigo-900/10 rounded-2xl border border-indigo-100 dark:border-indigo-900/30 cursor-pointer group hover:bg-indigo-50 transition-all">
+                      <input
+                        type="checkbox"
+                        checked={!!targetProf.hasLetterhead}
+                        onChange={(e) =>
+                          setTargetProf({
+                            ...targetProf,
+                            hasLetterhead: e.target.checked,
+                          })
+                        }
+                        className="w-6 h-6 rounded-lg border-indigo-300 text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-indigo-900 dark:text-indigo-300">
+                          HABILITAR ENCABEZADO PERSONALIZADO
+                        </span>
+                        <span className="text-xs text-indigo-700/60 dark:text-indigo-400/60">
+                          Si se activa, este profesional podrá usar su encabezado personalizado (hasta 8 líneas) en lugar del nombre estándar de COAT. El logo y pie siempre se muestran.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-center gap-3 p-4 bg-blue-50/50 dark:bg-blue-900/10 rounded-2xl border border-blue-100 dark:border-blue-900/30 cursor-pointer group hover:bg-blue-50 transition-all mt-4">
+                      <input
+                        type="checkbox"
+                        checked={!!targetProf.canCustomizeModels}
+                        onChange={(e) =>
+                          setTargetProf({
+                            ...targetProf,
+                            canCustomizeModels: e.target.checked,
+                          })
+                        }
+                        className="w-6 h-6 rounded-lg border-blue-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <div className="flex flex-col">
+                        <span className="text-sm font-bold text-blue-900 dark:text-blue-300">
+                          HABILITAR "MIS MODELOS"
+                        </span>
+                        <span className="text-xs text-blue-700/60 dark:text-blue-400/60">
+                          Si se activa, este profesional tendrá acceso a la pestaña "Mis Modelos" para personalizar sus informes base.
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
 
@@ -2750,59 +2916,77 @@ const AdminPage = () => {
               exit={{ opacity: 0, scale: 0.9 }}
               className="bg-white w-[210mm] min-h-[80mm] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.5)] overflow-hidden relative border border-gray-400 flex flex-col p-[15mm]"
             >
-              <div className="flex border-b-2 border-slate-200 pb-[5mm] mb-[5mm]">
+              <div className="flex border-b-2 border-slate-200 pb-[5mm] mb-[5mm] relative">
+                {targetProf.hasLetterhead === false && (
+                  <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-red-50 text-red-500 text-[8pt] font-black px-4 py-1 rounded-full border border-red-100 z-10 animate-pulse">
+                    MEMBRETE DESACTIVADO PARA ESTE PROFESIONAL
+                  </div>
+                )}
+
                 {/* Logo Area */}
                 <div className="w-[45mm] flex items-center justify-center pr-10 border-r border-slate-100">
-                  {targetProf.logoBase64 ? (
-                    <img
-                      src={targetProf.logoBase64}
-                      className="max-w-full max-h-full object-contain"
-                      alt="logo"
-                    />
+                  {targetProf.hasLetterhead !== false ? (
+                    targetProf.logoBase64 ? (
+                      <img
+                        src={targetProf.logoBase64}
+                        className="max-w-full max-h-full object-contain"
+                        alt="logo"
+                      />
+                    ) : (
+                      <img
+                        src="/coat_logo.png"
+                        className="max-w-full max-h-full object-contain"
+                        alt="logo"
+                      />
+                    )
                   ) : (
-                    <div className="text-slate-200 text-[10pt] font-sans font-bold uppercase tracking-tighter text-center">
-                      Espacio para Logo
+                    <div className="text-slate-300 text-[8pt] font-bold uppercase text-center">
+                      Logo<br/>Oculto
                     </div>
                   )}
                 </div>
 
                 {/* Header Text Area */}
                 <div className="flex-1 flex flex-col justify-center">
-                  {(previewType === "general"
-                    ? targetProf.headerGeneral || []
-                    : targetProf.headerFibro || []
-                  ).map((line, i) => {
-                    if (!line) return null;
-
-                    let fontSize = "9pt";
-                    let fontWeight = "400";
-                    let marginBottom = "1mm";
-                    if (i === 0) {
-                      fontSize = "16pt";
-                      fontWeight = "700";
-                      marginBottom = "3mm";
-                    } else if (i < 3) {
-                      fontSize = "11pt";
-                      fontWeight = "600";
-                    }
-
-                    return (
-                      <p
-                        key={i}
-                        style={{
-                          fontSize,
-                          fontWeight,
-                          textAlign: "center",
-                          margin: 0,
-                          marginBottom,
-                          color: "#000000",
-                          fontFamily: "sans-serif",
-                        }}
-                      >
-                        {line}
-                      </p>
-                    );
-                  })}
+                  {targetProf.hasLetterhead !== false || targetProf.role === 'directora_medica' ? (
+                    (previewType === "general"
+                      ? targetProf.headerGeneral || []
+                      : targetProf.headerFibro || []
+                    ).length > 0 && (previewType === "general" ? targetProf.headerGeneral : targetProf.headerFibro).some(l => l) ? (
+                      (previewType === "general" ? targetProf.headerGeneral : targetProf.headerFibro).map((line, i) => {
+                        if (!line) return null;
+                        let fontSize = "9pt";
+                        let fontWeight = "400";
+                        let marginBottom = "1mm";
+                        if (i === 0) {
+                          fontSize = "16pt";
+                          fontWeight = "700";
+                          marginBottom = "3mm";
+                        } else if (i < 3) {
+                          fontSize = "11pt";
+                          fontWeight = "600";
+                        }
+                        return (
+                          <p key={i} style={{ fontSize, fontWeight, textAlign: "center", margin: 0, marginBottom, color: "#000000", fontFamily: "sans-serif" }}>
+                            {line}
+                          </p>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <p style={{ fontSize: '14pt', fontWeight: 'bold', textAlign: 'center', margin: 0, color: '#006680' }}>
+                          CENTRO OTOAUDIOLÓGICO DE ALTA TECNOLOGÍA
+                        </p>
+                        <p style={{ fontSize: '10pt', textAlign: 'center', margin: 0, color: '#666' }}>
+                          NARIZ - GARGANTA - OÍDO
+                        </p>
+                      </>
+                    )
+                  ) : (
+                    <div className="text-center text-slate-300 font-bold uppercase tracking-widest text-xs">
+                      Encabezado Institucional Desactivado
+                    </div>
+                  )}
                 </div>
               </div>
 

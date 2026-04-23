@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
 import { 
   Printer, 
   User, 
@@ -18,11 +20,14 @@ import {
   Activity,
   Heart,
   ClipboardList,
-  Check
+  Check,
+  X,
+  Download,
+  FileText
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, setDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 
 const ICON_MAP = {
@@ -36,11 +41,22 @@ const ICON_MAP = {
 };
 
 const NewOrderPage = ({ userProfile: propProfile }) => {
+  const [searchParams] = useSearchParams();
+  const editId = searchParams.get('edit');
+
   const [orderTypes, setOrderTypes] = useState([]);
   const [practicesByType, setPracticesByType] = useState({});
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
   const [selectedType, setSelectedType] = useState('coat');
   const [patientEmailRequired, setPatientEmailRequired] = useState(false);
+  const [requiredFields, setRequiredFields] = useState({
+    requiredDni: true,
+    requiredName: true,
+    requiredInsurance: true,
+    requiredAffiliateNumber: true,
+    requiredDiagnosis: true,
+  });
+
 
   const toTitleCase = (str) => {
     if (!str) return '';
@@ -71,11 +87,16 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [profile, setProfile] = useState(propProfile || null);
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [orderMetadata, setOrderMetadata] = useState({ sentToAdmin: false });
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
+
+  const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
+  const [emailMissingWarning, setEmailMissingWarning] = useState(false);
 
   useEffect(() => {
     const searchPatient = async () => {
@@ -85,16 +106,28 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
           const docSnap = await getDoc(doc(db, 'patients', cleanDni));
           if (docSnap.exists()) {
             const data = docSnap.data();
+            const autoEmail = data.email || data.patientEmail || '';
             setPatientData(prev => ({
               ...prev,
               name: data.name || prev.name,
               insurance: data.insurance || prev.insurance,
               affiliateNumber: data.affiliateNumber || prev.affiliateNumber,
-              patientEmail: data.email || data.patientEmail || prev.patientEmail
+              patientEmail: autoEmail || prev.patientEmail
             }));
-            showToast('Paciente encontrado en historial');
+            showToast('✓ Paciente encontrado en historial');
+            if (autoEmail) {
+              setEmailAutoFilledToast(true);
+              setEmailMissingWarning(false);
+              setTimeout(() => setEmailAutoFilledToast(false), 10000);
+            } else {
+              // Patient found but no email on file — prompt to verify for 10s
+              setEmailMissingWarning(true);
+              setTimeout(() => setEmailMissingWarning(false), 10000);
+            }
           }
         } catch (err) {}
+      } else {
+        setEmailMissingWarning(false);
       }
     };
     const timer = setTimeout(searchPatient, 600);
@@ -105,23 +138,26 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     const cleanDni = patientData.dni.trim();
     if (!cleanDni || cleanDni.length < 7) return;
     try {
-      await setDoc(doc(db, 'patients', cleanDni), {
+      const payload = {
         name: patientData.name.trim(),
         dni: cleanDni,
         insurance: patientData.insurance.trim(),
         affiliateNumber: patientData.affiliateNumber.trim(),
-        email: patientData.patientEmail.trim(),
         lastUpdated: new Date().toISOString()
-      }, { merge: true });
+      };
+      // Only update email if user has entered one — never overwrite with empty
+      if (patientData.patientEmail.trim()) {
+        payload.email = patientData.patientEmail.trim();
+      }
+      await setDoc(doc(db, 'patients', cleanDni), payload, { merge: true });
     } catch (err) {}
   };
 
   const [currentOrderId, setCurrentOrderId] = useState(null);
 
   const saveOrderToDB = async () => {
-    if (currentOrderId) return currentOrderId;
     try {
-      const docRef = await addDoc(collection(db, 'orders'), {
+      const orderData = {
         ...patientData,
         orderType: selectedType,
         practices: selectedPractices,
@@ -131,16 +167,30 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
         allPracticesInCategory: practicesByType[selectedType] || [],
         profesionalId: auth.currentUser?.uid,
         profesionalName: profile?.nombre || profile?.n || auth.currentUser?.email,
-        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
         timestamp: new Date().toISOString()
-      });
-      setCurrentOrderId(docRef.id);
-      return docRef.id;
+      };
+
+      if (currentOrderId) {
+        // UPDATE existing
+        await updateDoc(doc(db, 'orders', currentOrderId), orderData);
+        return currentOrderId;
+      } else {
+        // CREATE new
+        const docRef = await addDoc(collection(db, 'orders'), {
+          ...orderData,
+          createdAt: serverTimestamp(),
+          sentToAdmin: false // Initial state
+        });
+        setCurrentOrderId(docRef.id);
+        return docRef.id;
+      }
     } catch (err) {
       console.error("Error saving order:", err);
       return null;
     }
   };
+
 
   useEffect(() => {
     if (!profile && auth.currentUser) {
@@ -165,6 +215,13 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
           setOrderTypes(data.categories || []);
           setPracticesByType(data.practicesByType || {});
           setPatientEmailRequired(data.patientEmailRequired || false);
+          setRequiredFields({
+            requiredDni:             data.requiredDni             !== false,
+            requiredName:            data.requiredName            !== false,
+            requiredInsurance:       data.requiredInsurance       !== false,
+            requiredAffiliateNumber: data.requiredAffiliateNumber !== false,
+            requiredDiagnosis:       data.requiredDiagnosis       !== false,
+          });
           if (data.categories?.length > 0) {
             setSelectedType(data.categories[0].id);
           }
@@ -178,16 +235,64 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     fetchOrderSettings();
   }, []);
 
+  // Effect to load order data for EDIT mode
+  useEffect(() => {
+    const loadOrderForEdit = async () => {
+      if (!editId) return;
+      
+      setIsLoadingSettings(true);
+      try {
+        const orderSnap = await getDoc(doc(db, 'orders', editId));
+        if (orderSnap.exists()) {
+          const data = orderSnap.data();
+          setCurrentOrderId(editId);
+          
+          setPatientData({
+            name: data.name || '',
+            dni: data.dni || '',
+            insurance: data.insurance || '',
+            affiliateNumber: data.affiliateNumber || '',
+            diagnosis: data.diagnosis || '',
+            date: data.date || new Date().toISOString().split('T')[0],
+            patientEmail: data.patientEmail || '',
+            observations: data.observations || ''
+          });
+          
+          if (data.orderType) setSelectedType(data.orderType);
+          setSelectedPractices(data.practices || []);
+          setQuantities(data.quantities || {});
+          setIndications(data.indications || {});
+          setCustomPractices(data.customPractices || []);
+          setOrderMetadata({ sentToAdmin: data.sentToAdmin || false });
+          
+          showToast('Pedido cargado para edición');
+        } else {
+          showToast('No se encontró el pedido a editar', 'error');
+        }
+      } catch (err) {
+        console.error("Error loading order for edit:", err);
+        showToast('Error al cargar pedido', 'error');
+      } finally {
+        setIsLoadingSettings(false);
+      }
+    };
+    loadOrderForEdit();
+  }, [editId]);
+
+
   const isEmailValid = (email) => !email || !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
   const isFormValid = () => {
     const { name, insurance, diagnosis, patientEmail, dni, affiliateNumber } = patientData;
-    const basicValid = name.trim() && insurance.trim() && diagnosis.trim() && dni.trim() && affiliateNumber.trim() && selectedPractices.length > 0;
-    const emailProvided = patientEmail.trim();
-    const emailValid = isEmailValid(patientEmail);
-    
-    if (patientEmailRequired && !emailProvided) return false;
-    return basicValid && emailValid;
+    if (requiredFields.requiredDni             && !dni.trim())             return false;
+    if (requiredFields.requiredName            && !name.trim())            return false;
+    if (requiredFields.requiredInsurance       && !insurance.trim())       return false;
+    if (requiredFields.requiredAffiliateNumber && !affiliateNumber.trim()) return false;
+    if (requiredFields.requiredDiagnosis       && !diagnosis.trim())       return false;
+    if (patientEmailRequired                   && !patientEmail.trim())    return false;
+    if (!isEmailValid(patientEmail))                                       return false;
+    if (selectedPractices.length === 0)                                    return false;
+    return true;
   };
 
   const togglePractice = (name) => {
@@ -210,7 +315,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     
     try {
       await savePatientToHistory();
-      await saveOrderToDB();
+      const orderId = await saveOrderToDB();
       
       const orderData = { 
         ...patientData, 
@@ -222,9 +327,16 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
         allPracticesInCategory: practicesByType[selectedType] || []
       };
       const currentProfile = profile || propProfile || {};
-      const result = await generateOrderPDF(orderData, currentProfile, mode);
+      const result = await generateOrderPDF(orderData, currentProfile, mode === 'preview' ? 'instance' : mode);
+      
+      if (mode === 'preview') {
+        const url = result.output('bloburl');
+        setPreviewUrl(url);
+      }
+      
       if (mode === 'instance') return result;
     } catch (err) {
+      console.error("Error in handleAction:", err);
       showToast('Error al procesar pedido', 'error');
     } finally {
       setIsGenerating(false);
@@ -233,30 +345,132 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   };
 
   const handleSendEmail = async () => {
-    if (!patientData.patientEmail) { showToast('Email requerido', 'error'); return; }
     if (!config.appsScriptUrl) { showToast('Apps Script no configurado', 'error'); return; }
     
     setIsSending(true);
-    setLoadingStatus('Enviando email al paciente...');
+    setLoadingStatus('Procesando envío de pedido...');
     try {
       const pdfDoc = await handleAction('instance');
+      if (!pdfDoc) {
+        setIsSending(false);
+        return;
+      }
       const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
-      await fetch(config.appsScriptUrl, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify({
-          token: config.token,
-          pdfBase64,
-          recipientEmails: [patientData.patientEmail],
-          subject: `COAT - Pedido: ${patientData.name}`,
-          message: `<p>Hola <strong>${patientData.name}</strong>, adjuntamos tu pedido médico.</p>`,
-          fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
-        })
-      });
-      showToast('¡Pedido enviado con éxito!');
-    } catch (err) { showToast('Error al enviar email.', 'error'); }
+
+      const formatDateForEmail = (dateStr) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}-${m}-${y}`;
+      };
+
+      const emailFooter = `
+        <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+            <tr>
+              <td style="vertical-align: top; width: 100px;">
+                <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
+              </td>
+              <td style="vertical-align: top; padding-left: 15px;">
+                <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">COAT</h3>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+                <div style="margin-top: 10px;">
+                  <a href="https://www.facebook.com/coatcordoba" style="text-decoration: none; display: inline-block; margin-right: 15px;">
+                    <img src="https://img.icons8.com/color/24/facebook-new.png" width="24" height="24" alt="Facebook" style="vertical-align: middle; border: 0;">
+                  </a>
+                  <a href="https://www.instagram.com/coatcordoba/" style="text-decoration: none; display: inline-block;">
+                    <img src="https://img.icons8.com/color/24/instagram-new.png" width="24" height="24" alt="Instagram" style="vertical-align: middle; border: 0;">
+                  </a>
+                </div>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      const displayTitle = selectedPractices.join(', ');
+      const emailBody = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+          <p>Estimado/a <strong>${patientData.name}</strong>,</p>
+          <p>Esperamos que se encuentre bien.</p>
+          <p>Le informamos que ya está disponible su <strong>pedido médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Detalles del pedido:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+              <li><strong>Paciente:</strong> ${patientData.name}</li>
+              <li><strong>Estudio/Prácticas:</strong> ${displayTitle}</li>
+              <li><strong>Fecha:</strong> ${formatDateForEmail(patientData.date)}</li>
+              <li><strong>Profesional Responsable:</strong> ${profile?.nombre || 'Dr/a.'}</li>
+            </ul>
+          </div>
+
+          <p>Si tiene alguna duda respecto al contenido del pedido, por favor no dude en contactarse con nosotros.</p>
+          
+          <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+          
+          ${emailFooter}
+          
+          <p style="font-size: 11px; color: #999; margin-top: 30px;">
+            Este es un mensaje automático, por favor no responda a esta dirección de correo.
+          </p>
+        </div>
+      `;
+
+      // Envío a Administración
+      if (config.adminEmail && !orderMetadata.sentToAdmin) {
+        setLoadingStatus('Enviando copia a administración...');
+        try {
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              recipientEmails: [config.adminEmail],
+              subject: `Pedido Médico: ${patientData.name}`,
+              message: emailBody,
+              fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
+            })
+          });
+          
+          // Marcamos como enviado inmediatamente si el fetch no lanzó error (aunque sea no-cors)
+          if (currentOrderId) {
+            await updateDoc(doc(db, 'orders', currentOrderId), { sentToAdmin: true });
+            setOrderMetadata(prev => ({ ...prev, sentToAdmin: true }));
+          }
+        } catch (e) {
+          console.warn("Error enviando copia admin:", e);
+        }
+      }
+
+      // Envío al Paciente
+      if (patientData.patientEmail) {
+        setLoadingStatus('Enviando pedido al paciente...');
+        await fetch(config.appsScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: JSON.stringify({
+            token: config.token,
+            pdfBase64,
+            recipientEmails: [patientData.patientEmail],
+            subject: `COAT - Pedido Médico: ${patientData.name}`,
+            message: emailBody,
+            fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
+          })
+        });
+      }
+
+      showToast('¡Email enviado con éxito!');
+    } catch (err) { 
+      console.error("Error en handleSendEmail:", err);
+      showToast('Error al enviar el email.', 'error'); 
+    }
     finally { 
       setIsSending(false);
+      setIsGenerating(false);
       setLoadingStatus('');
     }
   };
@@ -268,7 +482,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
           <button onClick={handleSendEmail} disabled={isSending || isGenerating || !isFormValid()} className="flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 font-bold">
             {isSending ? <Loader2 className="animate-spin" size={18} /> : <Mail size={18} />} <span>Enviar por Email</span>
           </button>
-          <button onClick={() => handleAction('print')} disabled={isGenerating || !isFormValid()} className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] border border-main rounded-xl hover:bg-main hover:text-white transition-all disabled:opacity-30 font-bold">
+          <button onClick={() => handleAction('preview')} disabled={isGenerating || !isFormValid()} className="flex items-center gap-2 px-4 py-2 bg-[var(--bg-secondary)] border border-main rounded-xl hover:bg-main hover:text-white transition-all disabled:opacity-30 font-bold">
             <Eye size={18} /> <span>Vista Previa</span>
           </button>
           <button onClick={() => handleAction('save')} disabled={isGenerating || !isFormValid()} className="btn-primary flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition-all disabled:opacity-30">
@@ -304,12 +518,12 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
             </div>
             <div className="space-y-4">
               {[
-                { label: 'DNI / Pasaporte', icon: Hash, key: 'dni', ph: 'Solo números - buscar paciente', required: true },
-                { label: 'Nombre Completo', icon: User, key: 'name', ph: '', required: true },
-                { label: 'Obra Social', icon: CreditCard, key: 'insurance', ph: '', required: true },
-                { label: 'Nro. Afiliado', icon: Hash, key: 'affiliateNumber', ph: 'Solo números', required: true },
-                { label: 'Diagnóstico', icon: Stethoscope, key: 'diagnosis', ph: '', required: true },
-                { label: 'Email del Paciente', icon: Mail, key: 'patientEmail', ph: patientEmailRequired ? '' : 'Opcional', required: patientEmailRequired }
+                { label: 'DNI / Pasaporte',    icon: Hash,        key: 'dni',             ph: 'Solo números - buscar paciente', required: requiredFields.requiredDni },
+                { label: 'Nombre Completo',    icon: User,        key: 'name',            ph: '',                               required: requiredFields.requiredName },
+                { label: 'Obra Social',        icon: CreditCard,  key: 'insurance',       ph: '',                               required: requiredFields.requiredInsurance },
+                { label: 'Nro. Afiliado',      icon: Hash,        key: 'affiliateNumber', ph: 'Solo números',                   required: requiredFields.requiredAffiliateNumber },
+                { label: 'Diagnóstico',        icon: Stethoscope, key: 'diagnosis',       ph: '',                               required: requiredFields.requiredDiagnosis },
+                { label: 'Email del Paciente', icon: Mail,        key: 'patientEmail',    ph: patientEmailRequired ? '' : 'Opcional', required: patientEmailRequired }
               ].map(f => (
                 <div key={f.key} className="space-y-1.5">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-1">{f.label} {f.required && '*'}</label>
@@ -332,6 +546,39 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                       }} 
                     />
                   </div>
+                  {/* Email auto-filled / missing badges */}
+                  {f.key === 'patientEmail' && (
+                    <AnimatePresence>
+                      {emailAutoFilledToast && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.2 }}
+                          className="flex items-center gap-1.5 ml-1 mt-1"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                          <span className="text-[10px] font-bold text-green-500">
+                            Email autocargado del historial del paciente
+                          </span>
+                        </motion.div>
+                      )}
+                      {emailMissingWarning && !emailAutoFilledToast && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -4 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, y: -4 }}
+                          transition={{ duration: 0.25 }}
+                          className="flex items-center gap-1.5 ml-1 mt-1"
+                        >
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          <span className="text-[10px] font-bold text-amber-500">
+                            Verificar email con el paciente
+                          </span>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+                  )}
                 </div>
               ))}
               <div className="space-y-1.5 pt-2">
@@ -582,6 +829,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
             )}
           </div>
         </div>
+      </div>
       {/* Loading Overlay */}
       <AnimatePresence>
         {(isGenerating || isSending) && (
@@ -613,9 +861,78 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
           </motion.div>
         )}
       </AnimatePresence>
-        </div>
+      {/* Preview Overlay */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-[var(--bg-page)] flex flex-col"
+          >
+            {/* Overlay Header */}
+            <div className="h-16 bg-[var(--bg-secondary)] border-b border-main flex items-center justify-between px-6 shadow-sm shrink-0">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-black tracking-tight text-[var(--text-main)]">Vista Previa Pedido</h2>
+                <div className="h-6 w-[1px] bg-[var(--border-main)]"></div>
+                <p className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest">{patientData.name}</p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={async () => await handleAction('save')}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                >
+                  <Download size={16} />
+                  Descargar
+                </button>
+                {patientData.patientEmail && (
+                  <button 
+                    disabled={isSending}
+                    onClick={handleSendEmail}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                  >
+                    {isSending ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                    Reenviar al Paciente
+                  </button>
+                )}
+                <button 
+                  onClick={async () => await handleAction('print')}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                >
+                  <Printer size={16} />
+                  Imprimir
+                </button>
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <button 
+                  onClick={() => {
+                    URL.revokeObjectURL(previewUrl);
+                    setPreviewUrl(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95"
+                >
+                  <X size={16} />
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-[var(--bg-secondary)]">
+              <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden">
+                <iframe 
+                  src={previewUrl}
+                  className="w-full h-full border-none"
+                  title="PDF Preview"
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 export default NewOrderPage;
+

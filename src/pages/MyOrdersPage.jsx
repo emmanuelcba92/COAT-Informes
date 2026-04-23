@@ -11,9 +11,14 @@ import {
   Database,
   Loader2,
   CheckCircle2,
-  FileText
+  FileText,
+  Mail,
+  PenLine,
+  X,
+  Download
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -30,6 +35,7 @@ import { db, auth } from '../services/firebase';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 
 const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
+  const navigate = useNavigate();
   const toTitleCase = (str) => {
     if (!str) return '';
     return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -43,6 +49,10 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
   const [hasMore, setHasMore] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [deleteModal, setDeleteModal] = useState({ show: false, order: null });
+  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const [isResending, setIsResending] = useState(null); // ID del pedido que se está reenviando
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [selectedOrderForPreview, setSelectedOrderForPreview] = useState(null);
   const PAGE_SIZE = 20;
 
   const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
@@ -74,6 +84,14 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
       } catch (err) {}
     };
     if (canSelectProfessional) fetchProfs();
+
+    const fetchConfig = async () => {
+      try {
+        const snap = await getDoc(doc(db, 'config', 'settings'));
+        if (snap.exists()) setConfig(snap.data());
+      } catch (err) { console.error("Config fetch error:", err); }
+    };
+    fetchConfig();
   }, [canSelectProfessional]);
 
   useEffect(() => {
@@ -112,17 +130,146 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
   };
 
   const handleViewOrder = async (order) => {
-    showToast("Generando PDF...");
+    showToast("Generando vista previa...");
     try {
-      // Re-fetch professional profile to get signature if not in order data
       let profProfile = {};
       const profSnap = await getDoc(doc(db, 'users', order.profesionalId));
       if (profSnap.exists()) profProfile = profSnap.data();
       
-      await generateOrderPDF(order, profProfile, 'print');
+      const result = await generateOrderPDF(order, profProfile, 'instance');
+      const url = result.output('bloburl');
+      setPreviewUrl(url);
+      setSelectedOrderForPreview({ ...order, profProfile });
     } catch (err) {
+      console.error("Error viewing order:", err);
       showToast("Error al visualizar pedido", "error");
     }
+  };
+  
+  const handleResendEmail = async (order) => {
+    if (!order.patientEmail) {
+      showToast('El pedido no cuenta con un email de paciente registrado.', 'error');
+      return;
+    }
+    if (!config.appsScriptUrl) {
+      showToast('Apps Script no configurado.', 'error');
+      return;
+    }
+
+    setIsResending(order.id);
+    showToast("Reenviando pedido...");
+
+    try {
+      // 1. Fetch professional profile for signature
+      let profProfile = {};
+      const profSnap = await getDoc(doc(db, 'users', order.profesionalId));
+      if (profSnap.exists()) profProfile = profSnap.data();
+
+      // 2. Generate PDF instance
+      const pdfDoc = await generateOrderPDF(order, profProfile, 'instance');
+      const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
+
+      const formatDateForEmail = (dateStr) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}-${m}-${y}`;
+      };
+
+      const emailFooter = `
+        <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+            <tr>
+              <td style="vertical-align: top; width: 100px;">
+                <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
+              </td>
+              <td style="vertical-align: top; padding-left: 15px;">
+                <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">COAT</h3>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      const displayTitle = order.practices?.join(', ') || 'Pedido Médico';
+
+      const emailBody = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+          <p>Estimado/a <strong>${order.name}</strong>,</p>
+          <p>Esperamos que se encuentre bien.</p>
+          <p>Le informamos que ya está disponible el reenvío de su <strong>pedido médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Detalles del pedido:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+              <li><strong>Paciente:</strong> ${order.name}</li>
+              <li><strong>Estudio/Prácticas:</strong> ${displayTitle}</li>
+              <li><strong>Fecha:</strong> ${formatDateForEmail(order.date)}</li>
+              <li><strong>Profesional Responsable:</strong> ${order.profesionalName}</li>
+            </ul>
+          </div>
+
+          <p>Si tiene alguna duda respecto al contenido del pedido, por favor no dude en contactarse con nosotros.</p>
+          
+          <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+          
+          ${emailFooter}
+          
+          <p style="font-size: 11px; color: #999; margin-top: 30px;">
+            Este es un mensaje automático, por favor no responda a esta dirección de correo.
+          </p>
+        </div>
+      `;
+
+      const emailPromises = [];
+      // Admin copy (ONLY if not sent before)
+      if (config.adminEmail && !order.sentToAdmin) {
+        emailPromises.push(fetch(config.appsScriptUrl, {
+          method: 'POST', mode: 'no-cors',
+          body: JSON.stringify({
+            token: config.token, pdfBase64,
+            recipientEmails: [config.adminEmail],
+            subject: `Reenvío Pedido Médico: ${order.name}`,
+
+            message: emailBody,
+            fileName: `Pedido_${order.name.replace(/\s/g, '_')}.pdf`
+          })
+        }));
+      }
+      // Patient
+      emailPromises.push(fetch(config.appsScriptUrl, {
+        method: 'POST', mode: 'no-cors',
+        body: JSON.stringify({
+          token: config.token, pdfBase64,
+          recipientEmails: [order.patientEmail],
+          subject: `COAT - Reenvío de Pedido Médico: ${order.name}`,
+          message: emailBody,
+          fileName: `Pedido_${order.name.replace(/\s/g, '_')}.pdf`
+        })
+      }));
+
+      await Promise.all(emailPromises);
+      
+      // Update record if it was the first time sending to admin
+      if (!order.sentToAdmin) {
+        const { updateDoc, doc: fireDoc } = await import('firebase/firestore');
+        await updateDoc(fireDoc(db, 'orders', order.id), { sentToAdmin: true });
+      }
+
+      showToast('¡Pedido reenviado con éxito!');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al reenviar email.', 'error');
+    } finally {
+      setIsResending(null);
+    }
+  };
+
+  const handleEditOrder = (orderId) => {
+    navigate(`/orders/new?edit=${orderId}`);
   };
 
   const confirmDelete = async () => {
@@ -229,7 +376,35 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center justify-center gap-2">
-                        <button onClick={() => handleViewOrder(order)} className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 border border-amber-100 shadow-sm transition-all" title="Ver PDF"><Printer size={18} /></button>
+                        {/* Imprimir / Vista Previa */}
+                        <button 
+                          onClick={() => handleViewOrder(order)} 
+                          className="p-2 bg-amber-50 text-amber-600 rounded-xl hover:bg-amber-100 border border-amber-100 shadow-sm transition-all" 
+                          title="Ver PDF / Imprimir"
+                        >
+                          <Printer size={18} />
+                        </button>
+                        
+                        {/* Reenviar Email */}
+                        <button 
+                          disabled={isResending === order.id}
+                          onClick={() => handleResendEmail(order)} 
+                          className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 border border-blue-100 shadow-sm transition-all disabled:opacity-50" 
+                          title="Reenviar por Email"
+                        >
+                          {isResending === order.id ? <Loader2 size={18} className="animate-spin" /> : <Mail size={18} />}
+                        </button>
+
+                        {/* Editar */}
+                        <button 
+                          onClick={() => handleEditOrder(order.id)}
+                          className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 border border-indigo-100 shadow-sm transition-all"
+                          title="Editar Pedido"
+                        >
+                          <PenLine size={18} />
+                        </button>
+
+                        {/* Eliminar */}
                         {(isAdmin || (!isSecretaria && auth.currentUser?.uid === order.profesionalId)) && (
                           <button onClick={() => setDeleteModal({ show: true, order })} className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 border border-red-100 shadow-sm transition-all" title="Eliminar"><Trash2 size={18} /></button>
                         )}
@@ -267,6 +442,76 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
         {toast.show && (
           <motion.div initial={{ opacity: 0, y: 50 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 50 }} className={`fixed bottom-8 right-8 z-[110] px-6 py-4 rounded-2xl shadow-2xl ${toast.type === 'success' ? 'bg-blue-600' : 'bg-red-600'} text-white font-bold`}>
             {toast.message}
+          </motion.div>
+        )}
+      </AnimatePresence>
+      {/* Preview Overlay */}
+      <AnimatePresence>
+        {previewUrl && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[100] bg-slate-900/95 flex flex-col"
+          >
+            {/* Overlay Header */}
+            <div className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm shrink-0">
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-black tracking-tight text-slate-800">Vista Previa Pedido</h2>
+                <div className="h-6 w-[1px] bg-slate-200"></div>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{selectedOrderForPreview?.name}</p>
+              </div>
+              
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={async () => await generateOrderPDF(selectedOrderForPreview, selectedOrderForPreview.profProfile, 'save')}
+                  className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
+                >
+                  <Download size={16} />
+                  Descargar
+                </button>
+                {selectedOrderForPreview?.patientEmail && (
+                  <button 
+                    disabled={isResending === selectedOrderForPreview.id}
+                    onClick={() => handleResendEmail(selectedOrderForPreview)}
+                    className="flex items-center gap-2 px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-indigo-500/20 disabled:opacity-50"
+                  >
+                    {isResending === selectedOrderForPreview.id ? <Loader2 className="animate-spin" size={16} /> : <FileText size={16} />}
+                    Reenviar al Paciente
+                  </button>
+                )}
+                <button 
+                  onClick={async () => await generateOrderPDF(selectedOrderForPreview, selectedOrderForPreview.profProfile, 'print')}
+                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-blue-500/20"
+                >
+                  <Printer size={16} />
+                  Imprimir
+                </button>
+                <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
+                <button 
+                  onClick={() => {
+                    URL.revokeObjectURL(previewUrl);
+                    setPreviewUrl(null);
+                    setSelectedOrderForPreview(null);
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95"
+                >
+                  <X size={16} />
+                  Cerrar
+                </button>
+              </div>
+            </div>
+
+            {/* Preview Content */}
+            <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-slate-800/50">
+              <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+                <iframe 
+                  src={previewUrl}
+                  className="w-full h-full border-none"
+                  title="PDF Preview"
+                />
+              </div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

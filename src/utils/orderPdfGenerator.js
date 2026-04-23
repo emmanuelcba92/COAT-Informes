@@ -12,10 +12,12 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
   };
 
-  const drawHeader = async (targetDoc, orderTypeLabel = "") => {
+  const drawHeader = async (targetDoc, orderTypeLabel) => {
+    // Institutional COAT branding is ALWAYS shown on orders
     try {
       const logoData = await new Promise((resolve) => {
         const img = new Image();
+        img.crossOrigin = "Anonymous";
         img.onload = () => {
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
@@ -33,7 +35,6 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     targetDoc.text("CENTRO OTOAUDIOLÓGICO DE ALTA TECNOLOGÍA", centerX, 20, { align: 'center' });
     targetDoc.setFontSize(8);
     targetDoc.text("NARIZ - GARGANTA - OÍDO", centerX, 25, { align: 'center' });
-    
     if (orderTypeLabel && orderData.orderType !== 'coat') {
       targetDoc.setFontSize(14);
       targetDoc.setFont("helvetica", "bold");
@@ -83,6 +84,8 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     else if (me) registrationText = `ME: ${me}`;
     
     if (registrationText) targetDoc.text(registrationText, signatureX + 32, signatureY + 8, { align: 'center' });
+
+    // Footer line — ALWAYS shown
     targetDoc.setDrawColor(...coatBlue);
     targetDoc.setLineWidth(0.3);
     targetDoc.line(15, pageHeight - 20, pageWidth - 15, pageHeight - 20);

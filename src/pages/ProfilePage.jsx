@@ -107,7 +107,8 @@ const ProfilePage = () => {
             headerFibro: profileData.headerFibro || Array(8).fill(''),
             signatureBase64: profileData.signatureBase64 || null,
             email: email,
-            role: profileData.role || 'médico'
+            role: profileData.role || 'médico',
+            hasLetterhead: profileData.hasLetterhead || false,
           };
           setProfile(cleanProfile);
           
@@ -208,7 +209,10 @@ const ProfilePage = () => {
     }
   };
 
-  const canEditHeader = profile.role === 'directora_medica';
+  // A professional can edit their custom header if:
+  // 1. They are the Directora Médica (always), OR
+  // 2. The Admin has granted them custom header access (hasLetterhead = true)
+  const canEditHeader = profile.role === 'directora_medica' || profile.hasLetterhead === true;
 
   const handleSave = async () => {
     if (!auth.currentUser) return;

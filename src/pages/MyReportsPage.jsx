@@ -22,7 +22,8 @@ import {
   Plus,
   CheckCircle2,
   ExternalLink,
-  PenLine
+  PenLine,
+  Mail
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -48,6 +49,13 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Helper para fechas en el email
+  const formatDateForEmail = (date) => {
+    if (!date) return '';
+    const d = date.seconds ? new Date(date.seconds * 1000) : new Date(date);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
   const [professionals, setProfessionals] = useState([]);
 
   const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
@@ -502,6 +510,140 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
     navigate(`/reports/new?edit=${report.id}`);
   };
 
+  const [isResending, setIsResending] = useState(null);
+
+  const handleResendEmail = async (report) => {
+    if (!report.patientEmail) {
+      showToast('El informe no cuenta con un email de paciente registrado.', 'error');
+      return;
+    }
+    if (!config.appsScriptUrl) {
+      showToast('Apps Script no configurado.', 'error');
+      return;
+    }
+
+    setIsResending(report.id);
+    showToast("Reenviando informe...");
+
+    try {
+      let pdfBase64 = '';
+      
+      if (report.tipoReporte === 'externo') {
+        // Fetch external PDF and convert to base64
+        const response = await fetch(report.pdfUrl);
+        const blob = await response.blob();
+        pdfBase64 = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onloadend = () => resolve(reader.result.split(',')[1]);
+          reader.readAsDataURL(blob);
+        });
+      } else {
+        // Internal report: we need to generate it or fetch it if possible. 
+        // For simplicity in this view, if it's internal we redirect to preview which has the full logic,
+        // OR we can implement a quick resend if we had the generator here.
+        // Since MyReportsPage doesn't have the generator logic, we'll inform the user.
+        showToast('Para informes internos, utilice la opción de "Ver/Editar" para reenviar.', 'info');
+        setIsResending(null);
+        return;
+      }
+
+      const formatDateForEmail = (dateStr) => {
+        if (!dateStr) return '';
+        const [y, m, d] = dateStr.split('-');
+        return `${d}-${m}-${y}`;
+      };
+
+      const emailFooter = `
+        <div style="margin-top: 30px; border-top: 2px solid #2563eb; padding-top: 20px;">
+          <table width="100%" cellpadding="0" cellspacing="0" style="font-family: sans-serif;">
+            <tr>
+              <td style="vertical-align: top; width: 100px;">
+                <img src="https://informescoat.web.app/coat_logo.png" alt="COAT" width="80" style="display: block;">
+              </td>
+              <td style="vertical-align: top; padding-left: 15px;">
+                <h3 style="margin: 0; color: #1e3a8a; font-size: 16px;">COAT</h3>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📍 Urquiza 401 - Alberdi</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
+                <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+              </td>
+            </tr>
+          </table>
+        </div>
+      `;
+
+      const emailBody = `
+        <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
+          <p>Estimado/a <strong>${report.pacienteNombre}</strong>,</p>
+          <p>Esperamos que se encuentre bien.</p>
+          <p>Le informamos que ya está disponible el reenvío del <strong>informe médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          
+          <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
+            <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
+              <li><strong>Paciente:</strong> ${report.pacienteNombre}</li>
+              <li><strong>Estudio:</strong> ${report.practicaNombre || 'Informe Médico'}</li>
+              <li><strong>Fecha:</strong> ${formatDateForEmail(report.fecha)}</li>
+              <li><strong>Profesional Responsable:</strong> ${report.profesionalNombre}</li>
+            </ul>
+          </div>
+
+          <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros o consultarlo en su próxima visita.</p>
+          
+          <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+          
+          ${emailFooter}
+          
+          <p style="font-size: 11px; color: #999; margin-top: 30px;">
+            Este es un mensaje automático, por favor no responda a esta dirección de correo.
+          </p>
+        </div>
+      `;
+
+      const emailPromises = [];
+      // Admin copy (ONLY if not sent before)
+      if (config.adminEmail && !report.sentToAdmin) {
+        emailPromises.push(fetch(config.appsScriptUrl, {
+          method: 'POST', mode: 'no-cors',
+          body: JSON.stringify({
+            token: config.token, pdfBase64,
+            recipientEmails: [config.adminEmail],
+            subject: `Reenvío Informe Médico: ${report.pacienteNombre}`,
+
+            message: emailBody,
+            fileName: `Informe_${report.pacienteNombre.replace(/\s/g, '_')}.pdf`
+          })
+        }));
+      }
+      
+      emailPromises.push(fetch(config.appsScriptUrl, {
+        method: 'POST', mode: 'no-cors',
+        body: JSON.stringify({
+          token: config.token, pdfBase64,
+          recipientEmails: [report.patientEmail],
+          subject: `COAT - Reenvío de Informe Médico: ${report.pacienteNombre}`,
+          message: emailBody,
+          fileName: `Informe_${report.pacienteNombre.replace(/\s/g, '_')}.pdf`
+        })
+      }));
+
+      await Promise.all(emailPromises);
+
+      // Update record if it was the first time sending to admin
+      if (!report.sentToAdmin) {
+        const { updateDoc, doc: fireDoc } = await import('firebase/firestore');
+        await updateDoc(fireDoc(db, 'reports', report.id), { sentToAdmin: true });
+      }
+
+      showToast('¡Informe reenviado con éxito!');
+    } catch (err) {
+      console.error(err);
+      showToast('Error al reenviar informe.', 'error');
+    } finally {
+      setIsResending(null);
+    }
+  };
+
   const filteredReports = reports.filter(r => {
     const matchesSearch = 
       r.pacienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -704,6 +846,17 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
                               title="Editar Informe"
                             >
                               <PenLine className="w-5 h-5" />
+                            </button>
+                          )}
+
+                          {report.patientEmail && report.tipoReporte === 'externo' && (
+                            <button 
+                              disabled={isResending === report.id}
+                              onClick={() => handleResendEmail(report)}
+                              className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 transition-all border border-indigo-100 shadow-sm disabled:opacity-50"
+                              title="Reenviar por Email"
+                            >
+                              {isResending === report.id ? <Loader2 className="w-5 h-5 animate-spin" /> : <Mail className="w-5 h-5" />}
                             </button>
                           )}
 

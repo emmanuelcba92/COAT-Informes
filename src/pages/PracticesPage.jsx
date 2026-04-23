@@ -47,6 +47,15 @@ const PracticesPage = () => {
     return () => unsub();
   }, []);
 
+  const formatContent = (content) => {
+    if (!content) return '';
+    // Si parece texto plano y tiene saltos de línea, convertir a párrafos HTML
+    if (!content.includes('<p>') && content.includes('\n')) {
+      return content.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '<p><br></p>').join('');
+    }
+    return content;
+  };
+
   const handleSelectPractice = (practice) => {
     setSelectedPractice(practice);
     // Use personal version if exists, otherwise use master body
@@ -54,7 +63,7 @@ const PracticesPage = () => {
     const content = personal 
       ? (typeof personal === 'string' ? personal : personal.b) 
       : (practice.b || '');
-    setEditorContent(content);
+    setEditorContent(formatContent(content));
   };
 
   const handleSavePersonal = async () => {
@@ -108,9 +117,10 @@ const PracticesPage = () => {
 
   const quillModules = {
     toolbar: [
-      [{ 'header': [1, 2, 3, false] }],
+      [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
       ['bold', 'italic', 'underline', 'strike'],
-      [{'list': 'ordered'}, {'list': 'bullet'}],
+      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+      [{ 'color': [] }, { 'background': [] }],
       ['clean']
     ],
   };

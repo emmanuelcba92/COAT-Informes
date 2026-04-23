@@ -41,7 +41,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     patientEmail: '',
     includeTitle: true,
     customTitle: '',
-    enableHeader: true
+    enableHeader: true,
+    sentToAdmin: false
   });
 
   // Patient autocomplete logic
@@ -54,17 +55,29 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
           const docSnap = await getDoc(docRef);
           if (docSnap.exists()) {
             const data = docSnap.data();
+            const autoEmail = data.email || data.patientEmail || '';
             setReportData(prev => ({
               ...prev,
               patient: data.name || prev.patient,
-              socialWork: data.insurance || prev.socialWork
-              // Email is intentionally NOT autocompleted as requested
+              socialWork: data.insurance || prev.socialWork,
+              patientEmail: autoEmail || prev.patientEmail
             }));
-            showToast('Datos de paciente cargados');
+            showToast('✓ Datos de paciente cargados');
+            if (autoEmail) {
+              setEmailAutoFilledToast(true);
+              setEmailMissingWarning(false);
+              setTimeout(() => setEmailAutoFilledToast(false), 10000);
+            } else {
+              // Patient found but no email on file — prompt to verify for 10s
+              setEmailMissingWarning(true);
+              setTimeout(() => setEmailMissingWarning(false), 10000);
+            }
           }
         } catch (err) {
           console.error("Error searching patient:", err);
         }
+      } else {
+        setEmailMissingWarning(false);
       }
     };
     const timer = setTimeout(searchPatient, 600);
@@ -76,13 +89,17 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     if (!cleanDni || cleanDni.length < 7) return;
     try {
       const patientRef = doc(db, 'patients', cleanDni);
-      await setDoc(patientRef, {
+      const payload = {
         name: reportData.patient.trim(),
         dni: cleanDni,
         insurance: reportData.socialWork.trim(),
-        email: reportData.patientEmail.trim(),
         lastUpdated: new Date().toISOString()
-      }, { merge: true });
+      };
+      // Only update email if user has entered one — never overwrite with empty
+      if (reportData.patientEmail.trim()) {
+        payload.email = reportData.patientEmail.trim();
+      }
+      await setDoc(patientRef, payload, { merge: true });
     } catch (err) {
       console.error("Error saving patient to history:", err);
     }
@@ -96,6 +113,17 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   const [professional, setProfessional] = useState(initialProfile || null);
   const [dbPractices, setDbPractices] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [reportRequiredFields, setReportRequiredFields] = useState({
+    reportRequiredPatient:    true,
+    reportRequiredDate:       true,
+    reportRequiredSocialWork: true,
+    reportRequiredDni:        false,
+    reportRequiredRequester:  false,
+    reportRequiredReason:     false,
+    reportRequiredEmail:      false,
+  });
+  const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
+  const [emailMissingWarning, setEmailMissingWarning] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get('edit');
@@ -129,6 +157,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         patientEmail: reportData.patientEmail || '',
         includeTitle: reportData.includeTitle,
         enableHeader: reportData.enableHeader,
+        sentToAdmin: reportData.sentToAdmin,
         pdfUrl: pdfUrl,
         fechaUpdatedAt: new Date().toISOString()
       };
@@ -163,7 +192,18 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         setDbPractices(list);
 
         if (configSnap.exists()) {
-          setConfig(configSnap.data());
+          const cfgData = configSnap.data();
+          setConfig(cfgData);
+          // Load report required fields from config
+          setReportRequiredFields({
+            reportRequiredPatient:    cfgData.reportRequiredPatient    !== false ? true  : false,
+            reportRequiredDate:       cfgData.reportRequiredDate       !== false ? true  : false,
+            reportRequiredSocialWork: cfgData.reportRequiredSocialWork !== false ? true  : false,
+            reportRequiredDni:        cfgData.reportRequiredDni        === true,
+            reportRequiredRequester:  cfgData.reportRequiredRequester  === true,
+            reportRequiredReason:     cfgData.reportRequiredReason     === true,
+            reportRequiredEmail:      cfgData.reportRequiredEmail      === true,
+          });
         }
 
         // Si no tenemos el perfil por props (caso raro), lo buscamos
@@ -176,6 +216,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               nombre: profData.nombre || profData.n || 'Médico',
               especialidad: profData.especialidad || profData.esp || '',
               mp: profData.mp || profData.m || '',
+              hasLetterhead: profData.hasLetterhead === true,
               headerGeneral: profData.headerGeneral || Array(8).fill(''),
               headerFibro: profData.headerFibro || Array(8).fill(''),
             });
@@ -208,7 +249,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               patientEmail: data.patientEmail || '',
               includeTitle: data.includeTitle !== undefined ? data.includeTitle : true,
               customTitle: data.customTitle || '',
-              enableHeader: data.enableHeader || false
+              enableHeader: data.enableHeader || false,
+              sentToAdmin: data.sentToAdmin || false
             });
             setSelectedPractice(data.practicaNombre || '');
             setContent(data.contenidoTexto || '');
@@ -225,6 +267,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                     nombre: profData.nombre || profData.n || 'Médico',
                     especialidad: profData.especialidad || profData.esp || '',
                     mp: profData.mp || profData.m || '',
+                    hasLetterhead: profData.hasLetterhead === true,
                     headerGeneral: profData.headerGeneral || Array(8).fill(''),
                     headerFibro: profData.headerFibro || Array(8).fill(''),
                   });
@@ -296,10 +339,14 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   };
 
   const generatePDF = async (mode = 'print') => {
-    if (!reportData.patient || !reportData.date) {
-      showToast('Complete los campos obligatorios: Paciente y Fecha.', 'error');
-      return null;
-    }
+    const r = reportRequiredFields;
+    if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
+    if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
+    if (r.reportRequiredSocialWork && !reportData.socialWork.trim()) { showToast('El campo Obra Social es obligatorio.', 'error'); return null; }
+    if (r.reportRequiredDni        && !reportData.dni.trim())        { showToast('El campo DNI es obligatorio.', 'error');         return null; }
+    if (r.reportRequiredRequester  && !reportData.requester.trim())  { showToast('El campo Solicitante es obligatorio.', 'error'); return null; }
+    if (r.reportRequiredReason     && !reportData.reason.trim())     { showToast('El campo Motivo es obligatorio.', 'error');      return null; }
+    if (r.reportRequiredEmail      && !reportData.patientEmail.trim()){ showToast('El campo Email es obligatorio.', 'error');     return null; }
 
     await savePatientToHistory();
     setIsGenerating(true);
@@ -309,20 +356,31 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     // Helper to clean HTML for PDF
     const cleanHtmlForPDF = (html) => {
       if (!html) return "";
-      let text = html.replace(/<br\s*\/?>/gi, '\n');
+      // Handle empty paragraphs from Quill properly
+      let text = html.replace(/<p><br\s*\/?><\/p>/gi, '\n');
+      text = text.replace(/<br\s*\/?>/gi, '\n');
       text = text.replace(/<\/p>/gi, '\n');
       text = text.replace(/<p>/gi, '');
       const tempDoc = new DOMParser().parseFromString(text, 'text/html');
-      return tempDoc.body.textContent || "";
+      return (tempDoc.body.textContent || "").trimEnd();
     };
     const prof = professional || {};
     const pageWidth = doc.internal.pageSize.width;
     
     // Select Header
     const isFibro = (selectedPractice || '').toLowerCase().includes('rinofaringolaringofibroscopia');
-    const activeHeader = isFibro ? (prof.headerFibro || []) : (prof.headerGeneral || []);
+    
+    // hasCustomHeader: Habilitado si el admin dio permiso O si el rol es directora_medica
+    const hasCustomHeader = prof.hasLetterhead === true || prof.role === 'directora_medica';
+    
+    // Forzamos que activeHeader sea un Array real, incluso si Firestore devuelve un Objeto
+    let rawHeader = isFibro ? (prof.headerFibro || []) : (prof.headerGeneral || []);
+    let activeHeader = Array.isArray(rawHeader) ? rawHeader : Object.values(rawHeader);
+    
+    // Rellenamos hasta 8 por seguridad
+    while(activeHeader.length < 8) activeHeader.push('');
 
-    // 1. Logo
+    // 1. Logo — ALWAYS
     const logoUrl = "/coat_logo.png";
     try {
       doc.addImage(logoUrl, 'PNG', 8, 8, 35, 16, undefined, 'FAST');
@@ -331,25 +389,29 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     }
 
     // 2. Header Text
-    let headerY = 16; 
-    if (reportData.enableHeader && prof.role === 'directora_medica') {
+    let headerY = 16;
+
+    if (hasCustomHeader && reportData.enableHeader && activeHeader.some(l => l && l.trim() !== '')) {
+      // Custom 8-line header (only for professionals with permission + toggle enabled)
       doc.setTextColor(60, 60, 60);
       activeHeader.forEach((line, index) => {
-        if (line && line.trim() !== '') {
+        const textLine = (line || '').toString().trim();
+        if (textLine !== '') {
           let fontSize = 7.5;
           if (index === 0) fontSize = 11;
           else if (index === 1 || index === 2) fontSize = 10;
           
           doc.setFontSize(fontSize);
-          doc.setFont('helvetica', index === 0 ? 'bold' : 'normal'); 
-          doc.text(line.toUpperCase(), 108, headerY, { align: 'center' });
-          headerY += (fontSize / 2.8) + 0.8;
-        } else {
-          headerY += 4.5;
+          doc.setFont('helvetica', index === 0 ? 'bold' : 'normal');
+          doc.text(textLine.toUpperCase(), 108, headerY, { align: 'center' });
+          headerY += (fontSize / 2.8) + 1.5; // Un poco más de aire
+        } else if (index < 4) { 
+          // Si una de las líneas principales está vacía, dejamos el hueco para mantener estructura
+          headerY += 5;
         }
       });
     } else {
-      // General Header (Photo version)
+      // Default COAT institutional header — always shown when no custom header
       doc.setTextColor(30, 30, 30);
       doc.setFontSize(10);
       doc.setFont('helvetica', 'bold');
@@ -359,27 +421,23 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       doc.text("NARIZ • GARGANTA • OÍDO", 108, 19, { align: 'center' });
     }
 
-    let currentY = (reportData.enableHeader && prof.role === 'directora_medica') 
-      ? Math.max(headerY + 5, 45) 
-      : 30; 
-    doc.setDrawColor(200);
-    doc.line(10, currentY - 5, 200, currentY - 5);
+    // 3. Bloque de Datos del Paciente (Compactado)
+    let currentY = (hasCustomHeader && reportData.enableHeader && activeHeader.some(l => l && l.trim() !== ''))
+      ? Math.max(headerY + 4, 42)
+      : 30;
 
-    // Patients Data (Fixed 2-Line Header)
-    doc.setFontSize(9); // Correct size for readability and fit
-    doc.setFont("helvetica", "normal");
+    doc.setDrawColor(200, 200, 200);
+    doc.line(15, currentY - 5, 195, currentY - 5); // Línea superior
     
-    // Line 1: PACIENTE (Centered)
-    doc.setFont("helvetica", "bold");
-    const patientText = `PACIENTE: ${reportData.patient.toUpperCase()}`;
-    const pWidth = doc.getTextWidth(patientText);
-    doc.text(patientText, (pageWidth - pWidth) / 2, currentY);
+    // Nombre del Paciente (CENTRADOS Y COMPACTOS)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 105, currentY, { align: 'center' });
     
-    currentY += 5;
-
-    // Line 2: Other info centered and reflowing (hiding empty fields)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8); // Slightly smaller for the secondary info line
+    // Datos secundarios (Obra Social, DNI, Fecha)
+    currentY += 5.5;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork.toUpperCase()}`);
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
@@ -387,14 +445,11 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester.toUpperCase()}`);
     if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason.toUpperCase()}`);
 
-    const secondaryInfo = infoParts.join("  |  ");
-    const sWidth = doc.getTextWidth(secondaryInfo);
-    doc.text(secondaryInfo, (pageWidth - sWidth) / 2, currentY);
+    doc.text(infoParts.join('  |  '), 105, currentY, { align: 'center' });
     
-    currentY += 7;
-
-    doc.line(10, currentY, 200, currentY);
-    currentY += 8;
+    currentY += 4.5;
+    doc.line(15, currentY, 195, currentY); // Línea inferior (Bien cerca de los datos)
+    currentY += 6;
 
     // Report Title
     let titleToPrint = "";
@@ -430,7 +485,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         currentY = 20;
       }
       doc.text(line, 10, currentY);
-      currentY += 4.8;
+      currentY += 4.2;
     });
     
     // Signature Area - Siempre al fondo de la hoja
@@ -498,19 +553,16 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       currentY += (i === 0 ? 3.5 : 3);
     });
 
-    // 10. Footer Institucional (Bottom of page)
-    doc.setDrawColor(30, 58, 138); // Blue COAT color
+    // 10. Footer Institucional (Bottom of page) — ALWAYS shown
+    const footerY = pageHeight - 15;
+    doc.setDrawColor(30, 58, 138);
     doc.setLineWidth(0.5);
-    doc.line(10, pageHeight - 22, 200, pageHeight - 22);
-    
-    doc.setFontSize(7.5);
-    doc.setTextColor(60, 60, 60);
-    doc.setFont("helvetica", "normal");
-    const footerLine1 = "Urquiza 401 - Alberdi - X5000KPI Córdoba - Teléfono: 0351 423-9428";
-    const footerLine2 = "+54 3543 579794 - Solicite turnos online: www.coat.com.ar";
-    
-    doc.text(footerLine1, 105, pageHeight - 15, { align: 'center' });
-    doc.text(footerLine2, 105, pageHeight - 11, { align: 'center' });
+    doc.line(10, footerY - 5, 200, footerY - 5);
+    doc.setFontSize(7);
+    doc.setTextColor(100, 100, 100);
+    doc.setFont('helvetica', 'normal');
+    doc.text("Urquiza 401 - Alberdi • Córdoba • Tel: (0351) 423-0530 / 423-9428 • WhatsApp: 3543579794", 105, footerY, { align: 'center' });
+    doc.text("Email: info@coat.com.ar • Web: www.coat.com.ar", 105, footerY + 3.5, { align: 'center' });
 
     if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
@@ -599,7 +651,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         </div>
       `;
 
-      const bodyPaciente = `
+      const emailBody = `
         <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
           <p>Estimado/a <strong>${reportData.patient}</strong>,</p>
           <p>Esperamos que se encuentre bien.</p>
@@ -627,60 +679,47 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         </div>
       `;
 
-      const bodyAdmin = `
-        <div style="font-family: sans-serif; line-height: 1.6; color: #333;">
-          <h2 style="color: #d32f2f;">Copia de Informe - Sistema COAT</h2>
-          <p>Se ha generado un nuevo informe técnico.</p>
-          <hr/>
-          <ul>
-            <li><strong>Paciente:</strong> ${reportData.patient}</li>
-            <li><strong>DNI:</strong> ${reportData.dni || 'No informado'}</li>
-            <li><strong>Estudio:</strong> ${displayTitle}</li>
-            <li><strong>Profesional:</strong> ${professional?.nombre || 'Dr/a.'}</li>
-          </ul>
-        </div>
-      `;
-
-      // Preparar ejecuciones en paralelo para no bloquear el UI
-      const emailPromises = [];
-
       // Envío a Administración
-      emailPromises.push(
-        fetch(config.appsScriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          body: JSON.stringify({
-            token: config.token,
-            pdfBase64,
-            recipientEmails: [config.adminEmail],
-            subject: `${reportData.patient} - ${displayTitle}`,
-            message: bodyAdmin,
-            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
-          })
-        })
-      );
-
-      // Envío al Paciente (si tiene email)
-      if (reportData.patientEmail) {
-        emailPromises.push(
-          fetch(config.appsScriptUrl, {
+      if (config.adminEmail && !reportData.sentToAdmin) {
+        try {
+          await fetch(config.appsScriptUrl, {
             method: 'POST',
             mode: 'no-cors',
             body: JSON.stringify({
               token: config.token,
               pdfBase64,
-              recipientEmails: [reportData.patientEmail],
-              subject: subjectPaciente,
-              message: bodyPaciente,
+              recipientEmails: [config.adminEmail],
+              subject: `Informe Médico: ${reportData.patient}`,
+              message: emailBody,
               fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
             })
-          })
-        );
+          });
+        } catch (e) {
+          console.warn("Error enviando copia admin:", e);
+        }
       }
 
-      await Promise.all(emailPromises);
+      // Envío al Paciente (si tiene email)
+      if (reportData.patientEmail) {
+        await fetch(config.appsScriptUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          body: JSON.stringify({
+            token: config.token,
+            pdfBase64,
+            recipientEmails: [reportData.patientEmail],
+            subject: subjectPaciente,
+            message: emailBody,
+            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+          })
+        });
+      }
       
-      // Guardamos en el historial (sin navegar fuera si estamos enviando)
+      // Actualizamos el estado para que saveToHistory sepa que ya se envió a admin
+      const updatedReportData = { ...reportData, sentToAdmin: true };
+      setReportData(updatedReportData);
+      
+      // Guardamos en el historial con el nuevo flag
       await saveToHistory(null, false);
       
       showToast('¡Informe enviado con éxito!');
@@ -692,6 +731,13 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       setIsGenerating(false);
     }
   };
+  // Auxiliar para formatear fechas en el mail
+  const formatDateForEmail = (date) => {
+    if (!date) return '';
+    const d = date.seconds ? new Date(date.seconds * 1000) : new Date(date);
+    return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  };
+
   const handleResendToPatient = async () => {
     if (!reportData.patientEmail) {
       showToast('El informe no cuenta con un email de paciente registrado.', 'error');
@@ -805,13 +851,13 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     }
 
     return (
-      <div className="fixed inset-0 z-[9999] bg-slate-900 flex flex-col">
+      <div className="fixed inset-0 z-[9999] bg-[var(--bg-page)] flex flex-col">
         {/* Header de la Vista Previa exclusiva */}
-        <div className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm shrink-0">
+        <div className="h-16 bg-[var(--bg-secondary)] border-b border-main flex items-center justify-between px-6 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-black tracking-tight text-slate-800">Vista Previa</h2>
-            <div className="h-6 w-[1px] bg-slate-200"></div>
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{reportData.patient}</p>
+            <h2 className="text-lg font-black tracking-tight text-[var(--text-main)]">Vista Previa</h2>
+            <div className="h-6 w-[1px] bg-[var(--border-main)]"></div>
+            <p className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest">{reportData.patient}</p>
           </div>
           
           <div className="flex items-center gap-3">
@@ -854,7 +900,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
           </div>
         </div>
 
-        <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-slate-800">
+        <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-[var(--bg-secondary)]">
           <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden">
             <iframe 
               src={previewUrl}
@@ -906,7 +952,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               </div>
             </div>
 
-            {professional?.role === 'directora_medica' && (
+            {(professional?.hasLetterhead === true || professional?.role === 'directora_medica') && (
               <div 
                 className={`
                   flex items-center gap-3 px-4 py-2 rounded-2xl border transition-all duration-300 cursor-pointer
@@ -939,31 +985,54 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
             )}
           </div>
 
+          {/* Row 1: DNI (buscar paciente) + Paciente */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">
+                DNI {reportRequiredFields.reportRequiredDni ? '*' : '(Opcional)'}
+              </label>
+              <input
+                type="text"
+                inputMode="numeric"
+                className="input-field"
+                placeholder="Solo números - buscar paciente"
+                value={reportData.dni}
+                onChange={e => setReportData({...reportData, dni: e.target.value.replace(/\D/g, '')})}
+              />
+            </div>
             <div className="space-y-1 md:col-span-2">
-              <label className="text-xs font-bold uppercase opacity-60">Paciente *</label>
-              <input 
-                type="text" 
-                className="input-field" 
+              <label className="text-xs font-bold uppercase opacity-60">
+                Paciente {reportRequiredFields.reportRequiredPatient ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="text"
+                className="input-field"
                 placeholder="Nombre y Apellido completo"
                 value={reportData.patient}
                 onChange={e => setReportData({...reportData, patient: toTitleCase(e.target.value)})}
               />
             </div>
+          </div>
+
+          {/* Row 2: Fecha + Obra Social + Solicitante */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">Fecha *</label>
-              <input 
-                type="date" 
+              <label className="text-xs font-bold uppercase opacity-60">
+                Fecha {reportRequiredFields.reportRequiredDate ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="date"
                 className="input-field"
                 value={reportData.date}
                 onChange={e => setReportData({...reportData, date: e.target.value})}
               />
             </div>
-
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">Obra Social *</label>
-              <input 
-                type="text" 
+              <label className="text-xs font-bold uppercase opacity-60">
+                Obra Social {reportRequiredFields.reportRequiredSocialWork ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="text"
                 className="input-field"
                 placeholder=""
                 value={reportData.socialWork}
@@ -971,20 +1040,11 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">DNI (Opcional)</label>
-              <input 
-                type="text" 
-                inputMode="numeric"
-                className="input-field"
-                placeholder="Solo números"
-                value={reportData.dni}
-                onChange={e => setReportData({...reportData, dni: e.target.value.replace(/\D/g, '')})}
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">Solicitante (Opc)</label>
-              <input 
-                type="text" 
+              <label className="text-xs font-bold uppercase opacity-60">
+                Solicitante {reportRequiredFields.reportRequiredRequester ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="text"
                 className="input-field"
                 placeholder="Médico que solicita..."
                 value={reportData.requester}
@@ -995,7 +1055,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">Motivo / Descripción (Opc)</label>
+              <label className="text-xs font-bold uppercase opacity-60">
+                Motivo / Descripción {reportRequiredFields.reportRequiredReason ? '*' : '(Opc)'}
+              </label>
               <input 
                 type="text" 
                 className="input-field"
@@ -1005,14 +1067,46 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">Email Paciente (Opc)</label>
-              <input 
-                type="email" 
+              <label className="text-xs font-bold uppercase opacity-60">
+                Email Paciente {reportRequiredFields.reportRequiredEmail ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="email"
                 className={`input-field ${reportData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reportData.patientEmail)) ? 'input-error' : ''}`}
-                placeholder="Email..."
+                placeholder={reportRequiredFields.reportRequiredEmail ? '' : 'Email...'}
                 value={reportData.patientEmail}
                 onChange={e => setReportData({...reportData, patientEmail: e.target.value})}
               />
+              <AnimatePresence>
+                {emailAutoFilledToast && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-1.5 ml-1 mt-1"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                    <span className="text-[10px] font-bold text-green-500">
+                      Email autocargado del historial del paciente
+                    </span>
+                  </motion.div>
+                )}
+                {emailMissingWarning && !emailAutoFilledToast && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -4 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex items-center gap-1.5 ml-1 mt-1"
+                  >
+                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    <span className="text-[10px] font-bold text-amber-500">
+                      Verificar email con el paciente
+                    </span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </div>
 
@@ -1056,6 +1150,15 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 theme="snow"
                 value={content}
                 onChange={setContent}
+                modules={{
+                  toolbar: [
+                    [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
+                    ['bold', 'italic', 'underline', 'strike'],
+                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
+                    [{ 'color': [] }, { 'background': [] }],
+                    ['clean']
+                  ],
+                }}
                 className="quill-editor-custom"
               />
             </div>
@@ -1112,14 +1215,14 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[100] bg-slate-900/95 flex flex-col"
+            className="fixed inset-0 z-[100] bg-[var(--bg-page)] flex flex-col"
           >
             {/* Overlay Header */}
-            <div className="h-16 bg-white border-b flex items-center justify-between px-6 shadow-sm shrink-0">
+            <div className="h-16 bg-[var(--bg-secondary)] border-b border-main flex items-center justify-between px-6 shadow-sm shrink-0">
               <div className="flex items-center gap-4">
-                <h2 className="text-lg font-black tracking-tight text-slate-800">Vista Previa</h2>
-                <div className="h-6 w-[1px] bg-slate-200"></div>
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">{reportData.patient}</p>
+                <h2 className="text-lg font-black tracking-tight text-[var(--text-main)]">Vista Previa</h2>
+                <div className="h-6 w-[1px] bg-[var(--border-main)]"></div>
+                <p className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest">{reportData.patient}</p>
               </div>
               
               <div className="flex items-center gap-3">
@@ -1163,8 +1266,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
             </div>
 
             {/* Preview Content */}
-            <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-slate-800/50">
-              <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden border border-white/10">
+            <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-[var(--bg-secondary)]">
+              <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden">
                 <iframe 
                   src={previewUrl}
                   className="w-full h-full border-none"
