@@ -1058,7 +1058,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder=""
                 value={reportData.socialWork}
-                onChange={e => setReportData({...reportData, socialWork: toTitleCase(e.target.value)})}
+                onChange={e => setReportData({...reportData, socialWork: e.target.value.toUpperCase()})}
               />
             </div>
             <div className="space-y-1">

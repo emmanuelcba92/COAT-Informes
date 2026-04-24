@@ -546,7 +546,10 @@ const OrdersPage = ({ userProfile: propProfile }) => {
                         className={`w-full pl-10 pr-4 py-3 bg-[var(--bg-secondary)] border ${hasError ? 'border-red-400 ring-1 ring-red-100' : 'border-main'} rounded-2xl text-sm focus:border-blue-500 outline-none transition-all text-[var(--text-main)]`} 
                         placeholder={f.ph} 
                         value={val} 
-                        onChange={e => setPatientData({...patientData, [f.key]: e.target.value})} 
+                        onChange={e => {
+                          const newValue = f.key === 'insurance' ? e.target.value.toUpperCase() : e.target.value;
+                          setPatientData({...patientData, [f.key]: newValue});
+                        }} 
                       />
                     </div>
                   </div>
