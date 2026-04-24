@@ -166,6 +166,8 @@ const OrdersPage = ({ userProfile: propProfile }) => {
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
   };
 
+  const [orderSettings, setOrderSettings] = useState({ categories: [], practicesByType: {} });
+
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -174,12 +176,41 @@ const OrdersPage = ({ userProfile: propProfile }) => {
         if (configSnap.exists()) {
           setConfig(configSnap.data());
         }
+
+        const ordersRef = doc(db, 'config', 'order_settings');
+        const ordersSnap = await getDoc(ordersRef);
+        if (ordersSnap.exists()) {
+          setOrderSettings(ordersSnap.data());
+        }
       } catch (err) {
         console.error("Error fetching config:", err);
       }
     };
     fetchConfig();
   }, []);
+
+  const filteredPractices = React.useMemo(() => {
+    const userRole = profile?.role;
+    const isAdmin = userRole === 'admin' || userRole === 'directora_medica';
+
+    // If we have data in Firestore, use it
+    if (orderSettings.categories.length > 0) {
+      const allPractices = [];
+      orderSettings.categories.forEach(cat => {
+        const practices = orderSettings.practicesByType[cat.id] || [];
+        practices.forEach(p => {
+          const allowedRoles = p.allowedRoles || [];
+          if (isAdmin || allowedRoles.length === 0 || allowedRoles.includes(userRole)) {
+            allPractices.push({ ...p, category: cat.label });
+          }
+        });
+      });
+      return allPractices;
+    }
+
+    // Fallback to defaultRPPractices if Firestore is empty
+    return defaultRPPractices;
+  }, [orderSettings, profile]);
 
   const togglePractice = (name) => {
     setSelectedPractices(prev => {
@@ -298,7 +329,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
       let y = currentY + 7;
       const rowHeight = 5.2; // Reduced line spacing
       
-      defaultRPPractices.forEach((p) => {
+      filteredPractices.forEach((p) => {
         const isSelected = selectedPractices.includes(p.n);
         doc.setDrawColor(200);
         doc.rect(25, y - 3, 3.5, 3.5);
@@ -559,7 +590,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
                </div>
             </div>
             <div className="p-6 space-y-1 max-h-[600px] overflow-y-auto custom-scrollbar">
-              {defaultRPPractices.filter(p => p.n.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => (
+              {filteredPractices.filter(p => p.n.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => (
                 <div key={idx} className={`flex items-center justify-between p-2 rounded-xl transition-all border ${selectedPractices.includes(p.n) ? 'bg-blue-600/5 border-blue-600/20' : 'bg-transparent border-transparent hover:bg-[var(--bg-secondary)]'}`}>
                   <div onClick={() => togglePractice(p.n)} className="flex items-center gap-3 flex-1 cursor-pointer py-1">
                     <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-all ${selectedPractices.includes(p.n) ? 'bg-blue-600 border-blue-600' : 'bg-[var(--bg-card)] border-main'}`}>

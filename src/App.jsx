@@ -136,19 +136,25 @@ function App() {
           console.warn("Supabase Heartbeat error:", e.message);
         }
 
-        try {
-          const docRef = doc(db, 'users', user.uid);
-          const docSnap = await getDoc(docRef);
-          if (docSnap.exists()) {
-            const data = docSnap.data();
+        // Listener de perfil en tiempo real
+        const profileUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (snap) => {
+          if (snap.exists()) {
+            const data = snap.data();
             setUserProfile(data);
             const role = data.role?.toLowerCase() || '';
             setIsSecretaria(role === 'secretaria' || role === 'secre' || role === 'secretaría');
             setIsDirectora(role.includes('directora') || role.includes('director'));
           }
-        } catch (error) {
-          console.error("Error fetching profile:", error);
-        }
+        }, (error) => {
+          console.error("Error fetching profile listener:", error);
+        });
+        
+        // Agregar a la limpieza
+        const oldUnsubscribeSettings = unsubscribeSettings;
+        unsubscribeSettings = () => {
+          oldUnsubscribeSettings();
+          profileUnsubscribe();
+        };
       } else {
         setCurrentUser(null);
         setUserProfile(null);
@@ -166,8 +172,7 @@ function App() {
   }, []);
 
   const isAdmin = userProfile?.role === 'admin' || 
-                  currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar' ||
-                  currentUser?.email?.toLowerCase() === 'aparedes@coat.com.ar';
+                  currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar';
 
 
 

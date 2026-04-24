@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -130,6 +130,26 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   const printFlag = new URLSearchParams(location.search).get('print');
   const previewFlag = new URLSearchParams(location.search).get('preview');
   const [isEditing, setIsEditing] = useState(false);
+
+  // Filtrado de modelos según especialidad/rol
+  const filteredPractices = useMemo(() => {
+    if (!dbPractices) return [];
+    
+    const userRole = professional?.role;
+    
+    // Admin y Directora Médica ven todo
+    if (userRole === 'admin' || userRole === 'directora_medica') {
+      return dbPractices;
+    }
+    
+    return dbPractices.filter(p => {
+      // Si el modelo no tiene roles definidos (legacy), se muestra a todos para no romper nada
+      if (!p.allowedRoles || p.allowedRoles.length === 0) return true;
+      
+      // Solo si el rol del profesional está incluido en los permitidos para este modelo
+      return p.allowedRoles.includes(userRole);
+    });
+  }, [dbPractices, professional?.role]);
   
   // Sistema de Notificaciones Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -144,7 +164,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     try {
       const data = {
         profesionalId: editId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
-        profesionalNombre: professional?.nombre || 'Desconocido',
+        profesionalNombre: professional?.nombre || professional?.n || 'Médico',
         pacienteNombre: reportData.patient.toUpperCase(),
         pacienteDni: reportData.dni || '',
         obraSocial: reportData.socialWork.toUpperCase(),
@@ -264,7 +284,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                   const profData = profSnap.data();
                   setProfessional({
                     ...profData,
-                    nombre: profData.nombre || profData.n || 'Médico',
+                    nombre: profData.nombre || profData.n || 'Profesional',
                     especialidad: profData.especialidad || profData.esp || '',
                     mp: profData.mp || profData.m || '',
                     hasLetterhead: profData.hasLetterhead === true,
@@ -541,9 +561,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     
     const isStaff = prof.role === 'admin' || prof.role === 'secre';
     const footerLines = [
-      prof.nombre || (isStaff ? 'Administración' : 'Profesional'),
-      isStaff ? '' : (prof.especialidad || 'Especialista'),
-      isStaff ? '' : `MP: ${prof.mp || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
+      prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional'),
+      isStaff ? '' : (prof.especialidad || prof.esp || 'Especialista'),
+      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
     ].filter(line => line !== '');
 
     footerLines.forEach((text, i) => {
@@ -1119,7 +1139,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               onChange={e => handlePracticeChange(e.target.value)}
             >
               <option value="" className="bg-[var(--bg-card)]">Seleccione un modelo de informe...</option>
-              {dbPractices.map(p => <option key={p.id} value={p.n} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.n}</option>)}
+              {filteredPractices.map(p => <option key={p.id} value={p.n} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.n}</option>)}
             </select>
           </div>
 

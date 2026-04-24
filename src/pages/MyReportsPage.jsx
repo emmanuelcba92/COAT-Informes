@@ -143,16 +143,19 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
         const cleanList = Object.values(uniqueUsers)
           .map(u => {
             const rawName = u.nombre || u.n || u.u || 'Profesional';
+            let rawRole = (u.role || u.rol || '').toLowerCase().trim();
+            if (!rawRole || rawRole === 'médico' || rawRole === 'medico') rawRole = 'orl';
             return {
               ...u,
               nombre: rawName.toUpperCase().trim(),
-              rol: (u.role || u.rol || '').toLowerCase().trim()
+              rol: rawRole
             };
           })
           .filter(u => {
             const name = u.nombre.toLowerCase();
             const role = u.rol.toLowerCase();
-            const isMedicalRole = role.includes('medico') || role.includes('médico') || role.includes('fonoaudiología');
+            const medicalRoles = ['cabeza y cuello', 'cx plástica', 'electrografías', 'orl', 'vestibular', 'directora_medica'];
+            const isMedicalRole = medicalRoles.includes(role) || role.includes('médico') || role.includes('fonoaudiología');
             // Excluir si el nombre contiene "sercretaria" (con R), "secretaria" o "admin"
             const isExcludedName = name.includes('sercretaria') || name.includes('secretaria') || name.includes('admin');
             return isMedicalRole && !isExcludedName;
@@ -788,7 +791,11 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
                       </div>
                     </td>
                     <td className="px-8 py-6">
-                       <p className="font-bold text-[10px] text-blue-600 uppercase tracking-tighter max-w-[120px] truncate">{report.profesionalNombre}</p>
+                        <p className="font-bold text-[10px] text-blue-600 uppercase tracking-tighter max-w-[120px] truncate">
+                          {(!report.profesionalNombre || report.profesionalNombre === 'Desconocido' || report.profesionalNombre === 'Profesional Desconocido') 
+                            ? (professionals.find(p => p.id === report.profesionalId)?.nombre || report.profesionalNombre || 'Médico')
+                            : report.profesionalNombre}
+                        </p>
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex items-center gap-3">

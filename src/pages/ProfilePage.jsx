@@ -107,7 +107,7 @@ const ProfilePage = () => {
             headerFibro: profileData.headerFibro || Array(8).fill(''),
             signatureBase64: profileData.signatureBase64 || null,
             email: email,
-            role: profileData.role || 'médico',
+            role: (profileData.role === 'médico' || profileData.role === 'medico' || !profileData.role) ? 'ORL' : profileData.role,
             hasLetterhead: profileData.hasLetterhead || false,
           };
           setProfile(cleanProfile);
@@ -252,7 +252,7 @@ const ProfilePage = () => {
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
         <div>
-          <h1 className="text-4xl font-black text-[var(--text-main)] transition-colors">Mi Perfil Médico</h1>
+          <h1 className="text-4xl font-black text-[var(--text-main)] transition-colors">Mi Perfil Profesional</h1>
           <p className="text-[var(--text-sub)] mt-1">Configure sus datos de firma y membretes oficiales</p>
         </div>
         <button 

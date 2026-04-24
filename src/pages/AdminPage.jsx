@@ -87,7 +87,7 @@ const AdminPage = () => {
     especialidad: "",
     u: "",
     password: "",
-    role: "médico",
+    role: "ORL",
   });
   const [loading, setLoading] = useState(true);
 
@@ -136,11 +136,12 @@ const AdminPage = () => {
     label: "",
     icon: "Clipboard",
   });
-  const [newPracticeForm, setNewPracticeForm] = useState({ n: "", c: "" });
+  const [newPracticeForm, setNewPracticeForm] = useState({ n: "", c: "", allowedRoles: [] });
   const [editingOrderPracticeIdx, setEditingOrderPracticeIdx] = useState(null);
   const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({
     n: "",
     c: "",
+    allowedRoles: [],
   });
 
   // Security Check
@@ -153,7 +154,7 @@ const AdminPage = () => {
       }
 
       const email = user.email?.toLowerCase();
-      const whiteList = ["egomez@coat.com.ar", "aparedes@coat.com.ar"];
+      const whiteList = ["egomez@coat.com.ar"];
 
       try {
         const docRef = doc(db, "users", user.uid);
@@ -162,6 +163,9 @@ const AdminPage = () => {
         if (docSnap.exists()) {
           const profile = docSnap.data();
           const role = profile.role?.toLowerCase() || "";
+
+          const medicalRoles = ['cabeza y cuello', 'cx plástica', 'electrografías', 'orl', 'vestibular', 'directora_medica'];
+          const isMedicalRole = medicalRoles.includes(role) || role.includes('médico') || role.includes('fonoaudiología');
 
           const isAuthorized = role === "admin" || whiteList.includes(email);
 
@@ -555,10 +559,15 @@ const AdminPage = () => {
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
-    const role = u.role || "médico";
-    const isStaff = role === "admin" || role === "secre";
+    let rawRole = (u.role || u.rol || "").toLowerCase().trim();
+    // Migración automática de rol legacy
+    if (!rawRole || rawRole === 'médico' || rawRole === 'medico') {
+      rawRole = 'orl';
+    }
+    
+    const isStaff = rawRole === "admin" || rawRole === "secretaria" || rawRole === "secre";
     return {
-      nombre: (u.nombre || u.n || u.u || "Sin nombre").toUpperCase().trim(),
+      nombre: (u.nombre || u.n || u.u || "Profesional").toUpperCase().trim(),
       email: (u.email || u.e || u.u || "").toLowerCase().trim(),
       especialidad: isStaff
         ? ""
@@ -566,10 +575,20 @@ const AdminPage = () => {
       mp: isStaff ? "" : u.mp || u.m || "-",
       me: isStaff ? "" : u.me || "-",
       id: u.id,
-      role: role,
+      role: rawRole,
       isOfficial: u.id.length === 28,
       lastLogin: u.lastLogin || null,
     };
+  };
+
+  const handleUpdateUserRole = async (userId, newRole) => {
+    try {
+      const userRef = doc(db, "users", userId);
+      await setDoc(userRef, { role: newRole }, { merge: true });
+    } catch (err) {
+      console.error("Error actualizando rol:", err);
+      alert("Error al actualizar rol: " + err.message);
+    }
   };
 
   const handleDeleteUser = async (id) => {
@@ -650,16 +669,21 @@ const AdminPage = () => {
   const handleSavePractice = async () => {
     if (!practiceForm.c || !practiceForm.n) return alert("Campos obligatorios");
     try {
+      const dataToSave = {
+        ...practiceForm,
+        allowedRoles: practiceForm.allowedRoles || []
+      };
+      
       if (selectedPractice) {
         await updateDoc(
           doc(db, "practices", selectedPractice.id),
-          practiceForm,
+          dataToSave,
         );
         setSelectedPractice(null);
       } else {
-        await addDoc(collection(db, "practices"), practiceForm);
+        await addDoc(collection(db, "practices"), dataToSave);
       }
-      setPracticeForm({ c: "", n: "", b: "", st: true });
+      setPracticeForm({ c: "", n: "", b: "", st: true, allowedRoles: [] });
     } catch (err) {
       alert(err.message);
     }
@@ -673,6 +697,7 @@ const AdminPage = () => {
       n: p.n || "",
       b: p.b || "",
       st: p.st !== undefined ? p.st : true,
+      allowedRoles: p.allowedRoles || [],
     };
     console.log("Setting practiceForm to:", newData);
     setPracticeForm(newData);
@@ -766,7 +791,7 @@ const AdminPage = () => {
 
   const handleStartEditOrderPractice = (idx, p) => {
     setEditingOrderPracticeIdx(idx);
-    setEditOrderPracticeForm({ n: p.n, c: p.c || "" });
+    setEditOrderPracticeForm({ n: p.n, c: p.c || "", allowedRoles: p.allowedRoles || [] });
   };
 
   const handleSaveEditOrderPractice = async (idx) => {
@@ -870,13 +895,13 @@ const AdminPage = () => {
           nombre: manualUserForm.nombre.trim(),
           u: manualUserForm.u.toLowerCase().trim(),
           email: email,
-          especialidad: "Otorrinolaringólogo",
+          especialidad: manualUserForm.role || "ORL",
           mp: "-",
           me: "-",
           isOfficial: true,
-          role: manualUserForm.role || "médico",
-          hasLetterhead: (manualUserForm.role || "médico") === "directora_medica" ? true : false,
-          canCustomizeModels: (manualUserForm.role || "médico") === "directora_medica" ? true : false,
+          role: manualUserForm.role || "ORL",
+          hasLetterhead: ["directora_medica", "admin"].includes(manualUserForm.role) ? true : false,
+          canCustomizeModels: ["directora_medica", "admin"].includes(manualUserForm.role) ? true : false,
         },
         { merge: true },
       );
@@ -1439,10 +1464,7 @@ const AdminPage = () => {
                         Especialidad
                       </th>
                       <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        Estado
-                      </th>
-                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">
-                        Acceso
+                        Rol de Acceso
                       </th>
                       <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">
                         Acciones
@@ -1488,41 +1510,32 @@ const AdminPage = () => {
                           </div>
                         </td>
                         <td className="px-6 py-4">
-                          <span
-                            className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${
-                              user._std.isOfficial
-                                ? "bg-green-100 text-green-600"
-                                : "bg-orange-100 text-orange-600"
+                          <select
+                            value={user._std.role}
+                            onChange={(e) => handleUpdateUserRole(user.id, e.target.value)}
+                            className={`px-3 py-1.5 rounded-full text-[9px] font-black uppercase tracking-tighter cursor-pointer border-none focus:ring-2 focus:ring-blue-500/20 transition-all ${
+                              user._std.role === 'admin'
+                                ? "bg-red-100 text-red-600"
+                                : user._std.role === 'directora_medica'
+                                ? "bg-purple-100 text-purple-600"
+                                : user._std.role === 'secretaria'
+                                ? "bg-amber-100 text-amber-600"
+                                : "bg-blue-100 text-blue-600"
                             }`}
                           >
-                            {user._std.isOfficial ? "Oficial" : "Provisorio"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-bold text-[var(--text-main)]">
-                              {user._std.lastLogin
-                                ? new Date(
-                                    user._std.lastLogin,
-                                  ).toLocaleDateString("es-AR", {
-                                    day: "2-digit",
-                                    month: "2-digit",
-                                    year: "numeric",
-                                  })
-                                : "Nunca"}
-                            </span>
-                            {user._std.lastLogin && (
-                              <span className="text-[10px] text-gray-400">
-                                {new Date(
-                                  user._std.lastLogin,
-                                ).toLocaleTimeString("es-AR", {
-                                  hour: "2-digit",
-                                  minute: "2-digit",
-                                })}{" "}
-                                hs
-                              </span>
-                            )}
-                          </div>
+                            <optgroup label="Administración">
+                              <option value="admin">Administrador</option>
+                              <option value="directora_medica">Directora Médica</option>
+                              <option value="secretaria">Secretaría</option>
+                            </optgroup>
+                            <optgroup label="Especialidades">
+                              <option value="cabeza y cuello">Cabeza y cuello</option>
+                              <option value="cx plástica">CX Plástica</option>
+                              <option value="electrografías">Electrografías</option>
+                              <option value="orl">ORL</option>
+                              <option value="vestibular">Vestibular</option>
+                            </optgroup>
+                          </select>
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1691,6 +1704,40 @@ const AdminPage = () => {
                       className="w-full px-5 py-3 bg-white border border-main rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none font-bold placeholder:text-gray-200"
                       placeholder="Ej: Rinofaringolaringofibroscopia"
                     />
+                  </div>
+                </div>
+
+                {/* Specialty Selection for Model */}
+                <div className="mt-4 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">
+                    Especialidades con acceso a este modelo
+                  </label>
+                  <div className="flex flex-wrap gap-2 px-2">
+                    {[
+                      { id: "cabeza y cuello", label: "Cabeza y cuello" },
+                      { id: "cx plástica", label: "CX plástica" },
+                      { id: "electrografías", label: "Electrografías" },
+                      { id: "orl", label: "ORL" },
+                      { id: "vestibular", label: "Vestibular" }
+                    ].map(roleObj => (
+                      <button
+                        key={roleObj.id}
+                        onClick={() => {
+                          const currentRoles = practiceForm.allowedRoles || [];
+                          const nextRoles = currentRoles.includes(roleObj.id)
+                            ? currentRoles.filter(r => r !== roleObj.id)
+                            : [...currentRoles, roleObj.id];
+                          setPracticeForm({ ...practiceForm, allowedRoles: nextRoles });
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-[10px] font-bold uppercase tracking-tight transition-all border ${
+                          (practiceForm.allowedRoles || []).includes(roleObj.id)
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-main text-gray-400 hover:border-blue-300'
+                        }`}
+                      >
+                        {roleObj.label}
+                      </button>
+                    ))}
                   </div>
                 </div>
               </div>
@@ -2050,6 +2097,38 @@ const AdminPage = () => {
                           placeholder="Código..."
                         />
                       </div>
+                      <div className="md:col-span-3 space-y-2">
+                        <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                          Especialidades con acceso (Vacío = Todos)
+                        </label>
+                        <div className="flex flex-wrap gap-2">
+                          {[
+                            { id: "cabeza y cuello", label: "Cabeza y cuello" },
+                            { id: "cx plástica", label: "CX plástica" },
+                            { id: "electrografías", label: "Electrografías" },
+                            { id: "orl", label: "ORL" },
+                            { id: "vestibular", label: "Vestibular" }
+                          ].map(roleObj => (
+                            <button
+                              key={roleObj.id}
+                              onClick={() => {
+                                const current = newPracticeForm.allowedRoles || [];
+                                const updated = current.includes(roleObj.id)
+                                  ? current.filter(r => r !== roleObj.id)
+                                  : [...current, roleObj.id];
+                                setNewPracticeForm({ ...newPracticeForm, allowedRoles: updated });
+                              }}
+                              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                                (newPracticeForm.allowedRoles || []).includes(roleObj.id)
+                                  ? "bg-blue-600 border-blue-600 text-white"
+                                  : "bg-[var(--bg-secondary)] border-main text-gray-400"
+                              }`}
+                            >
+                              {roleObj.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
                       <div className="md:col-span-1 flex items-end">
                         <button
                           onClick={handleAddOrderPractice}
@@ -2094,31 +2173,60 @@ const AdminPage = () => {
                           </div>
 
                           {editingOrderPracticeIdx === idx ? (
-                            <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-2 pr-4">
-                              <input
-                                type="text"
-                                className="input-field py-1.5 text-sm"
-                                value={editOrderPracticeForm.n}
-                                onChange={(e) =>
-                                  setEditOrderPracticeForm({
-                                    ...editOrderPracticeForm,
-                                    n: e.target.value,
-                                  })
-                                }
-                                autoFocus
-                              />
-                              <input
-                                type="text"
-                                className="input-field py-1.5 text-xs font-mono"
-                                value={editOrderPracticeForm.c}
-                                onChange={(e) =>
-                                  setEditOrderPracticeForm({
-                                    ...editOrderPracticeForm,
-                                    c: e.target.value.toUpperCase(),
-                                  })
-                                }
-                                placeholder="Cód."
-                              />
+                            <div className="flex-1 space-y-3 pr-4">
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                <input
+                                  type="text"
+                                  className="input-field py-1.5 text-sm"
+                                  value={editOrderPracticeForm.n}
+                                  onChange={(e) =>
+                                    setEditOrderPracticeForm({
+                                      ...editOrderPracticeForm,
+                                      n: e.target.value,
+                                    })
+                                  }
+                                  autoFocus
+                                />
+                                <input
+                                  type="text"
+                                  className="input-field py-1.5 text-xs font-mono"
+                                  value={editOrderPracticeForm.c}
+                                  onChange={(e) =>
+                                    setEditOrderPracticeForm({
+                                      ...editOrderPracticeForm,
+                                      c: e.target.value.toUpperCase(),
+                                    })
+                                  }
+                                  placeholder="Cód."
+                                />
+                              </div>
+                              <div className="flex flex-wrap gap-1.5">
+                                {[
+                                  { id: "cabeza y cuello", label: "Cabeza y cuello" },
+                                  { id: "cx plástica", label: "CX plástica" },
+                                  { id: "electrografías", label: "Electrografías" },
+                                  { id: "orl", label: "ORL" },
+                                  { id: "vestibular", label: "Vestibular" }
+                                ].map(roleObj => (
+                                  <button
+                                    key={roleObj.id}
+                                    onClick={() => {
+                                      const current = editOrderPracticeForm.allowedRoles || [];
+                                      const updated = current.includes(roleObj.id)
+                                        ? current.filter(r => r !== roleObj.id)
+                                        : [...current, roleObj.id];
+                                      setEditOrderPracticeForm({ ...editOrderPracticeForm, allowedRoles: updated });
+                                    }}
+                                    className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase transition-all border ${
+                                      (editOrderPracticeForm.allowedRoles || []).includes(roleObj.id)
+                                        ? "bg-blue-500 border-blue-500 text-white"
+                                        : "bg-white dark:bg-slate-800 border-gray-200 text-gray-400"
+                                    }`}
+                                  >
+                                    {roleObj.label}
+                                  </button>
+                                ))}
+                              </div>
                             </div>
                           ) : (
                             <div className="flex-1">
@@ -2707,22 +2815,20 @@ const AdminPage = () => {
                     </label>
                     <select
                       className="input-field"
-                      value={targetProf.role || "médico"}
+                      value={targetProf.role || "ORL"}
                       onChange={(e) => {
                         const newRole = e.target.value;
                         setTargetProf({ ...targetProf, role: newRole });
                       }}
                     >
-                      <option value="médico">
-                        Médico (Solo sus informes)
-                      </option>
-                      <option value="directora_medica">
-                        Directora Médica (Acceso total + Membretes)
-                      </option>
-                      <option value="admin">
-                        Administrador (Acceso total)
-                      </option>
-                      <option value="secre">Secretaría (Carga datos)</option>
+                      <option value="Cabeza y cuello">Cabeza y cuello (Solo sus informes)</option>
+                      <option value="CX plástica">CX plástica (Solo sus informes)</option>
+                      <option value="Electrografías">Electrografías (Solo sus informes)</option>
+                      <option value="ORL">ORL (Solo sus informes)</option>
+                      <option value="Vestibular">Vestibular (Solo sus informes)</option>
+                      <option value="admin">Administrador (Acceso total)</option>
+                      <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
+                      <option value="secretaria">Secretaría (Carga datos)</option>
                     </select>
                   </div>
 
@@ -3096,18 +3202,14 @@ const AdminPage = () => {
                       }
                       className="input-field appearance-none cursor-pointer"
                     >
-                      <option value="médico">
-                        Médico (Solo sus informes)
-                      </option>
-                      <option value="directora_medica">
-                        Directora Médica (Acceso total + Membretes)
-                      </option>
-                      <option value="secretaría">
-                        Secretaría (Solo lectura)
-                      </option>
-                      <option value="admin">
-                        Administrador (Control Total)
-                      </option>
+                      <option value="Cabeza y cuello">Cabeza y cuello</option>
+                      <option value="CX plástica">CX plástica</option>
+                      <option value="Electrografías">Electrografías</option>
+                      <option value="ORL">ORL</option>
+                      <option value="Vestibular">Vestibular</option>
+                      <option value="admin">Administrador (Control Total)</option>
+                      <option value="directora_medica">Directora Médica (Acceso Total)</option>
+                      <option value="secretaria">Secretaría (Acceso administrativo)</option>
                     </select>
                   </div>
                 </div>
