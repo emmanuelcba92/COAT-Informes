@@ -1718,7 +1718,8 @@ const AdminPage = () => {
                       { id: "cx plástica", label: "CX plástica" },
                       { id: "electrografías", label: "Electrografías" },
                       { id: "orl", label: "ORL" },
-                      { id: "vestibular", label: "Vestibular" }
+                      { id: "vestibular", label: "Vestibular" },
+                      { id: "directora_medica", label: "Directora Médica" }
                     ].map(roleObj => (
                       <button
                         key={roleObj.id}
@@ -2206,7 +2207,8 @@ const AdminPage = () => {
                                   { id: "cx plástica", label: "CX plástica" },
                                   { id: "electrografías", label: "Electrografías" },
                                   { id: "orl", label: "ORL" },
-                                  { id: "vestibular", label: "Vestibular" }
+                                  { id: "vestibular", label: "Vestibular" },
+                                  { id: "directora_medica", label: "Directora Médica" }
                                 ].map(roleObj => (
                                   <button
                                     key={roleObj.id}

@@ -135,9 +135,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   const filteredPractices = useMemo(() => {
     if (!dbPractices) return [];
     
-    const userRole = professional?.role;
+    const userRole = (professional?.role || '').toLowerCase().trim();
     
-    // Admin y Directora Médica ven todo
+    // Admin y Directora Médica ven todo para facilitar gestión y pruebas
     if (userRole === 'admin' || userRole === 'directora_medica') {
       return dbPractices;
     }

@@ -190,7 +190,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
   }, []);
 
   const filteredPractices = React.useMemo(() => {
-    const userRole = profile?.role;
+    const userRole = (profile?.role || '').toLowerCase().trim();
     const isAdmin = userRole === 'admin' || userRole === 'directora_medica';
 
     // If we have data in Firestore, use it
