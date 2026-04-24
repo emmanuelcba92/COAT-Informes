@@ -78,7 +78,7 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
   const [filterType, setFilterType] = useState('all');
   const [lastVisible, setLastVisible] = useState(null);
   const [hasMore, setHasMore] = useState(false);
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 15;
 
   // Sistema de Notificaciones Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -712,7 +712,7 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
           </div>
         </div>
 
-        <div className="md:col-span-3 bg-[var(--bg-card)] p-4 rounded-[2.5rem] border border-main flex items-center gap-4 shadow-sm">
+        <div className="md:col-span-3 bg-[var(--bg-card)] p-4 rounded-[2.5rem] border-2 border-slate-200 dark:border-main flex items-center gap-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
           <div className="flex-1 relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
             <input 

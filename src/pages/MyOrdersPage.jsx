@@ -53,7 +53,7 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
   const [isResending, setIsResending] = useState(null); // ID del pedido que se está reenviando
   const [previewUrl, setPreviewUrl] = useState(null);
   const [selectedOrderForPreview, setSelectedOrderForPreview] = useState(null);
-  const PAGE_SIZE = 20;
+  const PAGE_SIZE = 15;
 
   const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
   const canSelectProfessional = isAdmin || isSecretaria;
@@ -304,7 +304,7 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
           </div>
         </div>
 
-        <div className="md:col-span-3 bg-[var(--bg-card)] p-4 rounded-[2.5rem] border border-main flex items-center gap-4 shadow-sm">
+        <div className="md:col-span-3 bg-[var(--bg-card)] p-4 rounded-[2.5rem] border-2 border-slate-200 dark:border-main flex items-center gap-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
           {canSelectProfessional && (
             <div className="flex items-center gap-2 bg-[var(--bg-secondary)] px-4 py-3 rounded-2xl border border-main min-w-[200px]">
               <User size={16} className="text-blue-500" />

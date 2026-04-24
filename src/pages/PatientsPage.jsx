@@ -32,11 +32,14 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [visibleCount, setVisibleCount] = useState(10);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Intentamos ordenar por lastUpdated que es lo que usa NewOrderPage
-    const q = query(collection(db, 'patients'), orderBy('lastUpdated', 'desc'), limit(100));
+    // Intentamos ordenar alfabéticamente
+    // Nota: Si hay docs con 'name' y otros con 'nombre', Firestore requiere índices distintos.
+    // Por ahora priorizamos 'nombre' que es el estándar actual.
+    const q = query(collection(db, 'patients'), orderBy('nombre', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -46,8 +49,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
       setLoading(false);
     }, (err) => {
       console.error("Firestore Error:", err);
-      // Si falla por falta de índice o campo, intentamos sin ordenamiento para no dejar la pantalla en blanco
-      const fallbackQ = query(collection(db, 'patients'), limit(100));
+      // Fallback si falla el ordenamiento (por ejemplo si no hay campo 'nombre')
+      const fallbackQ = query(collection(db, 'patients'));
       onSnapshot(fallbackQ, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({
           id: doc.id,
@@ -56,7 +59,6 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
         setPatients(docs);
         setLoading(false);
       });
-      setError('Error al cargar pacientes');
     });
 
     return () => unsubscribe();
@@ -66,6 +68,9 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
     (p.name || p.nombre)?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     p.dni?.toString().includes(searchTerm)
   );
+
+  // Pagination logic
+  const displayedPatients = filteredPatients.slice(0, visibleCount);
 
   const handleDeletePatient = async (id, name) => {
     const patientName = name || 'este paciente';
@@ -96,7 +101,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
             placeholder="Buscar por nombre o DNI..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 bg-[var(--bg-card)] border border-main rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium text-slate-700 dark:text-slate-200"
+            className="w-full pl-12 pr-4 py-3 bg-[var(--bg-card)] border-2 border-slate-200 dark:border-main rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium text-slate-700 dark:text-slate-200 shadow-sm"
           />
         </div>
       </div>
@@ -152,7 +157,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
                 </tr>
               </thead>
               <tbody className="divide-y divide-main">
-                {filteredPatients.map((patient, idx) => (
+                {displayedPatients.map((patient, idx) => (
                   <motion.tr 
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
@@ -227,9 +232,21 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
         )}
       </div>
 
+      {filteredPatients.length > visibleCount && (
+        <div className="flex justify-center pt-4">
+          <button
+            onClick={() => setVisibleCount(prev => prev + 10)}
+            className="flex items-center gap-2 px-8 py-3 bg-white dark:bg-slate-800 border-2 border-blue-500 text-blue-600 dark:text-blue-400 font-black rounded-2xl hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-500/10 uppercase tracking-widest text-xs"
+          >
+            <Plus size={18} />
+            Cargar más pacientes
+          </button>
+        </div>
+      )}
+
       <div className="flex items-center justify-center gap-2 py-4">
         <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest">
-          Mostrando {filteredPatients.length} de {patients.length} pacientes
+          Mostrando {displayedPatients.length} de {filteredPatients.length} pacientes {searchTerm && `(filtrados de ${patients.length} totales)`}
         </p>
       </div>
     </div>
