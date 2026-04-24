@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
@@ -128,6 +128,7 @@ const AdminPage = () => {
     practicesByType: {},
     patientEmailRequired: false,
     ordersEnabled: true,
+    autoCleanDays: 0,
   });
   const [isSavingOrderSettings, setIsSavingOrderSettings] = useState(false);
   const [selectedOrderCategory, setSelectedOrderCategory] = useState(null);
@@ -143,6 +144,16 @@ const AdminPage = () => {
     c: "",
     allowedRoles: [],
   });
+
+  const autoCleanPerformed = useRef(false);
+
+  // Auto-cleanup trigger
+  useEffect(() => {
+    if (orderSettings.autoCleanDays > 0 && !autoCleanPerformed.current) {
+      autoCleanPerformed.current = true;
+      runAutoCleanup(orderSettings.autoCleanDays);
+    }
+  }, [orderSettings.autoCleanDays]);
 
   // Security Check
   useEffect(() => {
@@ -291,6 +302,7 @@ const AdminPage = () => {
   const [cleanOptions, setCleanOptions] = useState({
     pdfs: true,
     records: false,
+    target: "reports", // "reports", "orders", "both"
   });
   const [isCleaning, setIsCleaning] = useState(false);
   const [cleanSummary, setCleanSummary] = useState(null);
@@ -379,23 +391,35 @@ const AdminPage = () => {
     setCleanSummary(null);
 
     try {
-      const q = query(
-        collection(db, "reports"),
-        where("fecha", ">=", cleanRange.start),
-        where("fecha", "<=", cleanRange.end),
-      );
+      const collectionsToClean =
+        cleanOptions.target === "both"
+          ? ["reports", "orders"]
+          : [cleanOptions.target];
+      
+      let allDocs = [];
+      
+      for (const collName of collectionsToClean) {
+        // En orders la fecha se guarda en 'date', en reports en 'fecha'
+        const dateField = collName === "orders" ? "date" : "fecha";
+        const q = query(
+          collection(db, collName),
+          where(dateField, ">=", cleanRange.start),
+          where(dateField, "<=", cleanRange.end),
+        );
+        const snap = await getDocs(q);
+        const docs = snap.docs.map((d) => ({ id: d.id, coll: collName, ...d.data() }));
+        allDocs = [...allDocs, ...docs];
+      }
 
-      const snap = await getDocs(q);
-      const docs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-      const withFiles = docs.filter(
+      const withFiles = allDocs.filter(
         (d) => d.storagePath || d.pdfUrl?.includes("supabase"),
       );
 
       setCleanSummary({
-        total: docs.length,
+        total: allDocs.length,
         withFiles: withFiles.length,
         estimatedSize: (withFiles.length * 0.5).toFixed(1),
-        docs: docs,
+        docs: allDocs,
       });
     } catch (err) {
       console.error("Error analyzing:", err);
@@ -407,9 +431,14 @@ const AdminPage = () => {
 
   const handleExecuteCleanup = async () => {
     if (!cleanSummary) return;
+    
+    const targetLabel = 
+      cleanOptions.target === 'both' ? 'INFORMES Y PEDIDOS' :
+      cleanOptions.target === 'orders' ? 'PEDIDOS' : 'INFORMES';
+
     if (
       !window.confirm(
-        `¿ESTÁ SEGURO? Esta acción es irreversible.\nSe eliminarán ${cleanOptions.records ? "REGISTROS Y ARCHIVOS" : "SOLO ARCHIVOS"} de ${cleanSummary.total} informes.`,
+        `¿ESTÁ SEGURO? Esta acción es irreversible.\nSe eliminarán ${cleanOptions.records ? "REGISTROS Y ARCHIVOS" : "SOLO ARCHIVOS"} de ${cleanSummary.total} ${targetLabel.toLowerCase()}.`,
       )
     )
       return;
@@ -431,24 +460,25 @@ const AdminPage = () => {
         }
       }
 
+      const batch = writeBatch(db);
       if (cleanOptions.records) {
-        const batch = writeBatch(db);
         cleanSummary.docs.forEach((d) => {
-          batch.delete(doc(db, "reports", d.id));
+          batch.delete(doc(db, d.coll, d.id));
           recordsDeleted++;
         });
-        await batch.commit();
       } else if (cleanOptions.pdfs) {
-        const batch = writeBatch(db);
         cleanSummary.docs.forEach((d) => {
           if (d.storagePath) {
-            batch.update(doc(db, "reports", d.id), {
+            batch.update(doc(db, d.coll, d.id), {
               pdfUrl: null,
               storagePath: null,
               notaMantenimiento: `Archivo eliminado por limpieza el ${new Date().toLocaleDateString()}`,
             });
           }
         });
+      }
+      
+      if (cleanOptions.records || cleanOptions.pdfs) {
         await batch.commit();
       }
 
@@ -462,6 +492,47 @@ const AdminPage = () => {
       alert("Ocurrió un error parcial durante la limpieza.");
     } finally {
       setIsCleaning(false);
+    }
+  };
+
+  const runAutoCleanup = async (days) => {
+    console.log(`Iniciando auto-limpieza de pedidos (Antigüedad: ${days} días)`);
+    const limitDate = new Date();
+    limitDate.setDate(limitDate.getDate() - days);
+    const dateStr = limitDate.toISOString().split('T')[0];
+
+    try {
+      const q = query(
+        collection(db, "orders"),
+        where("date", "<", dateStr)
+      );
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        console.log("Auto-limpieza: No hay pedidos antiguos para procesar.");
+        return;
+      }
+
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      console.log(`Auto-limpieza: Encontrados ${docs.length} pedidos para borrar.`);
+
+      // 1. Borrar archivos en Supabase
+      const pathsToDelete = docs.map(d => d.storagePath).filter(Boolean);
+      if (pathsToDelete.length > 0) {
+        // Supabase remove acepta un array
+        await supabase.storage.from("informescoat").remove(pathsToDelete);
+      }
+
+      // 2. Borrar registros en Firestore
+      const batch = writeBatch(db);
+      docs.forEach(d => {
+        batch.delete(doc(db, "orders", d.id));
+      });
+      await batch.commit();
+      
+      console.log("Auto-limpieza de pedidos completada con éxito.");
+      fetchStorageStats();
+    } catch (err) {
+      console.error("Error en auto-limpieza:", err);
     }
   };
 
@@ -1931,6 +2002,39 @@ const AdminPage = () => {
                 </label>
               </div>
 
+              <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm space-y-6">
+                <div>
+                  <h3 className="text-xl font-bold mb-2 flex items-center gap-2">
+                    <RefreshCw size={20} className="text-blue-600" /> Auto-Limpieza
+                  </h3>
+                  <p className="text-[10px] text-gray-400 uppercase font-black">
+                    Borrado automático de pedidos antiguos
+                  </p>
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-400 uppercase ml-1">
+                    Días de antigüedad para borrar
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      className="input-field w-24 text-center font-bold"
+                      value={orderSettings.autoCleanDays || 0}
+                      onChange={(e) => handleSaveOrderSettings({
+                        ...orderSettings,
+                        autoCleanDays: parseInt(e.target.value) || 0
+                      })}
+                      min="0"
+                    />
+                    <span className="text-xs font-bold text-gray-500 uppercase">Días</span>
+                  </div>
+                  <p className="text-[9px] text-orange-400 font-bold uppercase mt-1 italic">
+                    * 0 = Desactivado. Se borran registros y PDFs.
+                  </p>
+                </div>
+              </div>
+
               <div className="card p-6 bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm">
                 <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
                   <Plus size={20} className="text-blue-600" /> Nueva Categoría
@@ -2520,6 +2624,32 @@ const AdminPage = () => {
                         }
                         className="input-field"
                       />
+                    </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-4">
+                    <div className="p-4 bg-[var(--bg-secondary)] rounded-2xl border border-main space-y-3">
+                      <label className="text-[10px] font-black uppercase text-gray-500 ml-1">¿Qué desea eliminar?</label>
+                      <div className="flex gap-2">
+                        {[
+                          { id: 'reports', label: 'Informes' },
+                          { id: 'orders', label: 'Pedidos' },
+                          { id: 'both', label: 'Ambos' }
+                        ].map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => setCleanOptions({ ...cleanOptions, target: t.id })}
+                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all border ${
+                              cleanOptions.target === t.id
+                                ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                                : 'bg-[var(--bg-card)] border-main text-gray-400 hover:border-blue-400'
+                            }`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
 
