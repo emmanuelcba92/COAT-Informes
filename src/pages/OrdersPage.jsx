@@ -205,11 +205,11 @@ const OrdersPage = ({ userProfile: propProfile }) => {
           }
         });
       });
-      return allPractices;
+      return allPractices.sort((a, b) => (a.n || '').localeCompare(b.n || ''));
     }
 
     // Fallback to defaultRPPractices if Firestore is empty
-    return defaultRPPractices;
+    return [...defaultRPPractices].sort((a, b) => (a.n || '').localeCompare(b.n || ''));
   }, [orderSettings, profile]);
 
   const togglePractice = (name) => {

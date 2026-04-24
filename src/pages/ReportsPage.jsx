@@ -142,13 +142,15 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       return dbPractices;
     }
     
-    return dbPractices.filter(p => {
+    const filtered = dbPractices.filter(p => {
       // Si el modelo no tiene roles definidos (legacy), se muestra a todos para no romper nada
       if (!p.allowedRoles || p.allowedRoles.length === 0) return true;
       
       // Solo si el rol del profesional está incluido en los permitidos para este modelo
       return p.allowedRoles.includes(userRole);
     });
+
+    return [...filtered].sort((a, b) => (a.n || '').localeCompare(b.n || ''));
   }, [dbPractices, professional?.role]);
   
   // Sistema de Notificaciones Toast
