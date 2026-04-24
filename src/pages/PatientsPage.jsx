@@ -36,10 +36,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    // Intentamos ordenar alfabéticamente
-    // Nota: Si hay docs con 'name' y otros con 'nombre', Firestore requiere índices distintos.
-    // Por ahora priorizamos 'nombre' que es el estándar actual.
-    const q = query(collection(db, 'patients'), orderBy('nombre', 'asc'));
+    // Usamos 'name' que es el campo real en la base de datos de pacientes
+    const q = query(collection(db, 'patients'), orderBy('name', 'asc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({
         id: doc.id,
@@ -49,7 +47,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false }) 
       setLoading(false);
     }, (err) => {
       console.error("Firestore Error:", err);
-      // Fallback si falla el ordenamiento (por ejemplo si no hay campo 'nombre')
+      // Fallback si falla el ordenamiento
       const fallbackQ = query(collection(db, 'patients'));
       onSnapshot(fallbackQ, (snapshot) => {
         const docs = snapshot.docs.map(doc => ({

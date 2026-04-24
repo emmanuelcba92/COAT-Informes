@@ -300,7 +300,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
     if (requiredFields.requiredInsurance       && !insurance.trim())       return false;
     if (requiredFields.requiredAffiliateNumber && !affiliateNumber.trim()) return false;
     if (requiredFields.requiredDiagnosis       && !diagnosis.trim())       return false;
-    if (patientEmailRequired                   && !patientEmail.trim())    return false;
+    // Permitimos que el formulario sea válido sin email para que se pueda enviar al menos a administración
     if (!isEmailValid(patientEmail))                                       return false;
     if (selectedPractices.length === 0)                                    return false;
     return true;
