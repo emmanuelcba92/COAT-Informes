@@ -139,7 +139,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     
     // Admin y Directora Médica ven todo para facilitar gestión y pruebas
     if (userRole === 'admin' || userRole === 'directora_medica') {
-      return dbPractices;
+      return [...dbPractices].sort((a, b) => (a.n || '').localeCompare(b.n || ''));
     }
     
     const filtered = dbPractices.filter(p => {

@@ -206,7 +206,7 @@ function App() {
         <AuthPage 
           onLogin={(user) => {
             setCurrentUser(user);
-            navigate('/reports');
+            navigate('/reports/new');
           }} 
           isDarkMode={isDarkMode} 
           toggleTheme={toggleTheme} 
@@ -343,13 +343,13 @@ function App() {
               className="p-3 md:pt-4 md:px-8 md:pb-8"
             >
               <Routes>
-                <Route path="/" element={<Navigate to="/reports" replace />} />
+                <Route path="/" element={<Navigate to="/reports/new" replace />} />
                 <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} />} />
                 <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isSecretaria={isSecretaria} />} />
-                <Route path="/patients" element={isAdmin || isDirectora || isSecretaria ? <PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} /> : <Navigate to="/reports" replace />} />
+                <Route path="/patients" element={isAdmin || isDirectora || isSecretaria ? <PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/reports" replace />} />
-                <Route path="*" element={<Navigate to="/reports" replace />} />
+                <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/reports/new" replace />} />
+                <Route path="*" element={<Navigate to="/reports/new" replace />} />
               </Routes>
             </motion.div>
           </AnimatePresence>
