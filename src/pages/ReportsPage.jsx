@@ -130,6 +130,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   const printFlag = new URLSearchParams(location.search).get('print');
   const previewFlag = new URLSearchParams(location.search).get('preview');
   const [isEditing, setIsEditing] = useState(false);
+  const [localReportId, setLocalReportId] = useState(editId || null);
+  const isSavingRef = React.useRef(false);
 
   // Filtrado de modelos según especialidad/rol
   const filteredPractices = useMemo(() => {
@@ -165,7 +167,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     if (!auth.currentUser || !reportData.patient) return;
     try {
       const data = {
-        profesionalId: editId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
+        profesionalId: localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
         profesionalNombre: professional?.nombre || professional?.n || 'Médico',
         pacienteNombre: reportData.patient.toUpperCase(),
         pacienteDni: reportData.dni || '',
@@ -184,12 +186,19 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         fechaUpdatedAt: new Date().toISOString()
       };
 
-      if (!editId) {
-        data.fechaCreatedAt = new Date().toISOString();
-        await addDoc(collection(db, 'reports'), data);
+      if (!localReportId) {
+        if (isSavingRef.current) return;
+        isSavingRef.current = true;
+        try {
+          data.fechaCreatedAt = new Date().toISOString();
+          const docRef = await addDoc(collection(db, 'reports'), data);
+          setLocalReportId(docRef.id);
+        } finally {
+          isSavingRef.current = false;
+        }
       } else {
         const { setDoc, doc: fireDoc } = await import('firebase/firestore');
-        await setDoc(fireDoc(db, 'reports', editId), data, { merge: true });
+        await setDoc(fireDoc(db, 'reports', localReportId), data, { merge: true });
         if (shouldNavigate) {
           showToast("¡Informe actualizado correctamente!");
           setTimeout(() => navigate('/history'), 1500);

@@ -21,9 +21,9 @@ import {
   Mail,
   Send
 } from 'lucide-react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import jsPDF from 'jspdf';
 
 const defaultRPPractices = [
@@ -62,8 +62,15 @@ const OrdersPage = ({ userProfile: propProfile }) => {
     diagnosis: '',
     date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
     patientEmail: '',
-    observations: ''
+    observations: '',
+    sentToAdmin: false
   });
+
+  const navigate = useNavigate();
+  const location = useLocation();
+  const editId = new URLSearchParams(location.search).get('edit');
+  const [isEditing, setIsEditing] = useState(false);
+  const [localOrderId, setLocalOrderId] = useState(editId || null);
 
   // Patient autocomplete logic
   useEffect(() => {
@@ -112,6 +119,44 @@ const OrdersPage = ({ userProfile: propProfile }) => {
       console.error("Error saving patient to history:", err);
     }
   };
+
+  const saveOrderToHistory = async (shouldNavigate = false) => {
+    if (!auth.currentUser || !patientData.name) return;
+    try {
+      const data = {
+        profesionalId: localOrderId ? (profile?.id || profile?.uid || auth.currentUser.uid) : auth.currentUser.uid,
+        profesionalName: profile?.nombre || profile?.n || 'Médico',
+        name: patientData.name.toUpperCase(),
+        dni: patientData.dni || '',
+        insurance: patientData.insurance.toUpperCase(),
+        affiliateNumber: patientData.affiliateNumber || '',
+        diagnosis: patientData.diagnosis || '',
+        date: patientData.date,
+        patientEmail: patientData.patientEmail || '',
+        observations: patientData.observations || '',
+        practices: selectedPractices,
+        quantities: quantities,
+        indications: indications,
+        customPractices: customPractices,
+        sentToAdmin: patientData.sentToAdmin || false,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (!localOrderId) {
+        data.createdAt = new Date().toISOString();
+        const docRef = await addDoc(collection(db, 'orders'), data);
+        setLocalOrderId(docRef.id);
+      } else {
+        await setDoc(doc(db, 'orders', localOrderId), data, { merge: true });
+        if (shouldNavigate) {
+          showToast("¡Pedido actualizado!");
+          setTimeout(() => navigate('/orders/history'), 1500);
+        }
+      }
+    } catch (err) {
+      console.error("Error saving order to history:", err);
+    }
+  };
   
   const [selectedPractices, setSelectedPractices] = useState([]);
   const [quantities, setQuantities] = useState({});
@@ -156,6 +201,48 @@ const OrdersPage = ({ userProfile: propProfile }) => {
       fetchFullProfile();
     }
   }, [auth.currentUser, profile]);
+
+  // Load order to edit
+  useEffect(() => {
+    const loadOrder = async () => {
+      if (editId) {
+        setIsEditing(true);
+        try {
+          const docRef = doc(db, 'orders', editId);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setPatientData({
+              name: data.name || '',
+              dni: data.dni || '',
+              insurance: data.insurance || '',
+              affiliateNumber: data.affiliateNumber || '',
+              diagnosis: data.diagnosis || '',
+              date: data.date || new Date().toISOString().split('T')[0],
+              patientEmail: data.patientEmail || '',
+              observations: data.observations || '',
+              sentToAdmin: data.sentToAdmin || false
+            });
+            setSelectedPractices(data.practices || []);
+            setQuantities(data.quantities || {});
+            setIndications(data.indications || {});
+            setCustomPractices(data.customPractices || []);
+            
+            // If it belongs to another professional, we should ideally keep their info
+            if (data.profesionalId && data.profesionalId !== auth.currentUser?.uid) {
+              const profSnap = await getDoc(doc(db, 'users', data.profesionalId));
+              if (profSnap.exists()) {
+                setProfile(profSnap.data());
+              }
+            }
+          }
+        } catch (err) {
+          console.error("Error loading order:", err);
+        }
+      }
+    };
+    loadOrder();
+  }, [editId]);
 
   const [isSending, setIsSending] = useState(false);
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
@@ -424,8 +511,10 @@ const OrdersPage = ({ userProfile: propProfile }) => {
 
       if (mode === 'save') {
         doc.save(`Pedido_${patientData.name || 'Paciente'}.pdf`);
+        await saveOrderToHistory(isEditing);
       } else if (mode === 'print') {
         window.open(doc.output('bloburl'), '_blank');
+        await saveOrderToHistory(false);
       } else {
         return doc;
       }
@@ -468,6 +557,10 @@ const OrdersPage = ({ userProfile: propProfile }) => {
           fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
         })
       });
+      // Update state and save
+      setPatientData(prev => ({ ...prev, sentToAdmin: true }));
+      await saveOrderToHistory(false);
+      
       showToast('¡Pedido enviado con éxito!');
     } catch (err) {
       showToast('Error al enviar email.', 'error');

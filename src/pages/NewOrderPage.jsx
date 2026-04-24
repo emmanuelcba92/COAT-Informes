@@ -89,6 +89,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
   const [previewUrl, setPreviewUrl] = useState(null);
   const [orderMetadata, setOrderMetadata] = useState({ sentToAdmin: false });
+  const isSavingRef = React.useRef(false);
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -172,21 +173,31 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
       };
 
       if (currentOrderId) {
-        // UPDATE existing
+        console.log("Updating existing order:", currentOrderId);
         await updateDoc(doc(db, 'orders', currentOrderId), orderData);
+        showToast("Pedido actualizado en historial");
         return currentOrderId;
       } else {
-        // CREATE new
-        const docRef = await addDoc(collection(db, 'orders'), {
-          ...orderData,
-          createdAt: serverTimestamp(),
-          sentToAdmin: false // Initial state
-        });
-        setCurrentOrderId(docRef.id);
-        return docRef.id;
+        if (isSavingRef.current) return;
+        isSavingRef.current = true;
+        try {
+          console.log("Creating new order document...");
+          const docRef = await addDoc(collection(db, 'orders'), {
+            ...orderData,
+            createdAt: serverTimestamp(),
+            sentToAdmin: false
+          });
+          setCurrentOrderId(docRef.id);
+          console.log("New order created with ID:", docRef.id);
+          showToast("Pedido guardado en historial");
+          return docRef.id;
+        } finally {
+          isSavingRef.current = false;
+        }
       }
     } catch (err) {
       console.error("Error saving order:", err);
+      showToast('Error al persistir en base de datos', 'error');
       return null;
     }
   };
@@ -541,7 +552,6 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         } else if (['name', 'insurance', 'diagnosis'].includes(f.key)) {
                           val = toTitleCase(val);
                         }
-                        setCurrentOrderId(null);
                         setPatientData({...patientData, [f.key]: val});
                       }} 
                     />
@@ -590,7 +600,6 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                     placeholder="" 
                     value={patientData.observations} 
                     onChange={e => {
-                      setCurrentOrderId(null);
                       setPatientData({...patientData, observations: e.target.value});
                     }} 
                   />
@@ -611,7 +620,6 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                     onClick={() => { 
                       setSelectedType(type.id); 
                       setSelectedPractices([]); 
-                      setCurrentOrderId(null);
                     }}
                     className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
                       selectedType === type.id
@@ -734,7 +742,6 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                             className="mt-1.5 text-[11px] bg-transparent border-b border-blue-200 focus:border-blue-500 outline-none text-blue-600 pb-0.5" 
                             value={indications[p.n] || ''} 
                             onChange={e => {
-                              setCurrentOrderId(null);
                               setIndications({...indications, [p.n]: e.target.value});
                             }} 
                             onClick={e => e.stopPropagation()} 
@@ -755,7 +762,6 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                       <span className="w-4 text-center text-xs font-bold text-blue-600">{quantities[p.n] || 1}</span>
                       <button 
                         onClick={() => {
-                          setCurrentOrderId(null);
                           setQuantities(q => ({...q, [p.n]: (q[p.n] || 1) + 1}));
                         }} 
                         className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
