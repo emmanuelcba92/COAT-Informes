@@ -42,7 +42,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { extractPatientsFromImage, extractPatientsFromText } from "../utils/aiService";
 
 // Configurar worker de PDF.js
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.6.205/build/pdf.worker.min.mjs`;
 
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import * as XLSX from "xlsx";
