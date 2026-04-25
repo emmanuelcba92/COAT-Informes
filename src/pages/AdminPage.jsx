@@ -33,7 +33,17 @@ import {
   RefreshCw,
   RefreshCcw,
   GripVertical,
+  Camera,
+  FileSearch,
+  Users as PatientsIcon,
+  Contact
 } from "lucide-react";
+import * as pdfjsLib from 'pdfjs-dist';
+import { extractPatientsFromImage, extractPatientsFromText } from "../utils/aiService";
+
+// Configurar worker de PDF.js
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import * as XLSX from "xlsx";
 import { initializeApp, deleteApp } from "firebase/app";
@@ -149,6 +159,15 @@ const AdminPage = () => {
     c: "",
     allowedRoles: [],
   });
+  
+  // State for Patient Import
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importLoading, setImportLoading] = useState(false);
+  const [importResults, setImportResults] = useState([]);
+  const [importError, setImportError] = useState("");
+  const [patientSearch, setPatientSearch] = useState("");
+  const [patients, setPatients] = useState([]);
+
 
   const autoCleanPerformed = useRef(false);
 
@@ -291,6 +310,16 @@ const AdminPage = () => {
       unsubscribeOrderSettings();
     };
   }, []);
+
+  // Sync Patients (Separate effect for performance)
+  useEffect(() => {
+    const q = query(collection(db, "patients"), orderBy("nombre", "asc"), limit(100));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      setPatients(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return unsubscribe;
+  }, []);
+
 
   // ESTADOS PARA MANTENIMIENTO Y ALMACENAMIENTO
   const [storageStats, setStorageStats] = useState({
@@ -656,7 +685,13 @@ const AdminPage = () => {
       label: "Configuración",
       icon: <ShieldCheck size={20} />,
     },
+    {
+      id: "patients",
+      label: "Pacientes",
+      icon: <Contact size={20} />,
+    },
   ];
+
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
@@ -705,6 +740,77 @@ const AdminPage = () => {
       }
     }
   };
+
+  const handleSmartImport = async (fileOrImage) => {
+    setImportLoading(true);
+    setImportError("");
+    try {
+      let results = [];
+      if (typeof fileOrImage === 'string') {
+        // Es base64 de una imagen/captura
+        const base64 = fileOrImage.split(',')[1] || fileOrImage;
+        results = await extractPatientsFromImage(base64);
+      } else if (fileOrImage.type === 'application/pdf') {
+        // Es un PDF
+        const arrayBuffer = await fileOrImage.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let fullText = "";
+        
+        // Leer hasta 10 páginas para no saturar
+        const maxPages = Math.min(pdf.numPages, 10);
+        for (let i = 1; i <= maxPages; i++) {
+          const page = await pdf.getPage(i);
+          const textContent = await page.getTextContent();
+          fullText += textContent.items.map(item => item.str).join(" ") + "\n";
+        }
+        
+        results = await extractPatientsFromText(fullText);
+      } else {
+        // Intentar como imagen
+        const reader = new FileReader();
+        const base64 = await new Promise((resolve) => {
+          reader.onload = () => resolve(reader.result.split(',')[1]);
+          reader.readAsDataURL(fileOrImage);
+        });
+        results = await extractPatientsFromImage(base64);
+      }
+      
+      setImportResults(results);
+      if (results.length === 0) setImportError("No se detectaron pacientes. Intenta con otra imagen o PDF.");
+    } catch (err) {
+      console.error("Import error:", err);
+      setImportError("Error al procesar el archivo. Revisa tu conexión o la API Key.");
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
+  const saveImportedPatients = async () => {
+    setImportLoading(true);
+    try {
+      const batch = writeBatch(db);
+      for (const p of importResults) {
+        if (!p.dni) continue;
+        const patientRef = doc(db, "patients", String(p.dni));
+        batch.set(patientRef, {
+          nombre: (p.nombre || "SIN NOMBRE").toUpperCase(),
+          dni: String(p.dni),
+          obraSocial: (p.obraSocial || "").toUpperCase(),
+          telefono: p.telefono || "",
+          updatedAt: new Date().toISOString()
+        }, { merge: true });
+      }
+      await batch.commit();
+      alert(`Se han importado/actualizado ${importResults.length} pacientes.`);
+      setIsImportModalOpen(false);
+      setImportResults([]);
+    } catch (err) {
+      alert("Error guardando pacientes: " + err.message);
+    } finally {
+      setImportLoading(false);
+    }
+  };
+
 
   const handleExcelUpload = async (e) => {
     const file = e.target.files[0];
@@ -2532,6 +2638,82 @@ const AdminPage = () => {
             </div>
           </div>
         )}
+
+        {activeTab === "patients" && (
+          <div className="space-y-6">
+            <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-[var(--border-main)]">
+              <div className="relative w-full md:w-96">
+                <SearchIcon
+                  className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400"
+                  size={18}
+                />
+                <input
+                  type="text"
+                  placeholder="Buscar por DNI o Nombre..."
+                  value={patientSearch}
+                  onChange={(e) => setPatientSearch(e.target.value)}
+                  className="input-field pl-12"
+                />
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-2xl font-bold hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20"
+                >
+                  <Camera size={18} />
+                  <span>Importador Inteligente (IA)</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-[var(--bg-card)] rounded-[2.5rem] border border-[var(--border-main)] overflow-hidden shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-[var(--bg-secondary)] border-b border-main">
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">DNI</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Paciente</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Obra Social</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Teléfono</th>
+                      <th className="px-6 py-5 text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 text-right">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {patients
+                      .filter(p => 
+                        p.nombre?.toLowerCase().includes(patientSearch.toLowerCase()) || 
+                        p.dni?.includes(patientSearch)
+                      )
+                      .map((p) => (
+                      <tr key={p.id} className="border-b border-main/50 hover:bg-[var(--bg-secondary)]/50 transition-colors group">
+                        <td className="px-6 py-4 font-mono text-xs text-blue-600">{p.dni}</td>
+                        <td className="px-6 py-4 font-bold text-[var(--text-main)] uppercase">{p.nombre}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-[10px] font-bold uppercase text-[var(--text-sub)]">
+                            {p.obraSocial || '--'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-xs text-gray-400">{p.telefono || '--'}</td>
+                        <td className="px-6 py-4 text-right">
+                          <button 
+                            onClick={async () => {
+                              if(window.confirm("¿Eliminar paciente?")) {
+                                await deleteDoc(doc(db, "patients", p.id));
+                              }
+                            }}
+                            className="p-2 text-red-400 hover:bg-red-50 rounded-xl opacity-0 group-hover:opacity-100 transition-all"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
       </div>      {/* MODAL: MANAGE PROFESSIONAL PROFILE */}
       <AnimatePresence>
         {isManageProfessionalModalOpen && targetProf && (
@@ -3041,6 +3223,171 @@ const AdminPage = () => {
                   CREAR CUENTA PROFESIONAL
                 </button>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* SMART IMPORT MODAL */}
+      <AnimatePresence>
+        {isImportModalOpen && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => !importLoading && setIsImportModalOpen(false)}
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm"
+            />
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="relative w-full max-w-4xl bg-[var(--bg-card)] rounded-[2.5rem] shadow-2xl border border-[var(--border-main)] overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-8 border-b border-main flex items-center justify-between bg-blue-600 text-white">
+                <div>
+                  <h3 className="text-2xl font-black flex items-center gap-3">
+                    <Camera size={28} /> Importador Inteligente (Gemini AI)
+                  </h3>
+                  <p className="text-blue-100 text-sm font-medium">Sube el turnero (PDF) o pega una captura de pantalla directamente</p>
+                </div>
+                {!importLoading && (
+                  <button onClick={() => setIsImportModalOpen(false)} className="p-2 hover:bg-white/20 rounded-xl transition-colors">
+                    <X size={24} />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex-1 overflow-auto p-8 space-y-8 custom-scrollbar">
+                {importResults.length === 0 ? (
+                  <div 
+                    onPaste={(e) => {
+                      const item = e.clipboardData.items[0];
+                      if (item?.type.includes('image')) {
+                        const blob = item.getAsFile();
+                        const reader = new FileReader();
+                        reader.onload = (ev) => handleSmartImport(ev.target.result);
+                        reader.readAsDataURL(blob);
+                      }
+                    }}
+                    className="group relative flex flex-col items-center justify-center p-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-[2rem] hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer"
+                  >
+                    {importLoading ? (
+                      <div className="flex flex-col items-center gap-4">
+                        <div className="w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
+                        <p className="font-black text-blue-600 animate-pulse">ANALIZANDO CON IA...</p>
+                        <p className="text-xs text-slate-400 uppercase tracking-widest font-bold">Esto puede tardar unos segundos</p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-3xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
+                          <FileSearch size={40} />
+                        </div>
+                        <h4 className="text-xl font-bold text-slate-700 dark:text-slate-200">Arrastra aquí el Turnero o Pega Captura</h4>
+                        <p className="text-slate-400 text-sm mt-2 font-medium">Soporta PDF de Gacitua o Captura de Pantalla (Ctrl + V)</p>
+                        
+                        <input 
+                          type="file" 
+                          accept="application/pdf,image/*"
+                          className="absolute inset-0 opacity-0 cursor-pointer"
+                          onChange={(e) => handleSmartImport(e.target.files[0])}
+                        />
+
+                        {importError && (
+                          <div className="mt-6 p-4 bg-red-50 text-red-600 rounded-2xl text-xs font-bold border border-red-100">
+                            {importError}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <h4 className="font-black text-slate-500 uppercase tracking-widest text-xs">
+                        Pacientes Detectados ({importResults.length})
+                      </h4>
+                      <button 
+                        onClick={() => setImportResults([])}
+                        className="text-xs font-black text-red-500 uppercase hover:underline"
+                      >
+                        Limpiar y reintentar
+                      </button>
+                    </div>
+                    <div className="border border-main rounded-2xl overflow-hidden shadow-sm">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-50 dark:bg-slate-800/50">
+                          <tr>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">DNI</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Nombre</th>
+                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Obra Social</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {importResults.map((r, idx) => (
+                            <tr key={idx} className="border-t border-main">
+                              <td className="px-4 py-3">
+                                <input 
+                                  value={r.dni} 
+                                  onChange={(e) => {
+                                    const next = [...importResults];
+                                    next[idx].dni = e.target.value;
+                                    setImportResults(next);
+                                  }}
+                                  className="w-full bg-transparent font-mono text-xs text-blue-600 focus:outline-none"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input 
+                                  value={r.nombre} 
+                                  onChange={(e) => {
+                                    const next = [...importResults];
+                                    next[idx].nombre = e.target.value.toUpperCase();
+                                    setImportResults(next);
+                                  }}
+                                  className="w-full bg-transparent font-bold text-xs focus:outline-none"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input 
+                                  value={r.obraSocial} 
+                                  onChange={(e) => {
+                                    const next = [...importResults];
+                                    next[idx].obraSocial = e.target.value.toUpperCase();
+                                    setImportResults(next);
+                                  }}
+                                  className="w-full bg-transparent text-xs text-slate-500 focus:outline-none"
+                                />
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {importResults.length > 0 && (
+                <div className="p-8 border-t border-main bg-slate-50 dark:bg-slate-900/20 flex gap-4">
+                  <button 
+                    disabled={importLoading}
+                    onClick={() => setIsImportModalOpen(false)}
+                    className="flex-1 py-4 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-300 transition-all"
+                  >
+                    Cancelar
+                  </button>
+                  <button 
+                    disabled={importLoading}
+                    onClick={saveImportedPatients}
+                    className="flex-[2] py-4 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/20 flex items-center justify-center gap-2"
+                  >
+                    {importLoading ? <Loader2 className="animate-spin" size={18} /> : <Check size={18} />}
+                    CONFIRMAR E IMPORTAR {importResults.length} PACIENTES
+                  </button>
+                </div>
+              )}
             </motion.div>
           </div>
         )}
