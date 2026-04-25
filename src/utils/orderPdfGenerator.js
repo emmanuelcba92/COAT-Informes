@@ -1,5 +1,28 @@
 import jsPDF from 'jspdf';
 
+const optimizeImage = async (src, maxWidth = 600) => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const scale = Math.min(1, maxWidth / img.width);
+      canvas.width = img.width * scale;
+      canvas.height = img.height * scale;
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      // Usamos JPEG para mejor compresión si no necesitamos transparencia absoluta, 
+      // o PNG con calidad reducida. Para firmas, PNG es mejor para preservar trazos.
+      resolve({ 
+        data: canvas.toDataURL('image/png', 0.7), 
+        ratio: img.width / img.height 
+      });
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+};
+
 export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
@@ -15,19 +38,10 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
   const drawHeader = async (targetDoc, orderTypeLabel) => {
     // Institutional COAT branding is ALWAYS shown on orders
     try {
-      const logoData = await new Promise((resolve) => {
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.onload = () => {
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          canvas.width = img.width; canvas.height = img.height;
-          ctx.drawImage(img, 0, 0);
-          resolve({ data: canvas.toDataURL('image/png'), ratio: img.width / img.height });
-        };
-        img.src = '/coat_logo.png';
-      });
-      targetDoc.addImage(logoData.data, 'PNG', 15, 8, 35, 35 / logoData.ratio);
+      const logoData = await optimizeImage('/coat_logo.png', 400);
+      if (logoData) {
+        targetDoc.addImage(logoData.data, 'PNG', 15, 8, 35, 35 / logoData.ratio, undefined, 'FAST');
+      }
     } catch (e) {}
 
     targetDoc.setFontSize(10);
@@ -62,12 +76,29 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     targetDoc.text(`Obra Social: ${toTitleCase(orderData.insurance)} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${toTitleCase(orderData.diagnosis)}` : ''}`, centerX, 55, { align: 'center' });
   };
 
-  const drawFooter = (targetDoc) => {
-    const signatureY = pageHeight - 42;
+  const drawFooter = async (targetDoc, currentY = null) => {
+    // 5. Signature Area - ADAPTATIVA (Petición para que no quede abajo del todo)
+    const middlePoint = pageHeight / 2;
+    let signatureY = pageHeight - 42; // Fallback position
+
+    if (currentY !== null) {
+      // Si el contenido terminó muy arriba, forzamos la firma a la mitad de la hoja
+      if (currentY < middlePoint - 20) {
+        signatureY = middlePoint + 20; // Ajustado para que el nombre quede cerca del centro
+      } else {
+        signatureY = Math.min(currentY + 30, pageHeight - 42); // Sigue al texto con límite
+      }
+    }
+
     const signatureX = pageWidth - 80;
     if (profile.signatureBase64) {
       try {
-        targetDoc.addImage(profile.signatureBase64, 'PNG', signatureX + 5, signatureY - 28, 55, 22);
+        const sigData = await optimizeImage(profile.signatureBase64, 500);
+        if (sigData) {
+          const sigW = 40;
+          const sigH = Math.min(14, sigW / sigData.ratio);
+          targetDoc.addImage(sigData.data, 'PNG', signatureX + 12, signatureY - sigH - 2, sigW, sigH, undefined, 'FAST');
+        }
       } catch (e) {}
     }
     targetDoc.setTextColor(0);
@@ -85,7 +116,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     
     if (registrationText) targetDoc.text(registrationText, signatureX + 32, signatureY + 8, { align: 'center' });
 
-    // Footer line — ALWAYS shown
+    // Footer line — ALWAYS shown at the very bottom
     targetDoc.setDrawColor(...coatBlue);
     targetDoc.setLineWidth(0.3);
     targetDoc.line(15, pageHeight - 20, pageWidth - 15, pageHeight - 20);
@@ -156,7 +187,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
           doc.setFont("helvetica", "normal");
         }
       });
-      drawFooter(doc);
+      await drawFooter(doc, curY + 15 + (selectedLabs.length * 7));
     }
 
     // Page 2: Cardiovascular (Checklist style)
@@ -199,7 +230,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
         }
         y += 8;
       });
-      drawFooter(doc);
+      await drawFooter(doc, y);
     }
 
     // Page 3: RX
@@ -224,7 +255,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
           doc.text(`Ind: ${orderData.indications[p]}`, 32, curY + 22 + (i * 10));
         }
       });
-      drawFooter(doc);
+      await drawFooter(doc, curY + 15 + (selectedRX.length * 10));
     }
   } else if (orderData.orderType === 'coat') {
     await drawHeader(doc, "");
@@ -257,8 +288,8 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       const isSelected = orderData.practices.includes(p.n);
       
       // Si realmente no entra, pasar a otra página
-      if (y > pageHeight - 25) { 
-        drawFooter(doc);
+      if (y > pageHeight - 35) { 
+        await drawFooter(doc, y);
         doc.addPage();
         await drawHeader(doc, "");
         y = 65;
@@ -309,8 +340,8 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     }
 
     for (const pName of customOnes) {
-      if (y > pageHeight - 25) {
-        drawFooter(doc);
+      if (y > pageHeight - 35) {
+        await drawFooter(doc, y);
         doc.addPage();
         await drawHeader(doc, "");
         y = 65;
@@ -339,7 +370,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       }
       y += yIncrement;
     }
-    drawFooter(doc);
+    await drawFooter(doc, y);
   } else {
     await drawHeader(doc, "");
     let currentY = 62;
@@ -356,9 +387,9 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       const splitIndications = indications ? doc.splitTextToSize(indications, pageWidth - 45) : [];
       const itemHeight = 6 + (splitIndications.length > 0 ? (splitIndications.length * 5) : 0) + 2;
       if (y + itemHeight > pageHeight - footerMargin) {
-        drawFooter(doc);
+        await drawFooter(doc, y);
         doc.addPage();
-        await drawHeader(doc, label);
+        await drawHeader(doc, "");
         y = 65;
       }
       doc.setFontSize(10);
@@ -375,7 +406,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       }
       y += 2;
     }
-    drawFooter(doc);
+    await drawFooter(doc, y);
   }
 
   if (mode === 'save') {

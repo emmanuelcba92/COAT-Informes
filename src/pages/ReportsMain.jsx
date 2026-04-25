@@ -13,7 +13,7 @@ const ReportsPage = React.lazy(() => import('./ReportsPage'));
 const MyReportsPage = React.lazy(() => import('./MyReportsPage'));
 const PracticesPage = React.lazy(() => import('./PracticesPage'));
 
-const ReportsMain = ({ currentUser, userProfile, isSecretaria = false, canCustomizeModels = false }) => {
+const ReportsMain = ({ currentUser, userProfile, isAdmin = false, isSecretaria = false, canCustomizeModels = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -34,7 +34,7 @@ const ReportsMain = ({ currentUser, userProfile, isSecretaria = false, canCustom
         <Suspense fallback={<div className="p-10 text-center opacity-50">Cargando sección...</div>}>
           <Routes>
             <Route path="new" element={!isSecretaria ? <ReportsPage isSecretaria={isSecretaria} userProfile={userProfile} /> : <Navigate to="/reports/history" replace />} />
-            <Route path="history" element={<MyReportsPage user={currentUser} userProfile={userProfile} isSecretaria={isSecretaria} />} />
+            <Route path="history" element={<MyReportsPage user={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} />} />
             <Route path="models" element={canCustomizeModels && !isSecretaria ? <PracticesPage /> : <Navigate to="/reports/history" replace />} />
             <Route index element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
             <Route path="*" element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />

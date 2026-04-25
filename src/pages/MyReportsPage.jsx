@@ -45,7 +45,7 @@ import { db, auth } from '../services/firebase';
 
 
 
-const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) => {
+const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp }) => {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -58,7 +58,7 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
   };
   const [professionals, setProfessionals] = useState([]);
 
-  const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
+  // isAdmin is now received as a prop
   const isSecretaria = isSecretariaProp || userProfile?.role?.toLowerCase().includes('secre');
   const canSelectProfessional = isAdmin || isSecretaria;
 
@@ -846,7 +846,7 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
                             <Printer className="w-5 h-5" />
                           </button>
 
-                          {(isAdmin || !isSecretaria) && (
+                          {(isAdmin || !isSecretaria) && report.tipoReporte !== 'externo' && (
                             <button 
                               onClick={() => handleEditReport(report)}
                               className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
@@ -867,7 +867,7 @@ const MyReportsPage = ({ user, userProfile, isSecretaria: isSecretariaProp }) =>
                             </button>
                           )}
 
-                          {(isAdmin || (!isSecretaria && user.uid === report.profesionalId)) && (
+                          {(isAdmin || (!isSecretaria && user.uid === report.profesionalId)) && !isSecretaria && (
                             <button 
                               onClick={() => handleDeleteReport(report)}
                               className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all border border-red-100 shadow-sm"

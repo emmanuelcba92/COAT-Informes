@@ -27,7 +27,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 
 const ICON_MAP = {
@@ -143,21 +143,28 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   }, [patientData.dni]);
 
   const savePatientToHistory = async () => {
-    const cleanDni = patientData.dni.trim();
+    const cleanDni = patientData.dni.toString().replace(/\D/g, '');
     if (!cleanDni || cleanDni.length < 7) return;
     try {
+      const patientRef = doc(db, 'patients', cleanDni);
+      const patientName = patientData.name.trim().toUpperCase();
+      const insuranceName = patientData.insurance.trim().toUpperCase();
+      
       const payload = {
-        name: patientData.name.trim(),
+        name: patientName,
+        nombre: patientName,
         dni: cleanDni,
-        insurance: patientData.insurance.trim(),
-        affiliateNumber: patientData.affiliateNumber.trim(),
+        insurance: insuranceName,
+        obraSocial: insuranceName,
+        affiliateNumber: (patientData.affiliateNumber || '').trim().toUpperCase(),
+        professionalIds: arrayUnion(profile?.id || profile?.uid || auth.currentUser.uid),
         lastUpdated: new Date().toISOString()
       };
       // Only update email if user has entered one — never overwrite with empty
-      if (patientData.patientEmail.trim()) {
+      if (patientData.patientEmail && patientData.patientEmail.trim()) {
         payload.email = patientData.patientEmail.trim();
       }
-      await setDoc(doc(db, 'patients', cleanDni), payload, { merge: true });
+      await setDoc(patientRef, payload, { merge: true });
     } catch (err) {}
   };
 

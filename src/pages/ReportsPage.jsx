@@ -21,7 +21,7 @@ import {
   X
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, collection, getDocs, addDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -85,14 +85,20 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   }, [reportData.dni]);
 
   const savePatientToHistory = async () => {
-    const cleanDni = reportData.dni.trim();
+    const cleanDni = reportData.dni.toString().replace(/\D/g, '');
     if (!cleanDni || cleanDni.length < 7) return;
     try {
       const patientRef = doc(db, 'patients', cleanDni);
+      const patientName = reportData.patient.trim().toUpperCase();
+      const insuranceName = reportData.socialWork.trim().toUpperCase();
+      
       const payload = {
-        name: reportData.patient.trim(),
+        name: patientName,
+        nombre: patientName,
         dni: cleanDni,
-        insurance: reportData.socialWork.trim(),
+        insurance: insuranceName,
+        obraSocial: insuranceName,
+        professionalIds: arrayUnion(professional?.id || professional?.uid || auth.currentUser.uid),
         lastUpdated: new Date().toISOString()
       };
       // Only update email if user has entered one — never overwrite with empty
@@ -165,6 +171,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   // Guardar en el historial corregido para manejar EDICIÓN
   const saveToHistory = async (pdfUrl = null, shouldNavigate = false) => {
     if (!auth.currentUser || !reportData.patient) return;
+    if (isSecretaria && localReportId) {
+      showToast('Las secretarias no pueden editar informes existentes.', 'error');
+      return;
+    }
     try {
       const data = {
         profesionalId: localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
@@ -264,6 +274,11 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
   useEffect(() => {
     const loadReportToEdit = async () => {
       if (editId) {
+        if (isSecretaria && !isPreview) {
+          showToast('Permisos insuficientes para editar informes.', 'error');
+          navigate('/reports/history');
+          return;
+        }
         setIsEditing(true);
         try {
           const docRef = doc(db, 'reports', editId);
@@ -501,40 +516,59 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       currentY += 10;
     }
 
-    // Lógica inteligente de tamaño de letra
+    // 4. Report Content with Intelligent Font Scaling
     doc.setFont("helvetica", "normal");
     const plainResult = cleanHtmlForPDF(reportData.result || content);
     const pageHeight = doc.internal.pageSize.height;
-    const availableHeight = pageHeight - currentY - 70; // Espacio restante aprox.
+    
+    // Alturas estimadas para la firma (aprox 40-50mm)
+    const signatureReservedSpace = 55; 
+    const footerReservedSpace = 20;
+    
+    // Espacio disponible en la primera hoja antes de tener que saltar o reducir letra
+    const availableHeightFirstPage = pageHeight - currentY - signatureReservedSpace - footerReservedSpace;
     
     // Probar primero con 11pt
-    doc.setFontSize(11);
+    let fontSize = 11;
+    doc.setFontSize(fontSize);
     let contentLines = doc.splitTextToSize(plainResult, 185);
-    let lineHeight = 5.2; // Altura de línea para 11pt
+    let lineHeight = 5.2; 
     
-    // Si el texto a 11pt supera el espacio disponible en la primera hoja, bajamos a 10pt
-    if (contentLines.length * lineHeight > availableHeight) {
-      doc.setFontSize(10);
+    // Si el texto a 11pt supera el espacio disponible para que entre en una sola hoja, bajamos a 10pt
+    if (contentLines.length * lineHeight > availableHeightFirstPage) {
+      fontSize = 10;
+      doc.setFontSize(fontSize);
       contentLines = doc.splitTextToSize(plainResult, 185);
-      lineHeight = 4.2; // Altura de línea para 10pt
+      lineHeight = 4.5; // Altura de línea para 10pt
     }
 
     contentLines.forEach(line => {
-      // Check for page break (leaving space for signature/footer)
-      if (currentY > pageHeight - 50) {
+      // Control de salto de página para el TEXTO
+      // Dejamos margen para el footer institucional
+      if (currentY > pageHeight - 25) {
         doc.addPage();
-        currentY = 20;
+        currentY = 25;
       }
       doc.text(line, 10, currentY);
       currentY += lineHeight;
     });
     
-    // Signature Area - Siempre al fondo de la hoja
-    if (currentY > pageHeight - 65) {
-       doc.addPage();
-       currentY = 20;
+    // 5. Signature Area - ADAPTATIVA
+    // Objetivo: Que no quede abajo del todo si el informe es corto (petición de obras sociales)
+    const middlePoint = pageHeight / 2;
+    
+    // Si el texto terminó muy arriba, forzamos la firma al menos a la mitad de la hoja
+    if (currentY < middlePoint - 20) {
+      currentY = middlePoint;
+    } else {
+      currentY += 10; // Un poco de aire después del texto
     }
-    currentY = pageHeight - 55;
+    
+    // Control de seguridad: Si la firma queda muy cerca del borde inferior, saltamos de hoja
+    if (currentY > pageHeight - 65) {
+        doc.addPage();
+        currentY = 40; // Empezamos en un lugar visible en la nueva hoja
+    }
 
     if (prof.signatureBase64) {
       try {
@@ -584,7 +618,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     const footerLines = [
       prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional'),
       isStaff ? '' : (prof.especialidad || prof.esp || 'Especialista'),
-      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'}${prof.me && prof.me.trim() !== "" ? ` | ME: ${prof.me}` : ''}`
+      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'}${prof.me && String(prof.me).trim() !== "" ? ` | ME: ${prof.me}` : ''}`
     ].filter(line => line !== '');
 
     footerLines.forEach((text, i) => {

@@ -34,7 +34,7 @@ import {
 import { db, auth } from '../services/firebase';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 
-const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
+const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
   const navigate = useNavigate();
   const toTitleCase = (str) => {
     if (!str) return '';
@@ -55,7 +55,7 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
   const [selectedOrderForPreview, setSelectedOrderForPreview] = useState(null);
   const PAGE_SIZE = 15;
 
-  const isAdmin = userProfile?.role?.toLowerCase().includes('admin');
+  // isAdmin is now received as a prop
   const canSelectProfessional = isAdmin || isSecretaria;
   const [selectedProfId, setSelectedProfId] = useState('all');
 
@@ -401,16 +401,18 @@ const MyOrdersPage = ({ userProfile, isSecretaria = false }) => {
                         </button>
 
                         {/* Editar */}
-                        <button 
-                          onClick={() => handleEditOrder(order.id)}
-                          className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 border border-indigo-100 shadow-sm transition-all"
-                          title="Editar Pedido"
-                        >
-                          <PenLine size={18} />
-                        </button>
+                        {!isSecretaria && (
+                          <button 
+                            onClick={() => handleEditOrder(order.id)}
+                            className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 border border-indigo-100 shadow-sm transition-all"
+                            title="Editar Pedido"
+                          >
+                            <PenLine size={18} />
+                          </button>
+                        )}
 
                         {/* Eliminar */}
-                        {(isAdmin || (!isSecretaria && auth.currentUser?.uid === order.profesionalId)) && (
+                        {(isAdmin || (!isSecretaria && auth.currentUser?.uid === order.profesionalId)) && !isSecretaria && (
                           <button onClick={() => setDeleteModal({ show: true, order })} className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 border border-red-100 shadow-sm transition-all" title="Eliminar"><Trash2 size={18} /></button>
                         )}
                       </div>

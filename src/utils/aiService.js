@@ -29,9 +29,10 @@ export const extractPatientsFromImage = async (base64Image) => {
       - La columna "Paciente" contiene Apellido y Nombre.
       - La columna "Mutual" es la Obra Social.
       - La columna "Teléfono" es el teléfono del paciente.
+      - Si existe un email, extráelo en minúsculas.
       
       Devuelve los datos estrictamente en formato JSON como un array de objetos con las siguientes claves:
-      dni (string, solo números), nombre (string, Apellido y Nombre), obraSocial (string), telefono (string).
+      dni (string, solo números), nombre (string, Apellido y Nombre), obraSocial (string), telefono (string), email (string | null).
       
       Si no puedes extraer nada, devuelve un array vacío [].
       Solo devuelve el JSON, sin texto adicional ni bloques de código.
@@ -45,7 +46,24 @@ export const extractPatientsFromImage = async (base64Image) => {
           mimeType: "image/png"
         }
       }
-    ]);
+    ], {
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              dni: { type: "string" },
+              nombre: { type: "string" },
+              obraSocial: { type: "string" },
+              telefono: { type: "string" },
+              email: { type: ["string", "null"] }
+            }
+          }
+        }
+      }
+    });
 
     const response = await result.response;
     const text = response.text();
@@ -74,21 +92,49 @@ export const extractPatientsFromText = async (pdfText) => {
     });
 
     const prompt = `
-      Analiza el siguiente texto extraído de un PDF de turnos de una clínica.
-      Extrae todos los pacientes y conviértelos a un formato estructurado.
+      Actúa como un experto en extracción de datos médicos.
+      Analiza el siguiente texto extraído de un PDF o imagen de turnos de una clínica (GACITUA).
+      Extrae todos los pacientes y conviértelos a un formato estructurado JSON.
       
-      Buscamos: DNI (está en la columna H.C.), Nombre (columna Paciente), Obra Social (columna Mutual) y Teléfono.
+      INSTRUCCIONES CRÍTICAS:
+      1. MAPEO DE COLUMNAS:
+         - "H.C." es el DNI (extrae solo números).
+         - "Paciente" es el Nombre completo (normalmente APELLIDO NOMBRE).
+         - "Mutual" es la Obra Social / Seguro Médico.
+         - "Teléfono" es el teléfono de contacto.
+      2. EXTRACCIÓN DE EMAIL:
+         - Busca patrones de correo electrónico (ej: usuario@gmail.com, nombre.apellido@dominio.ar).
+         - Si el email aparece en cualquier parte del texto asociado al paciente (o en la misma fila), EXTRÁELO SIN FALTA.
+         - Es VITAL capturar el email si está presente para el envío automático de informes.
       
-      Texto del PDF:
+      Texto a procesar:
       ${pdfText}
       
       Devuelve los datos estrictamente en formato JSON como un array de objetos con las siguientes claves:
-      dni, nombre, obraSocial, telefono.
+      dni, nombre, obraSocial, telefono, email.
       
-      Solo devuelve el JSON, sin texto adicional.
+      Si no encuentras el email para un paciente específico, pon null.
+      Solo devuelve el JSON, sin texto adicional ni bloques de código.
     `;
 
-    const result = await model.generateContent(prompt);
+    const result = await model.generateContent(prompt, {
+      generationConfig: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              dni: { type: "string" },
+              nombre: { type: "string" },
+              obraSocial: { type: "string" },
+              telefono: { type: "string" },
+              email: { type: ["string", "null"] }
+            }
+          }
+        }
+      }
+    });
     const response = await result.response;
     const text = response.text();
     

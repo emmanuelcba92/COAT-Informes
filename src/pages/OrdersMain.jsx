@@ -10,7 +10,7 @@ import {
 const NewOrderPage = React.lazy(() => import('./NewOrderPage'));
 const MyOrdersPage = React.lazy(() => import('./MyOrdersPage'));
 
-const OrdersMain = ({ userProfile, isSecretaria = false }) => {
+const OrdersMain = ({ userProfile, isAdmin = false, isSecretaria = false }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
@@ -27,7 +27,7 @@ const OrdersMain = ({ userProfile, isSecretaria = false }) => {
         <Suspense fallback={<div className="p-10 text-center opacity-50 text-[var(--text-main)]">Cargando sección de pedidos...</div>}>
           <Routes>
             <Route path="new" element={!isSecretaria ? <NewOrderPage userProfile={userProfile} /> : <Navigate to="/orders/history" replace />} />
-            <Route path="history" element={<MyOrdersPage userProfile={userProfile} isSecretaria={isSecretaria} />} />
+            <Route path="history" element={<MyOrdersPage userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} />} />
             <Route index element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
             <Route path="*" element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
           </Routes>
