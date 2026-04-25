@@ -2474,6 +2474,7 @@ const AdminPage = () => {
                         <span className="text-xs font-bold uppercase text-gray-500">Espacio en Drive</span>
                       </div>
                       <button 
+                        onClick={async () => {
                           try {
                             const res = await fetch(appsScriptUrl, {
                               method: 'POST',
