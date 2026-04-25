@@ -1124,7 +1124,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 placeholder="Nombre y Apellido completo"
                 value={reportData.patient}
                 onChange={e => {
-                  const val = toTitleCase(e.target.value);
+                  const val = e.target.value;
                   setReportData(prev => ({ ...prev, patient: val }));
                 }}
               />
@@ -1172,7 +1172,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 placeholder="Médico que solicita..."
                 value={reportData.requester}
                 onChange={e => {
-                  const val = toTitleCase(e.target.value);
+                  const val = e.target.value;
                   setReportData(prev => ({ ...prev, requester: val }));
                 }}
               />
@@ -1190,7 +1190,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 placeholder=""
                 value={reportData.reason}
                 onChange={e => {
-                  const val = toTitleCase(e.target.value);
+                  const val = e.target.value;
                   setReportData(prev => ({ ...prev, reason: val }));
                 }}
               />

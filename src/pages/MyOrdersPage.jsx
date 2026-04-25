@@ -33,6 +33,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from '../services/firebase';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
+import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
 const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
   const navigate = useNavigate();
@@ -278,6 +279,14 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
     setLoading(true);
     try {
       await deleteDoc(doc(db, 'orders', order.id));
+      
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.DELETE_ORDER, 
+        order.id, 
+        order.name || "Pedido"
+      );
+
       showToast('Pedido eliminado.');
       fetchOrders(selectedProfId, true);
     } catch (err) {

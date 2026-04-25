@@ -31,10 +31,10 @@ import {
   User as UserIcon,
   Database,
   RefreshCw,
-  RefreshCcw,
-  GripVertical,
-  Camera,
-  FileSearch
+  History,
+  FileSearch,
+  ShieldAlert,
+  Clock
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -63,6 +63,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { supabase } from '../services/supabase';
+import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -147,11 +148,12 @@ const AdminPage = () => {
   });
   const [newPracticeForm, setNewPracticeForm] = useState({ n: "", c: "", allowedRoles: [] });
   const [editingOrderPracticeIdx, setEditingOrderPracticeIdx] = useState(null);
-  const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({
-    n: "",
-    c: "",
-    allowedRoles: [],
-  });
+  const [editOrderPracticeForm, setEditOrderPracticeForm] = useState({ n: "", c: "", allowedRoles: [] });
+
+  // State for Audit Logs
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditSearch, setAuditSearch] = useState("");
 
 
   const autoCleanPerformed = useRef(false);
@@ -659,7 +661,12 @@ const AdminPage = () => {
     {
       id: "settings",
       label: "Configuración",
-      icon: <ShieldCheck size={20} />,
+      icon: <Settings2 size={20} />,
+    },
+    {
+      id: "audit",
+      label: "Auditoría",
+      icon: <History size={20} />,
     },
   ];
 
@@ -811,8 +818,15 @@ const AdminPage = () => {
   };
 
   const handleDeletePractice = async (id) => {
-    if (window.confirm("¿Eliminar modelo de informe?"))
+    if (window.confirm("¿Eliminar modelo de informe?")) {
       await deleteDoc(doc(db, "practices", id));
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        id, 
+        "Modelo de informe eliminado"
+      );
+    }
   };
 
   const handleSaveSettings = async () => {
@@ -827,6 +841,14 @@ const AdminPage = () => {
         autoSaveToDrive,
         showPrivacyToggle
       }, { merge: true });
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        "global_settings", 
+        "Configuración general del sistema"
+      );
+
       alert("Configuración guardada correctamente");
     } catch (err) {
       alert("Error al guardar: " + err.message);
@@ -840,6 +862,13 @@ const AdminPage = () => {
     try {
       await setDoc(doc(db, "config", "settings"), newConfigData, { merge: true });
       setConfig(newConfigData);
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        "field_requirements", 
+        "Requerimientos de campos en informes"
+      );
     } catch (err) {
       alert("Error al guardar configuración: " + err.message);
     }
@@ -971,6 +1000,14 @@ const AdminPage = () => {
       await setDoc(doc(db, "users", targetProf.id), targetProf, {
         merge: true,
       });
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        targetProf.id, 
+        `Perfil de usuario actualizado: ${targetProf.nombre}`
+      );
+
       setIsManageProfessionalModalOpen(false);
       alert("Perfil actualizado");
     } catch (err) {
@@ -2356,6 +2393,124 @@ const AdminPage = () => {
           </div>
         )}
 
+        {activeTab === "audit" && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="space-y-6"
+          >
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-3 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-2xl shadow-sm">
+                  <ShieldAlert size={24} />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-[var(--text-main)]">Log de Auditoría Inmutable</h2>
+                  <p className="text-[var(--text-sub)] text-sm font-medium">Registro histórico de acciones críticas (90 días)</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <div className="relative group flex-1 md:w-80">
+                  <SearchIcon
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-500"
+                    size={18}
+                  />
+                  <input
+                    type="text"
+                    placeholder="Buscar por usuario o acción..."
+                    className="w-full pl-11 pr-4 py-3 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                    value={auditSearch}
+                    onChange={(e) => setAuditSearch(e.target.value)}
+                  />
+                </div>
+                <button 
+                  onClick={fetchAuditLogs}
+                  className="p-3 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl text-[var(--text-sub)] hover:text-blue-600 hover:border-blue-500 transition-all shadow-sm"
+                  title="Refrescar logs"
+                >
+                  <RefreshCw size={20} className={auditLoading ? "animate-spin" : ""} />
+                </button>
+              </div>
+            </div>
+
+            <div className="card overflow-hidden border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[2.5rem]">
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr className="bg-[var(--bg-secondary)] border-b border-[var(--border-main)]">
+                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Fecha / Hora</th>
+                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Usuario</th>
+                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Acción</th>
+                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Detalle</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--border-main)]">
+                    {auditLogs
+                      .filter(log => 
+                        log.userEmail?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                        log.userName?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                        log.action?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                        log.targetName?.toLowerCase().includes(auditSearch.toLowerCase())
+                      )
+                      .map((log) => (
+                        <tr key={log.id} className="hover:bg-[var(--hover-main)] transition-colors group">
+                          <td className="px-6 py-5">
+                            <div className="flex items-center gap-2">
+                              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">
+                                <Clock size={14} />
+                              </div>
+                              <span className="text-xs font-bold text-[var(--text-main)]">
+                                {new Date(log.timestamp?.seconds * 1000 || log.timestamp).toLocaleString('es-AR')}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-col">
+                              <span className="text-sm font-black text-[var(--text-main)]">{log.userName}</span>
+                              <span className="text-[10px] font-medium text-[var(--text-sub)]">{log.userEmail}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                              log.action?.includes('DELETE') ? 'bg-red-100 text-red-600' :
+                              log.action?.includes('CREATE') ? 'bg-emerald-100 text-emerald-600' :
+                              log.action?.includes('UPDATE') ? 'bg-amber-100 text-amber-600' :
+                              'bg-blue-100 text-blue-600'
+                            }`}>
+                              {log.action}
+                            </span>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-[var(--text-main)]">
+                                <span className="text-[var(--text-sub)] opacity-50">Objetivo:</span> {log.targetName}
+                              </p>
+                              {log.details && (
+                                <p className="text-[10px] text-[var(--text-sub)] bg-[var(--bg-secondary)] p-2 rounded-xl border border-main/10 font-mono">
+                                  {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}
+                                </p>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    {auditLogs.length === 0 && !auditLoading && (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-20 text-center">
+                          <div className="flex flex-col items-center opacity-30">
+                            <FileSearch size={48} className="mb-4" />
+                            <p className="text-sm font-black uppercase tracking-widest">No hay registros de auditoría</p>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </motion.div>
+        )}
         {activeTab === "settings" && (
           <div className="max-w-3xl mx-auto">
             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">

@@ -42,6 +42,7 @@ import {
 } from 'firebase/firestore';
 import { supabase } from '../services/supabase';
 import { db, auth } from '../services/firebase';
+import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
 
 
@@ -310,7 +311,14 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         patientEmail: uploadData.patientEmail || ''
       };
 
-      await addDoc(collection(db, 'reports'), reportSaveData);
+      const docRef = await addDoc(collection(db, 'reports'), reportSaveData);
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.UPLOAD_EXTERNAL_PDF, 
+        docRef.id, 
+        uploadData.patientName || "Paciente desconocido"
+      );
 
       // 4. Send Email if configured
       if (config.appsScriptUrl && config.token) {
@@ -484,6 +492,13 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
       // 2. Borrar en Firestore (siempre lo hacemos)
       await deleteDoc(doc(db, 'reports', report.id));
+      
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.DELETE_REPORT, 
+        report.id, 
+        report.pacienteNombre || report.n || "Informe"
+      );
       
       showToast('Informe eliminado de la lista.');
       fetchReports(selectedProfId || 'all', true);

@@ -43,6 +43,7 @@ import {
   getCountFromServer,
   arrayUnion
 } from 'firebase/firestore';
+import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import * as pdfjsLib from 'pdfjs-dist';
 import { extractPatientsFromImage, extractPatientsFromText } from '../utils/aiService';
 
@@ -165,6 +166,13 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
     if (window.confirm(`¿Estás seguro de eliminar al paciente ${patientName}? Esta acción no se puede deshacer.`)) {
       try {
         await deleteDoc(doc(db, 'patients', id));
+        
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.DELETE_PATIENT, 
+          id, 
+          patientName
+        );
       } catch (err) {
         alert('Error al eliminar: ' + err.message);
       }
@@ -293,6 +301,14 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
       }
 
       setImportProgress({ current: importResults.length, total: importResults.length });
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.IMPORT_PATIENTS, 
+        "bulk", 
+        `${importResults.length} pacientes`
+      );
+
       alert(`Se importaron/actualizaron ${importResults.length} pacientes correctamente.`);
       setIsImportModalOpen(false);
       setImportResults([]);
