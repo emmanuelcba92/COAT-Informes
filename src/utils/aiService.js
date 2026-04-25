@@ -1,6 +1,9 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
+const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const MODEL_NAME = "gemini-3.1-flash-lite";
+
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 /**
  * Procesa una imagen (captura de pantalla) para extraer datos de pacientes
@@ -9,7 +12,12 @@ const genAI = new GoogleGenerativeAI(import.meta.env.VITE_GEMINI_API_KEY);
  */
 export const extractPatientsFromImage = async (base64Image) => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+      model: MODEL_NAME,
+      generationConfig: {
+        responseMimeType: "application/json",
+      }
+    });
 
     const prompt = `
       Actúa como un experto en extracción de datos médicos. 
@@ -58,7 +66,12 @@ export const extractPatientsFromImage = async (base64Image) => {
  */
 export const extractPatientsFromText = async (pdfText) => {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ 
+      model: MODEL_NAME,
+      generationConfig: {
+        responseMimeType: "application/json",
+      }
+    });
 
     const prompt = `
       Analiza el siguiente texto extraído de un PDF de turnos de una clínica.
