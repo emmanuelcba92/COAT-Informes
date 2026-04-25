@@ -75,9 +75,13 @@ const AdminPage = () => {
   const [appsScriptUrl, setAppsScriptUrl] = useState("");
   const [adminEmail, setAdminEmail] = useState("");
   const [token, setToken] = useState("");
+  const [driveFolderId, setDriveFolderId] = useState("");
+  const [ordersFolderId, setOrdersFolderId] = useState("");
+  const [autoSaveToDrive, setAutoSaveToDrive] = useState(false);
   // Full config/settings object — used for report required-fields toggles
   const [config, setConfig] = useState({});
   const [isSavingSettings, setIsSavingSettings] = useState(false);
+  const [driveQuota, setDriveQuota] = useState(null);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [pasteData, setPasteData] = useState("");
@@ -262,6 +266,9 @@ const AdminPage = () => {
           setAppsScriptUrl(data.appsScriptUrl || "");
           setAdminEmail(data.adminEmail || "");
           setToken(data.token || "");
+          setDriveFolderId(data.driveFolderId || "");
+          setOrdersFolderId(data.ordersFolderId || "");
+          setAutoSaveToDrive(data.autoSaveToDrive || false);
           setConfig(data); // full config object for feature toggles
         }
       },
@@ -341,16 +348,22 @@ const AdminPage = () => {
 
       const fbCount = reportsSnap.size + ordersSnap.size + patientsSnap.size;
 
-      let totalBytes = 0;
+      let reportsBytes = 0;
       reportsSnap.forEach((doc) => {
-        totalBytes += JSON.stringify(doc.data()).length;
+        reportsBytes += JSON.stringify(doc.data()).length;
       });
+
+      let ordersBytes = 0;
       ordersSnap.forEach((doc) => {
-        totalBytes += JSON.stringify(doc.data()).length;
+        ordersBytes += JSON.stringify(doc.data()).length;
       });
+
+      let patientsBytes = 0;
       patientsSnap.forEach((doc) => {
-        totalBytes += JSON.stringify(doc.data()).length;
+        patientsBytes += JSON.stringify(doc.data()).length;
       });
+
+      const totalBytes = reportsBytes + ordersBytes + patientsBytes;
 
       // 2. Supabase (Files)
       const { data: files } = await supabase.storage
@@ -370,9 +383,25 @@ const AdminPage = () => {
         );
       }
 
+      // 3. Google Drive (Quota)
+      if (appsScriptUrl) {
+        try {
+          const res = await fetch(appsScriptUrl);
+          if (res.ok) {
+            const data = await res.json();
+            setDriveQuota(data);
+          }
+        } catch (e) {
+          console.error("Error auto-fetching drive quota:", e);
+        }
+      }
+
       setStorageStats({
         fbCount,
         fbSize: (totalBytes / 1024).toFixed(2),
+        reportsSize: (reportsBytes / 1024).toFixed(2),
+        ordersSize: (ordersBytes / 1024).toFixed(2),
+        patientsSize: (patientsBytes / 1024).toFixed(2),
         sbCount,
         sbSize: (sbSize / (1024 * 1024)).toFixed(2),
         loading: false,
@@ -787,7 +816,10 @@ const AdminPage = () => {
         appsScriptUrl,
         adminEmail,
         token,
-      });
+        driveFolderId,
+        ordersFolderId,
+        autoSaveToDrive
+      }, { merge: true });
       alert("Configuración guardada correctamente");
     } catch (err) {
       alert("Error al guardar: " + err.message);
@@ -1220,11 +1252,27 @@ const AdminPage = () => {
                           </span>
                         </p>
                         <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">
-                          Espacio ocupado en BD
+                          Total en Base de Datos
                         </p>
                       </div>
                     </div>
-                    <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
+                    
+                    <div className="space-y-3 mt-4 pt-4 border-t border-main/10">
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-indigo-500 uppercase">Informes</span>
+                        <span className="text-[var(--text-main)]">{storageStats.reportsSize} KB</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-purple-500 uppercase">Pedidos</span>
+                        <span className="text-[var(--text-main)]">{storageStats.ordersSize} KB</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[10px] font-bold">
+                        <span className="text-blue-500 uppercase">Pacientes</span>
+                        <span className="text-[var(--text-main)]">{storageStats.patientsSize} KB</span>
+                      </div>
+                    </div>
+
+                    <div className="w-full h-2 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden mt-6">
                       <div
                         className="h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_10px_rgba(37,99,235,0.5)]"
                         style={{
@@ -1234,10 +1282,8 @@ const AdminPage = () => {
                     </div>
                   </div>
                   <p className="text-sm text-gray-500 leading-relaxed">
-                    La base de datos Firestore almacena los metadatos de los
-                    informes, pacientes y ahora también los pedidos. Al
-                    regenerar los PDFs dinámicamente, mantenemos este consumo
-                    en niveles óptimos.
+                    La base de datos Firestore separa los informes, pacientes y pedidos. 
+                    Mantenemos este consumo optimizado mediante el almacenamiento de archivos pesados en Drive y Supabase.
                   </p>
                 </div>
               </div>
@@ -1248,7 +1294,7 @@ const AdminPage = () => {
                     <Upload size={24} />
                   </div>
                   <h3 className="text-xl font-bold">
-                    Almacenamiento de Archivos (Supabase)
+                    Archivos (Supabase)
                   </h3>
                 </div>
 
@@ -1263,7 +1309,7 @@ const AdminPage = () => {
                           </span>
                         </p>
                         <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">
-                          Archivos y Firmas
+                          Capacidad Usada
                         </p>
                       </div>
                       <div className="text-right">
@@ -1285,9 +1331,63 @@ const AdminPage = () => {
                     </div>
                   </div>
                   <p className="text-xs text-slate-500 leading-relaxed font-medium">
-                    Supabase aloja los PDFs generados en informes anteriores y
-                    las firmas de los profesionales. El plan gratuito permite
-                    hasta 1GB, lo cual es suficiente para miles de registros.
+                    Aloja firmas y PDFs de informes. Límite de 1GB en plan gratuito.
+                  </p>
+                </div>
+              </div>
+
+              <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm lg:col-span-2">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2.5 bg-blue-100 dark:bg-blue-900/20 text-blue-600 rounded-xl">
+                    <Database size={24} />
+                  </div>
+                  <h3 className="text-xl font-bold">
+                    Respaldo en Nube (Google Drive)
+                  </h3>
+                </div>
+
+                <div className="space-y-6">
+                  <div className="p-6 bg-[var(--bg-secondary)] rounded-3xl border border-main">
+                    {driveQuota ? (
+                      <>
+                        <div className="flex justify-between items-end mb-4">
+                          <div>
+                            <p className="text-3xl font-black text-[var(--text-main)]">
+                              {driveQuota.usedGB}{" "}
+                              <span className="text-sm font-medium text-[var(--text-sub)]">
+                                GB
+                              </span>
+                            </p>
+                            <p className="text-[10px] font-black text-[var(--text-sub)] uppercase tracking-widest mt-1">
+                              Uso de Cuota Personal
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className={`text-xl font-bold ${parseFloat(driveQuota.percent) > 90 ? 'text-red-500' : 'text-blue-600'}`}>
+                              {driveQuota.percent}%
+                            </p>
+                            <p className="text-[10px] font-bold text-[var(--text-sub)] uppercase">
+                              Ocupado
+                            </p>
+                          </div>
+                        </div>
+                        <div className="w-full h-2.5 bg-white/20 dark:bg-black/20 rounded-full overflow-hidden border border-main/10">
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${driveQuota.percent}%` }}
+                            className={`h-full transition-all duration-1000 shadow-[0_0_10px_rgba(37,99,235,0.5)] ${parseFloat(driveQuota.percent) > 90 ? 'bg-red-500' : 'bg-blue-600'}`}
+                          ></motion.div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="py-10 text-center">
+                        <Loader2 className="animate-spin mx-auto text-gray-300" size={32} />
+                        <p className="text-xs text-gray-400 mt-2 uppercase font-black">Cargando cuota de Drive...</p>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                    Google Drive actúa como almacenamiento secundario. Tienes un límite de 15GB gratuitos compartidos con tu cuenta de Google.
                   </p>
                 </div>
               </div>
@@ -2313,6 +2413,103 @@ const AdminPage = () => {
                     className="input-field"
                     placeholder="••••••••"
                   />
+                </div>
+
+                <div className="border-t border-main pt-8 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center">
+                      <Database size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold">Google Drive Storage</h4>
+                      <p className="text-[10px] text-gray-400">Respaldo automático de PDFs en la nube</p>
+                    </div>
+                    <div className="ml-auto">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={autoSaveToDrive}
+                          onChange={(e) => setAutoSaveToDrive(e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500"></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
+                      ID de Carpeta para Informes
+                    </label>
+                    <input
+                      type="text"
+                      value={driveFolderId}
+                      onChange={(e) => setDriveFolderId(e.target.value)}
+                      className="input-field font-mono text-sm"
+                      placeholder="ID de la carpeta de Informes"
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-sm font-bold uppercase text-gray-400 ml-1 flex items-center gap-2">
+                      ID de Carpeta para Pedidos
+                    </label>
+                    <input
+                      type="text"
+                      value={ordersFolderId}
+                      onChange={(e) => setOrdersFolderId(e.target.value)}
+                      className="input-field font-mono text-sm"
+                      placeholder="ID de la carpeta de Pedidos"
+                    />
+                    <p className="text-[10px] text-gray-400 ml-1">
+                      El ID se encuentra al final de la URL de tu carpeta de Drive.
+                    </p>
+                  </div>
+
+                  {/* Monitor de Almacenamiento */}
+                  <div className="mt-4 p-4 bg-slate-100 dark:bg-slate-800/50 rounded-xl border border-main">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <Database size={16} className="text-blue-500" />
+                        <span className="text-xs font-bold uppercase text-gray-500">Espacio en Drive</span>
+                      </div>
+                      <button 
+                          try {
+                            const res = await fetch(appsScriptUrl, {
+                              method: 'POST',
+                              body: JSON.stringify({ token, action: 'getQuota' })
+                            });
+                            const data = await res.json();
+                            setDriveQuota(data);
+                          } catch (e) {
+                            console.error("Error al obtener cuota:", e);
+                          }
+                        }}
+                        className="text-[10px] bg-blue-100 text-blue-600 px-2 py-1 rounded-md hover:bg-blue-200 transition-colors"
+                      >
+                        Actualizar
+                      </button>
+                    </div>
+
+                    {driveQuota ? (
+                      <div className="space-y-2">
+                        <div className="flex justify-between text-[10px] font-mono">
+                          <span>{driveQuota.usedGB} GB</span>
+                          <span className="font-bold text-blue-600">{driveQuota.percent}%</span>
+                          <span>{driveQuota.limitGB} GB</span>
+                        </div>
+                        <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${driveQuota.percent}%` }}
+                            className={`h-full ${parseFloat(driveQuota.percent) > 90 ? 'bg-red-500' : 'bg-blue-500'}`}
+                          />
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-center text-gray-400 py-2">Click en actualizar para cargar estado</p>
+                    )}
+                  </div>
                 </div>
                 <div className="pt-6">
                   <button

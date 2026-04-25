@@ -86,7 +86,14 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
   const [loadingStatus, setLoadingStatus] = useState(''); // New state for descriptive messages
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [profile, setProfile] = useState(propProfile || null);
-  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const [config, setConfig] = useState({ 
+    adminEmail: '', 
+    appsScriptUrl: '', 
+    token: '', 
+    driveFolderId: '', 
+    ordersFolderId: '', 
+    autoSaveToDrive: false 
+  });
   const [previewUrl, setPreviewUrl] = useState(null);
   const [orderMetadata, setOrderMetadata] = useState({ sentToAdmin: false });
   const isSavingRef = React.useRef(false);
@@ -430,6 +437,13 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
         </div>
       `;
 
+      // Determinar carpeta de destino: usar ordersFolderId si está disponible, sino driveFolderId como fallback
+      let folderIdToSend = config.ordersFolderId || config.driveFolderId;
+      if (!config.autoSaveToDrive) folderIdToSend = null;
+
+      const baseFileName = `Pedido_${patientData.name.replace(/\s/g, '_')}`;
+      const driveFileName = `${patientData.date}_Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`;
+
       // Envío a Administración
       if (config.adminEmail && !orderMetadata.sentToAdmin) {
         setLoadingStatus('Enviando copia a administración...');
@@ -443,10 +457,13 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
               recipientEmails: [config.adminEmail],
               subject: `Pedido Médico: ${patientData.name}`,
               message: emailBody,
-              fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
+              fileName: driveFileName,
+              folderId: folderIdToSend,
+              dni: patientData.dni // Enviamos DNI para la subcarpeta
             })
           });
-          
+          folderIdToSend = null; // Consumido
+
           // Marcamos como enviado inmediatamente si el fetch no lanzó error (aunque sea no-cors)
           if (currentOrderId) {
             await updateDoc(doc(db, 'orders', currentOrderId), { sentToAdmin: true });
@@ -460,18 +477,45 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
       // Envío al Paciente
       if (patientData.patientEmail) {
         setLoadingStatus('Enviando pedido al paciente...');
-        await fetch(config.appsScriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          body: JSON.stringify({
-            token: config.token,
-            pdfBase64,
-            recipientEmails: [patientData.patientEmail],
-            subject: `COAT - Pedido Médico: ${patientData.name}`,
-            message: emailBody,
-            fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
-          })
-        });
+        try {
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              recipientEmails: [patientData.patientEmail],
+              subject: `COAT - Pedido Médico: ${patientData.name}`,
+              message: emailBody,
+              fileName: driveFileName,
+              folderId: folderIdToSend,
+              dni: patientData.dni // Enviamos DNI para la subcarpeta
+            })
+          });
+          folderIdToSend = null; // Consumido
+        } catch (e) {
+          console.warn("Error enviando al paciente:", e);
+        }
+      }
+
+      // Backup a Drive solo (si no se envió antes)
+      if (folderIdToSend) {
+        setLoadingStatus('Guardando respaldo en Drive...');
+        try {
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              fileName: driveFileName,
+              folderId: folderIdToSend,
+              dni: patientData.dni // Enviamos DNI para la subcarpeta
+            })
+          });
+        } catch (e) {
+          console.warn("Error backup Drive:", e);
+        }
       }
 
       showToast('¡Email enviado con éxito!');

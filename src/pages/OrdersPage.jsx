@@ -173,10 +173,10 @@ const OrdersPage = ({ userProfile: propProfile }) => {
   };
 
   const isFormValid = () => {
-    const { name, insurance, affiliateNumber, diagnosis, patientEmail } = patientData;
+    const { name, dni, insurance, affiliateNumber, diagnosis, patientEmail } = patientData;
     const isParticular = (insurance || '').toLowerCase().trim() === 'particular';
     
-    const basicFields = name.trim() && insurance.trim() && diagnosis.trim();
+    const basicFields = name.trim() && dni.trim() && insurance.trim() && diagnosis.trim();
     const affiliateOk = isParticular || (affiliateNumber.trim() && /^\d+$/.test(affiliateNumber));
     const emailOk = isEmailValid(patientEmail);
     const practicesOk = selectedPractices.length > 0;
@@ -245,7 +245,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
   }, [editId]);
 
   const [isSending, setIsSending] = useState(false);
-  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '', ordersFolderId: '', autoSaveToDrive: false });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   const showToast = (message, type = 'success') => {
@@ -554,7 +554,9 @@ const OrdersPage = ({ userProfile: propProfile }) => {
           recipientEmails: [patientData.patientEmail],
           subject: `COAT - Pedido Médico Digital: ${patientData.name}`,
           message: `<p>Estimado/a <strong>${patientData.name}</strong>, le adjuntamos su pedido médico.</p>`,
-          fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`
+          fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`,
+          folderId: config.autoSaveToDrive ? config.ordersFolderId : null,
+          dni: patientData.dni
         })
       });
       // Update state and save

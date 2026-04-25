@@ -710,6 +710,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         </div>
       `;
 
+      let folderIdToSend = config.autoSaveToDrive ? config.driveFolderId : null;
+
       // Envío a Administración
       if (config.adminEmail && !reportData.sentToAdmin) {
         try {
@@ -722,9 +724,12 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               recipientEmails: [config.adminEmail],
               subject: `Informe Médico: ${reportData.patient}`,
               message: emailBody,
-              fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
+              fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`,
+              folderId: folderIdToSend,
+              dni: reportData.dni
             })
           });
+          folderIdToSend = null; // Consumido
         } catch (e) {
           console.warn("Error enviando copia admin:", e);
         }
@@ -732,18 +737,44 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
 
       // Envío al Paciente (si tiene email)
       if (reportData.patientEmail) {
-        await fetch(config.appsScriptUrl, {
-          method: 'POST',
-          mode: 'no-cors',
-          body: JSON.stringify({
-            token: config.token,
-            pdfBase64,
-            recipientEmails: [reportData.patientEmail],
-            subject: subjectPaciente,
-            message: emailBody,
-            fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`
-          })
-        });
+        try {
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              recipientEmails: [reportData.patientEmail],
+              subject: subjectPaciente,
+              message: emailBody,
+              fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`,
+              folderId: folderIdToSend,
+              dni: reportData.dni
+            })
+          });
+          folderIdToSend = null; // Consumido
+        } catch (e) {
+          console.warn("Error enviando al paciente:", e);
+        }
+      }
+
+      // Backup a Drive solo (si no se envió antes)
+      if (folderIdToSend) {
+        try {
+          await fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            body: JSON.stringify({
+              token: config.token,
+              pdfBase64,
+              fileName: `${reportData.patient.replace(/\s/g, '_')}.pdf`,
+              folderId: folderIdToSend,
+              dni: reportData.dni
+            })
+          });
+        } catch (e) {
+          console.warn("Error backup Drive:", e);
+        }
       }
       
       // Actualizamos el estado para que saveToHistory sepa que ya se envió a admin
@@ -852,7 +883,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
           recipientEmails: [reportData.patientEmail],
           subject: `COAT Informes - REENVÍO: ${reportData.patient}`,
           message: bodyPaciente,
-          fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`
+          fileName: `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`,
+          dni: reportData.dni,
+          folderId: config.autoSaveToDrive ? config.driveFolderId : null
         })
       });
 
