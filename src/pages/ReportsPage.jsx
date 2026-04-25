@@ -501,13 +501,22 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
       currentY += 10;
     }
 
-    // Main Content
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    
+    // Lógica inteligente de tamaño de letra
     const plainResult = cleanHtmlForPDF(reportData.result || content);
-    const contentLines = doc.splitTextToSize(plainResult, 185);
     const pageHeight = doc.internal.pageSize.height;
+    const availableHeight = pageHeight - currentY - 70; // Espacio restante aprox.
+    
+    // Probar primero con 11pt
+    doc.setFontSize(11);
+    let contentLines = doc.splitTextToSize(plainResult, 185);
+    let lineHeight = 5.2; // Altura de línea para 11pt
+    
+    // Si el texto a 11pt supera el espacio disponible en la primera hoja, bajamos a 10pt
+    if (contentLines.length * lineHeight > availableHeight) {
+      doc.setFontSize(10);
+      contentLines = doc.splitTextToSize(plainResult, 185);
+      lineHeight = 4.2; // Altura de línea para 10pt
+    }
 
     contentLines.forEach(line => {
       // Check for page break (leaving space for signature/footer)
@@ -516,7 +525,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         currentY = 20;
       }
       doc.text(line, 10, currentY);
-      currentY += 4.2;
+      currentY += lineHeight;
     });
     
     // Signature Area - Siempre al fondo de la hoja
