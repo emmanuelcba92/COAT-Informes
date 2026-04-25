@@ -260,6 +260,14 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
         await updateDoc(fireDoc(db, 'orders', order.id), { sentToAdmin: true });
       }
 
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.SEND_ORDER,
+        order.id,
+        `Pedido reenviado: ${order.name} (${order.practices?.join(', ') || 'Sin prácticas'})`,
+        { recipient: order.patientEmail }
+      );
+
       showToast('¡Pedido reenviado con éxito!');
     } catch (err) {
       console.error(err);
@@ -284,7 +292,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
       await logAction(
         AUDIT_ACTIONS.DELETE_ORDER, 
         order.id, 
-        order.name || "Pedido"
+        `Pedido eliminado: ${order.name} (${order.practices?.join(', ') || 'Sin prácticas'})`
       );
 
       showToast('Pedido eliminado.');

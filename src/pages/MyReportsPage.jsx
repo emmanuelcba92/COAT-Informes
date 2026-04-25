@@ -48,6 +48,12 @@ import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
 const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp, isDarkMode }) => {
   const navigate = useNavigate();
+  
+  const toTitleCase = (str) => {
+    if (!str) return '';
+    return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+  };
+
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
   
@@ -317,7 +323,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       await logAction(
         AUDIT_ACTIONS.UPLOAD_EXTERNAL_PDF, 
         docRef.id, 
-        uploadData.patientName || "Paciente desconocido"
+        `PDF Externo subido: ${uploadData.patientName.toUpperCase()} (${uploadData.reason.toUpperCase() || 'INFORME EXTERNO'})`
       );
 
       // 4. Send Email if configured
@@ -497,11 +503,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       await logAction(
         AUDIT_ACTIONS.DELETE_REPORT,
         report.id,
-        `Informe eliminado: ${report.patient || report.pacienteNombre || 'Desconocido'}`,
-        { 
-          date: report.date || report.d,
-          socialWork: report.socialWork || report.sw
-        }
+        `Informe eliminado: ${report.patient || report.pacienteNombre || 'Desconocido'} (${report.practicaNombre || 'Sin práctica'})`
       );
       
       showToast('Informe eliminado de la lista.');
@@ -824,7 +826,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                             {report.pacienteNombre?.charAt(0)}
                          </div>
                          <div>
-                            <p className="font-black text-sm">{report.pacienteNombre}</p>
+                            <p className="font-black text-sm">{toTitleCase(report.pacienteNombre)}</p>
                             <p className="text-xs text-gray-400">DNI: {report.pacienteDni || 'N/A'}</p>
                          </div>
                       </div>

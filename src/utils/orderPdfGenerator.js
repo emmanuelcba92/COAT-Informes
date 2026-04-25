@@ -31,8 +31,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
   const coatBlue = [0, 102, 128];
 
   const toTitleCase = (str) => {
-    if (!str) return '';
-    return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    return str || '';
   };
 
   const drawHeader = async (targetDoc, orderTypeLabel) => {
@@ -69,11 +68,11 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     targetDoc.setFontSize(12);
     targetDoc.setFont("helvetica", "bold");
     targetDoc.setTextColor(0, 0, 0);
-    targetDoc.text(`Paciente: ${toTitleCase(orderData.name)}`, centerX, 49, { align: 'center' });
+    targetDoc.text(`Paciente: ${orderData.name}`, centerX, 49, { align: 'center' });
 
     targetDoc.setFontSize(10);
     targetDoc.setFont("helvetica", "normal");
-    targetDoc.text(`Obra Social: ${toTitleCase(orderData.insurance)} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${toTitleCase(orderData.diagnosis)}` : ''}`, centerX, 55, { align: 'center' });
+    targetDoc.text(`Obra Social: ${orderData.insurance} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${orderData.diagnosis}` : ''}`, centerX, 55, { align: 'center' });
   };
 
   const drawFooter = async (targetDoc, currentY = null) => {

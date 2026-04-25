@@ -17,7 +17,7 @@ export const logAction = async (action, targetId, targetName, details = {}) => {
       timestamp: serverTimestamp(),
       userId: user.uid,
       userEmail: user.email,
-      userName: user.displayName || 'Usuario sin nombre',
+      userName: localStorage.getItem('audit_user_name') || user.displayName || 'Usuario sin nombre',
       action,
       targetId,
       targetName,
@@ -43,5 +43,8 @@ export const AUDIT_ACTIONS = {
   ADMIN_CHANGE_SETTINGS: 'CAMBIO_CONFIGURACION',
   AUTH_LOGIN: 'INICIO_SESION',
   CREATE_REPORT: 'CREAR_REPORTE',
-  SEND_REPORT: 'ENVIAR_REPORTE'
+  SEND_REPORT: 'ENVIAR_REPORTE',
+  CREATE_ORDER: 'CREAR_PEDIDO',
+  SEND_ORDER: 'ENVIAR_PEDIDO',
+  UPLOAD_EXTERNAL_PDF: 'SUBIDA_PDF_EXTERNO'
 };

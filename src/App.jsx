@@ -141,6 +141,11 @@ function App() {
           if (snap.exists()) {
             const data = snap.data();
             setUserProfile(data);
+            
+            // Persistir nombre para logs de auditoría
+            if (data.nombre) {
+              localStorage.setItem('audit_user_name', data.nombre);
+            }
             const role = data.role?.toLowerCase() || '';
             setIsSecretaria(role === 'secretaria' || role === 'secre' || role === 'secretaría');
             setIsDirectora(role.includes('directora') || role.includes('director'));
@@ -158,6 +163,7 @@ function App() {
       } else {
         setCurrentUser(null);
         setUserProfile(null);
+        localStorage.removeItem('audit_user_name');
         setIsSecretaria(false);
         setIsDirectora(false);
         unsubscribeSettings(); // Detener listener si se desloguea

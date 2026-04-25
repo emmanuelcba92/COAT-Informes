@@ -6,7 +6,9 @@ service cloud.firestore {
     // Función para verificar si es administrador
     function isAdmin() {
       return request.auth != null && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() == 'administrador';
+        (request.auth.token.email.lower() == 'egomez@coat.com.ar' ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role.lower() in ['admin', 'administrador']));
     }
 
     // Colección de Usuarios

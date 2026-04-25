@@ -28,6 +28,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 
 const ICON_MAP = {
@@ -189,6 +190,14 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
       if (currentOrderId) {
         console.log("Updating existing order:", currentOrderId);
         await updateDoc(doc(db, 'orders', currentOrderId), orderData);
+        
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.EDIT_ORDER,
+          currentOrderId,
+          `Pedido editado: ${orderData.name} (${orderData.selectedPractices.join(', ')})`
+        );
+
         showToast("Pedido actualizado en historial");
         return currentOrderId;
       } else {
@@ -202,6 +211,14 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
             sentToAdmin: false
           });
           setCurrentOrderId(docRef.id);
+
+          // LOG AUDIT
+          await logAction(
+            AUDIT_ACTIONS.CREATE_ORDER,
+            docRef.id,
+            `Nuevo pedido: ${orderData.name} (${orderData.selectedPractices.join(', ')})`
+          );
+
           console.log("New order created with ID:", docRef.id);
           showToast("Pedido guardado en historial");
           return docRef.id;

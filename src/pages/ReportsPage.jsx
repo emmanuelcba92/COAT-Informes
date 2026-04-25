@@ -91,8 +91,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     if (!cleanDni || cleanDni.length < 7) return;
     try {
       const patientRef = doc(db, 'patients', cleanDni);
-      const patientName = reportData.patient.trim().toUpperCase();
-      const insuranceName = reportData.socialWork.trim().toUpperCase();
+      const patientName = reportData.patient.trim();
+      const insuranceName = reportData.socialWork.trim();
       
       const payload = {
         name: patientName,
@@ -181,9 +181,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       const data = {
         profesionalId: localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
         profesionalNombre: professional?.nombre || professional?.n || 'Médico',
-        pacienteNombre: reportData.patient.toUpperCase(),
+        pacienteNombre: reportData.patient,
         pacienteDni: reportData.dni || '',
-        obraSocial: reportData.socialWork.toUpperCase(),
+        obraSocial: reportData.socialWork,
         fecha: reportData.date,
         practicaNombre: selectedPractice,
         tipoReporte: selectedPractice.toLowerCase().includes('fibro') ? 'fibro' : 'clinico',
@@ -206,12 +206,27 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
           data.fechaCreatedAt = new Date().toISOString();
           const docRef = await addDoc(collection(db, 'reports'), data);
           setLocalReportId(docRef.id);
+
+          // LOG AUDIT
+          await logAction(
+            AUDIT_ACTIONS.CREATE_REPORT,
+            docRef.id,
+            `Nuevo informe: ${data.pacienteNombre} (${data.practicaNombre})`
+          );
         } finally {
           isSavingRef.current = false;
         }
       } else {
         const { setDoc, doc: fireDoc } = await import('firebase/firestore');
         await setDoc(fireDoc(db, 'reports', localReportId), data, { merge: true });
+
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.EDIT_REPORT,
+          localReportId,
+          `Informe editado: ${data.pacienteNombre} (${data.practicaNombre})`
+        );
+
         if (shouldNavigate) {
           showToast("¡Informe actualizado correctamente!");
           setTimeout(() => navigate('/history'), 1500);
@@ -482,18 +497,18 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     // Nombre del Paciente (CENTRADOS Y COMPACTOS)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text(`PACIENTE: ${reportData.patient.toUpperCase()}`, 105, currentY, { align: 'center' });
+    doc.text(`PACIENTE: ${reportData.patient}`, 105, currentY, { align: 'center' });
     
     // Datos secundarios (Obra Social, DNI, Fecha)
     currentY += 5.5;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
     const infoParts = [];
-    if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork.toUpperCase()}`);
+    if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
     infoParts.push(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`);
-    if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester.toUpperCase()}`);
-    if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason.toUpperCase()}`);
+    if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester}`);
+    if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason}`);
 
     doc.text(infoParts.join('  |  '), 105, currentY, { align: 'center' });
     
@@ -648,7 +663,32 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       window.open(pdfUrl, '_blank');
       saveToHistory(null, false);
     } else if (mode === 'save') {
-      doc.save(`Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`);
+      const fileName = `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`;
+      doc.save(fileName);
+
+      // Si el botón de envío está desactivado globalmente, enviamos la copia a administración automáticamente al guardar
+      if (config.showSendButton === false && config.appsScriptUrl) {
+        console.log("Auto-sending admin copy since manual button is hidden...");
+        try {
+          const pdfBase64 = doc.output('datauristring').split(',')[1];
+          fetch(config.appsScriptUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token: config.token,
+              action: 'sendAdminCopy',
+              adminEmail: config.adminEmail,
+              professionalName: professional?.nombre || 'Profesional',
+              patientName: reportData.patient,
+              pdfBase64: pdfBase64,
+              fileName: fileName
+            })
+          }).catch(e => console.error("Error auto-sending admin copy:", e));
+        } catch (err) {
+          console.error("Failed to prepare auto-send:", err);
+        }
+      }
       saveToHistory(null, true);
     } else if (mode === 'blob') {
       setIsGenerating(false);
@@ -836,7 +876,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       await logAction(
         AUDIT_ACTIONS.SEND_REPORT,
         reportData.patient.replace(/\s/g, '_'),
-        `Informe enviado: ${reportData.patient}`,
+        `Informe enviado: ${reportData.patient} (${displayTitle})`,
         { 
           sentToAdmin: !!config.adminEmail,
           sentToPatient: (reportData.patientEmail && !reportData.skipEmail),
@@ -1170,7 +1210,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 placeholder=""
                 value={reportData.socialWork}
                 onChange={e => {
-                  const val = e.target.value.toUpperCase();
+                  const val = e.target.value;
                   setReportData(prev => ({ ...prev, socialWork: val }));
                 }}
               />
@@ -1388,19 +1428,21 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 </div>
               </button>
             
-              <button 
-                className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-blue-600 border border-blue-500 shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95 text-white disabled:opacity-50 disabled:scale-100"
-                onClick={handleSendReport}
-                disabled={isGenerating || isSending || !reportData.patient || !selectedPractice}
-              >
-                <div className="w-14 h-14 rounded-2xl bg-white/20 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
-                  {isSending ? <Loader2 size={28} className="animate-spin" /> : <Send size={28} />}
-                </div>
-                <div className="text-center">
-                  <span className="block font-bold">{isSending ? 'Enviando...' : 'Enviar Informe'}</span>
-                  <span className="text-[10px] text-white/60">Por email (Clínica + Copia)</span>
-                </div>
-              </button>
+              {config.showSendButton !== false && (
+                <button 
+                  className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-blue-600 border border-blue-500 shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all active:scale-95 text-white disabled:opacity-50 disabled:scale-100"
+                  onClick={handleSendReport}
+                  disabled={isGenerating || isSending || !reportData.patient || !selectedPractice}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-white/20 text-white flex items-center justify-center group-hover:scale-110 transition-transform">
+                    {isSending ? <Loader2 size={28} className="animate-spin" /> : <Send size={28} />}
+                  </div>
+                  <div className="text-center">
+                    <span className="block font-bold">{isSending ? 'Enviando...' : 'Enviar Informe'}</span>
+                    <span className="text-[10px] text-white/60">Por email (Clínica + Copia)</span>
+                  </div>
+                </button>
+              )}
           </div>
         </div>
       )}

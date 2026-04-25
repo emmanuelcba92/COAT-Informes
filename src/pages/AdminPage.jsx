@@ -34,7 +34,8 @@ import {
   History,
   FileSearch,
   ShieldAlert,
-  Clock
+  Clock,
+  Send
 } from "lucide-react";
 import { motion, AnimatePresence, Reorder } from "framer-motion";
 import * as XLSX from "xlsx";
@@ -82,6 +83,7 @@ const AdminPage = () => {
   const [ordersFolderId, setOrdersFolderId] = useState("");
   const [autoSaveToDrive, setAutoSaveToDrive] = useState(false);
   const [showPrivacyToggle, setShowPrivacyToggle] = useState(true);
+  const [showSendButton, setShowSendButton] = useState(true);
   // Full config/settings object — used for report required-fields toggles
   const [config, setConfig] = useState({});
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -275,9 +277,10 @@ const AdminPage = () => {
           setToken(data.token || "");
           setDriveFolderId(data.driveFolderId || "");
           setOrdersFolderId(data.ordersFolderId || "");
-          setAutoSaveToDrive(docSnap.data().autoSaveToDrive || false);
-          setShowPrivacyToggle(docSnap.data().showPrivacyToggle !== false);
-          setConfig(docSnap.data()); // full config object for feature toggles
+          setAutoSaveToDrive(data.autoSaveToDrive || false);
+          setShowPrivacyToggle(data.showPrivacyToggle !== false);
+          setShowSendButton(data.showSendButton !== false);
+          setConfig(data); // full config object for feature toggles
         }
       },
     );
@@ -699,7 +702,18 @@ const AdminPage = () => {
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
       const userRef = doc(db, "users", userId);
-      await setDoc(userRef, { role: newRole }, { merge: true });
+      const targetUser = users.find(u => u.id === userId);
+      const userName = targetUser ? (targetUser.nombre || targetUser.u) : userId;
+
+      await setDoc(userRef, { role: newRole, rol: newRole }, { merge: true });
+      
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+        userId,
+        `Cambio de rol de ${userName} a: ${newRole}`,
+        { targetUserId: userId, newRole, userName }
+      );
     } catch (err) {
       console.error("Error actualizando rol:", err);
       alert("Error al actualizar rol: " + err.message);
@@ -713,7 +727,16 @@ const AdminPage = () => {
       )
     ) {
       try {
+        const targetUser = users.find(u => u.id === id);
+        const userName = targetUser ? (targetUser.nombre || targetUser.u) : id;
+
         await deleteDoc(doc(db, "users", id));
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+          id,
+          `Perfil profesional eliminado: ${userName}`
+        );
       } catch (err) {
         alert("Error: " + err.message);
       }
@@ -795,8 +818,22 @@ const AdminPage = () => {
           dataToSave,
         );
         setSelectedPractice(null);
+
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+          selectedPractice.id,
+          `Modelo de informe editado: ${dataToSave.n}`
+        );
       } else {
-        await addDoc(collection(db, "practices"), dataToSave);
+        const docRef = await addDoc(collection(db, "practices"), dataToSave);
+        
+        // LOG AUDIT
+        await logAction(
+          AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+          docRef.id,
+          `Nuevo modelo de informe creado: ${dataToSave.n}`
+        );
       }
       setPracticeForm({ c: "", n: "", b: "", st: true, allowedRoles: [] });
     } catch (err) {
@@ -820,12 +857,15 @@ const AdminPage = () => {
 
   const handleDeletePractice = async (id) => {
     if (window.confirm("¿Eliminar modelo de informe?")) {
+      const targetPractice = practices.find(p => p.id === id);
+      const practiceName = targetPractice ? targetPractice.n : id;
+
       await deleteDoc(doc(db, "practices", id));
       // LOG AUDIT
       await logAction(
         AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS, 
         id, 
-        "Modelo de informe eliminado"
+        `Modelo de informe eliminado: ${practiceName}`
       );
     }
   };
@@ -840,7 +880,8 @@ const AdminPage = () => {
         driveFolderId,
         ordersFolderId,
         autoSaveToDrive,
-        showPrivacyToggle
+        showPrivacyToggle,
+        showSendButton
       }, { merge: true });
 
       // LOG AUDIT
@@ -875,10 +916,17 @@ const AdminPage = () => {
     }
   };
 
-  const handleSaveOrderSettings = async (newData) => {
+  const handleSaveOrderSettings = async (newData, customLogMsg) => {
     setIsSavingOrderSettings(true);
     try {
       await setDoc(doc(db, "config", "order_settings"), newData);
+      
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+        "order_settings",
+        customLogMsg || "Configuración de gestión de pedidos"
+      );
     } catch (err) {
       alert("Error al guardar gestión de pedidos: " + err.message);
     } finally {
@@ -897,20 +945,23 @@ const AdminPage = () => {
         [newCategoryForm.id]: [],
       },
     };
-    await handleSaveOrderSettings(updated);
+    await handleSaveOrderSettings(updated, `Nueva categoría añadida: ${newCategoryForm.label}`);
     setNewCategoryForm({ id: "", label: "", icon: "Clipboard" });
   };
 
   const handleDeleteOrderCategory = async (catId) => {
     if (!window.confirm("¿Eliminar categoría y todas sus prácticas?"))
       return;
+    const targetCat = orderSettings.categories.find(c => c.id === catId);
+    const catLabel = targetCat ? targetCat.label : catId;
+
     const updated = {
       ...orderSettings,
       categories: orderSettings.categories.filter((c) => c.id !== catId),
       practicesByType: { ...orderSettings.practicesByType },
     };
     delete updated.practicesByType[catId];
-    await handleSaveOrderSettings(updated);
+    await handleSaveOrderSettings(updated, `Categoría eliminada: ${catLabel}`);
     if (selectedOrderCategory === catId) setSelectedOrderCategory(null);
   };
 
@@ -926,7 +977,7 @@ const AdminPage = () => {
         [selectedOrderCategory]: [...currentList, newPracticeForm],
       },
     };
-    await handleSaveOrderSettings(updated);
+    await handleSaveOrderSettings(updated, `Nueva práctica añadida a ${selectedOrderCategory}: ${newPracticeForm.n}`);
     setNewPracticeForm({ n: "", c: "" });
   };
 
@@ -949,7 +1000,7 @@ const AdminPage = () => {
         [selectedOrderCategory]: currentList,
       },
     };
-    await handleSaveOrderSettings(updated);
+    await handleSaveOrderSettings(updated, `Práctica editada en ${selectedOrderCategory}: ${editOrderPracticeForm.n}`);
     setEditingOrderPracticeIdx(null);
   };
 
@@ -971,6 +1022,9 @@ const AdminPage = () => {
     const currentList = [
       ...(orderSettings.practicesByType[selectedOrderCategory] || []),
     ];
+    const targetPractice = currentList[pIdx];
+    const practiceName = targetPractice ? targetPractice.n : "desconocida";
+
     currentList.splice(pIdx, 1);
     const updated = {
       ...orderSettings,
@@ -979,7 +1033,11 @@ const AdminPage = () => {
         [selectedOrderCategory]: currentList,
       },
     };
-    await handleSaveOrderSettings(updated);
+
+    const catObj = orderSettings.categories.find(c => c.id === selectedOrderCategory);
+    const catLabel = catObj ? catObj.label : selectedOrderCategory;
+
+    await handleSaveOrderSettings(updated, `Práctica "${practiceName}" eliminada de ${catLabel}`);
   };
 
   const handleManageUser = (user) => {
@@ -1090,6 +1148,13 @@ const AdminPage = () => {
       setIsManualModalOpen(false);
       // setManualUserForm({ nombre: "", mp: "", me: "", especialidad: "", u: "", password: "", role: "medico" });
       alert("Usuario creado con éxito");
+
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+        res.user.uid,
+        `Nuevo usuario creado manualmente: ${manualUserForm.u}`
+      );
     } catch (err) {
       alert("Error: " + err.message);
     } finally {
@@ -2425,124 +2490,7 @@ const AdminPage = () => {
           </div>
         )}
 
-        {activeTab === "audit" && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="p-3 bg-red-100 dark:bg-red-900/20 text-red-600 rounded-2xl shadow-sm">
-                  <ShieldAlert size={24} />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-black text-[var(--text-main)]">Log de Auditoría Inmutable</h2>
-                  <p className="text-[var(--text-sub)] text-sm font-medium">Registro histórico de acciones críticas (90 días)</p>
-                </div>
-              </div>
 
-              <div className="flex items-center gap-2">
-                <div className="relative group flex-1 md:w-80">
-                  <SearchIcon
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-500"
-                    size={18}
-                  />
-                  <input
-                    type="text"
-                    placeholder="Buscar por usuario o acción..."
-                    className="w-full pl-11 pr-4 py-3 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
-                    value={auditSearch}
-                    onChange={(e) => setAuditSearch(e.target.value)}
-                  />
-                </div>
-                <button 
-                  onClick={fetchAuditLogs}
-                  className="p-3 bg-[var(--bg-card)] border border-[var(--border-main)] rounded-2xl text-[var(--text-sub)] hover:text-blue-600 hover:border-blue-500 transition-all shadow-sm"
-                  title="Refrescar logs"
-                >
-                  <RefreshCw size={20} className={auditLoading ? "animate-spin" : ""} />
-                </button>
-              </div>
-            </div>
-
-            <div className="card overflow-hidden border-none bg-[var(--bg-card)] shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-[2.5rem]">
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="bg-[var(--bg-secondary)] border-b border-[var(--border-main)]">
-                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Fecha / Hora</th>
-                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Usuario</th>
-                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Acción</th>
-                      <th className="px-6 py-5 text-left text-[10px] font-black text-[var(--text-sub)] uppercase tracking-[0.2em]">Detalle</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--border-main)]">
-                    {auditLogs
-                      .filter(log => 
-                        log.userEmail?.toLowerCase().includes(auditSearch.toLowerCase()) ||
-                        log.userName?.toLowerCase().includes(auditSearch.toLowerCase()) ||
-                        log.action?.toLowerCase().includes(auditSearch.toLowerCase()) ||
-                        log.targetName?.toLowerCase().includes(auditSearch.toLowerCase())
-                      )
-                      .map((log) => (
-                        <tr key={log.id} className="hover:bg-[var(--hover-main)] transition-colors group">
-                          <td className="px-6 py-5">
-                            <div className="flex items-center gap-2">
-                              <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-lg text-slate-500">
-                                <Clock size={14} />
-                              </div>
-                              <span className="text-xs font-bold text-[var(--text-main)]">
-                                {new Date(log.timestamp?.seconds * 1000 || log.timestamp).toLocaleString('es-AR')}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-5">
-                            <div className="flex flex-col">
-                              <span className="text-sm font-black text-[var(--text-main)]">{log.userName}</span>
-                              <span className="text-[10px] font-medium text-[var(--text-sub)]">{log.userEmail}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-5">
-                            <span className={`inline-flex items-center px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                              log.action?.includes('DELETE') ? 'bg-red-100 text-red-600' :
-                              log.action?.includes('CREATE') ? 'bg-emerald-100 text-emerald-600' :
-                              log.action?.includes('UPDATE') ? 'bg-amber-100 text-amber-600' :
-                              'bg-blue-100 text-blue-600'
-                            }`}>
-                              {log.action}
-                            </span>
-                          </td>
-                          <td className="px-6 py-5">
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-[var(--text-main)]">
-                                <span className="text-[var(--text-sub)] opacity-50">Objetivo:</span> {log.targetName}
-                              </p>
-                              {log.details && (
-                                <p className="text-[10px] text-[var(--text-sub)] bg-[var(--bg-secondary)] p-2 rounded-xl border border-main/10 font-mono">
-                                  {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}
-                                </p>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    {auditLogs.length === 0 && !auditLoading && (
-                      <tr>
-                        <td colSpan="4" className="px-6 py-20 text-center">
-                          <div className="flex flex-col items-center opacity-30">
-                            <FileSearch size={48} className="mb-4" />
-                            <p className="text-sm font-black uppercase tracking-widest">No hay registros de auditoría</p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </motion.div>
-        )}
         {activeTab === "settings" && (
           <div className="max-w-3xl mx-auto">
             <div className="card p-10 bg-[var(--bg-card)] border-main shadow-lg space-y-8">
@@ -2648,6 +2596,27 @@ const AdminPage = () => {
                           onChange={(e) => setAutoSaveToDrive(e.target.checked)}
                         />
                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-orange-500"></div>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 flex items-center justify-center">
+                      <Send size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold">Botón de Envío</h4>
+                      <p className="text-[10px] text-gray-400">Mostrar botón "Enviar Informe" en la edición</p>
+                    </div>
+                    <div className="ml-auto">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={showSendButton}
+                          onChange={(e) => setShowSendButton(e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-500"></div>
                       </label>
                     </div>
                   </div>
@@ -2758,13 +2727,28 @@ const AdminPage = () => {
                   </h3>
                   <p className="text-sm text-gray-400">Registros de acciones críticas de los últimos 90 días (Inmutable)</p>
                 </div>
-                <button 
-                  onClick={fetchAuditLogs}
-                  disabled={isLoadingAudit}
-                  className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all"
-                >
-                  <RefreshCw size={20} className={isLoadingAudit ? "animate-spin" : ""} />
-                </button>
+                <div className="flex items-center gap-4">
+                  <div className="relative group md:w-80">
+                    <SearchIcon
+                      className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-500"
+                      size={18}
+                    />
+                    <input
+                      type="text"
+                      placeholder="Buscar por usuario o acción..."
+                      className="w-full pl-11 pr-4 py-3 bg-[var(--bg-secondary)] border border-[var(--border-main)] rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
+                      value={auditSearch}
+                      onChange={(e) => setAuditSearch(e.target.value)}
+                    />
+                  </div>
+                  <button 
+                    onClick={fetchAuditLogs}
+                    disabled={isLoadingAudit}
+                    className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all"
+                  >
+                    <RefreshCw size={20} className={isLoadingAudit ? "animate-spin" : ""} />
+                  </button>
+                </div>
               </div>
 
               {isLoadingAudit ? (
@@ -2789,7 +2773,14 @@ const AdminPage = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-main/50">
-                      {auditLogs.map((log) => (
+                      {auditLogs
+                        .filter(log => 
+                          log.userEmail?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                          log.userName?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                          log.action?.toLowerCase().includes(auditSearch.toLowerCase()) ||
+                          log.targetName?.toLowerCase().includes(auditSearch.toLowerCase())
+                        )
+                        .map((log) => (
                         <tr key={log.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/5 transition-colors group">
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex flex-col">
@@ -2805,7 +2796,11 @@ const AdminPage = () => {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex flex-col">
-                              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{log.userName}</span>
+                              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                                {log.userName === 'Usuario sin nombre' 
+                                  ? (users.find(u => u.id === log.userId)?.nombre || log.userName)
+                                  : log.userName}
+                              </span>
                               <span className="text-[10px] text-gray-400">{log.userEmail}</span>
                             </div>
                           </td>
