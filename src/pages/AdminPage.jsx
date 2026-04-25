@@ -155,8 +155,10 @@ const AdminPage = () => {
   // State for Audit Logs
   const [auditLogs, setAuditLogs] = useState([]);
   const [isLoadingAudit, setIsLoadingAudit] = useState(false);
-  const [auditLoading, setAuditLoading] = useState(false);
   const [auditSearch, setAuditSearch] = useState("");
+  const [auditLimit, setAuditLimit] = useState(100);
+  const [hasMoreAudit, setHasMoreAudit] = useState(true);
+  const [lastAuditDoc, setLastAuditDoc] = useState(null);
 
 
   const autoCleanPerformed = useRef(false);
@@ -1052,24 +1054,44 @@ const AdminPage = () => {
     setIsManageProfessionalModalOpen(true);
   };
 
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = async (isLoadMore = false, manualLimit = null) => {
     setIsLoadingAudit(true);
+    const effectiveLimit = manualLimit || auditLimit;
     try {
       const ninetyDaysAgo = new Date();
       ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
 
-      const q = query(
+      let q = query(
         collection(db, "audit_logs"),
         where("timestamp", ">=", ninetyDaysAgo),
         orderBy("timestamp", "desc"),
-        limit(500)
+        limit(effectiveLimit)
       );
+
+      if (isLoadMore && lastAuditDoc) {
+        q = query(
+          collection(db, "audit_logs"),
+          where("timestamp", ">=", ninetyDaysAgo),
+          orderBy("timestamp", "desc"),
+          startAfter(lastAuditDoc),
+          limit(effectiveLimit)
+        );
+      }
+
       const snap = await getDocs(q);
       const logs = snap.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      setAuditLogs(logs);
+
+      if (isLoadMore) {
+        setAuditLogs(prev => [...prev, ...logs]);
+      } else {
+        setAuditLogs(logs);
+      }
+
+      setLastAuditDoc(snap.docs[snap.docs.length - 1] || null);
+      setHasMoreAudit(snap.docs.length === effectiveLimit);
     } catch (err) {
       console.error("Error fetching audit logs:", err);
     } finally {
@@ -1078,7 +1100,7 @@ const AdminPage = () => {
   };
 
   useEffect(() => {
-    if (activeTab === "audit") {
+    if (activeTab === "audit" && auditLogs.length === 0) {
       fetchAuditLogs();
     }
   }, [activeTab]);
@@ -2727,24 +2749,46 @@ const AdminPage = () => {
                   </h3>
                   <p className="text-sm text-gray-400">Registros de acciones críticas de los últimos 90 días (Inmutable)</p>
                 </div>
-                <div className="flex items-center gap-4">
-                  <div className="relative group md:w-80">
+                <div className="flex flex-wrap items-center gap-4">
+                  <div className="relative group flex-1 md:min-w-[400px]">
                     <SearchIcon
                       className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 transition-colors group-focus-within:text-blue-500"
                       size={18}
                     />
                     <input
                       type="text"
-                      placeholder="Buscar por usuario o acción..."
+                      placeholder="Buscar por paciente, usuario o acción específica..."
                       className="w-full pl-11 pr-4 py-3 bg-[var(--bg-secondary)] border border-[var(--border-main)] rounded-2xl text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all shadow-sm"
                       value={auditSearch}
                       onChange={(e) => setAuditSearch(e.target.value)}
                     />
                   </div>
+
+                  <div className="flex items-center gap-2 bg-[var(--bg-secondary)] p-1 rounded-2xl border border-main">
+                    {[50, 100, 300].map(val => (
+                      <button
+                        key={val}
+                        onClick={() => { 
+                          setAuditLimit(val); 
+                          setAuditLogs([]); 
+                          fetchAuditLogs(false, val);
+                        }}
+                        className={`px-4 py-2 rounded-xl text-[10px] font-black transition-all ${
+                          auditLimit === val 
+                            ? 'bg-blue-600 text-white shadow-md' 
+                            : 'text-gray-500 hover:bg-main'
+                        }`}
+                      >
+                        {val}
+                      </button>
+                    ))}
+                  </div>
+
                   <button 
-                    onClick={fetchAuditLogs}
+                    onClick={() => fetchAuditLogs(false)}
                     disabled={isLoadingAudit}
                     className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all"
+                    title="Refrescar logs"
                   >
                     <RefreshCw size={20} className={isLoadingAudit ? "animate-spin" : ""} />
                   </button>
@@ -2762,6 +2806,7 @@ const AdminPage = () => {
                   <p className="text-gray-400 font-medium">No se han encontrado registros de actividad reciente.</p>
                 </div>
               ) : (
+                <>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left border-collapse">
                     <thead>
@@ -2828,6 +2873,19 @@ const AdminPage = () => {
                     </tbody>
                   </table>
                 </div>
+                {hasMoreAudit && auditLogs.length > 0 && (
+                  <div className="p-8 flex justify-center border-t border-main bg-[var(--bg-secondary)]/10">
+                    <button 
+                      onClick={() => fetchAuditLogs(true)}
+                      disabled={isLoadingAudit}
+                      className="px-10 py-3 bg-[var(--bg-card)] border border-main rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-[var(--bg-secondary)] transition-all flex items-center gap-3 text-[var(--text-main)] shadow-sm hover:shadow-md disabled:opacity-50"
+                    >
+                      {isLoadingAudit ? <Loader2 size={16} className="animate-spin" /> : <ChevronDown size={16} />}
+                      Cargar más registros
+                    </button>
+                  </div>
+                )}
+              </>
               )}
             </div>
           </div>
