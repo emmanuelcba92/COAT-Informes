@@ -40,7 +40,7 @@ const ICON_MAP = {
   ClipboardList
 };
 
-const NewOrderPage = ({ userProfile: propProfile }) => {
+const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
 
@@ -117,9 +117,9 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
             const autoEmail = data.email || data.patientEmail || '';
             setPatientData(prev => ({
               ...prev,
-              name: data.name || prev.name,
-              insurance: data.insurance || prev.insurance,
-              affiliateNumber: data.affiliateNumber || prev.affiliateNumber,
+              name: data.name || data.nombre || prev.name,
+              insurance: data.insurance || data.obraSocial || prev.insurance,
+              affiliateNumber: data.affiliateNumber || data.nroAfiliado || prev.affiliateNumber,
               patientEmail: autoEmail || prev.patientEmail
             }));
             showToast('✓ Paciente encontrado en historial');
@@ -574,7 +574,10 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                   type="date" 
                   className="bg-transparent border-none text-xs font-bold outline-none cursor-pointer" 
                   value={patientData.date} 
-                  onChange={e => setPatientData({...patientData, date: e.target.value})} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    setPatientData(prev => ({ ...prev, date: val }));
+                  }} 
                 />
               </div>
             </div>
@@ -603,7 +606,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         } else if (['name', 'insurance', 'diagnosis'].includes(f.key)) {
                           val = toTitleCase(val);
                         }
-                        setPatientData({...patientData, [f.key]: val});
+                        setPatientData(prev => ({ ...prev, [f.key]: val }));
                       }} 
                     />
                   </div>
@@ -727,13 +730,13 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                 return groups.map(group => (
                   <div key={group.id} className="mb-8 last:mb-0">
                     <div className="flex items-center gap-4 mb-4 px-2">
-                      <div className="h-0.5 flex-1 bg-slate-300 dark:bg-slate-700"></div>
-                      <span className="text-[11px] font-black text-blue-600 dark:text-blue-400 uppercase tracking-[0.2em]">{group.label}</span>
-                      <div className="h-0.5 flex-1 bg-slate-300 dark:bg-slate-700"></div>
+                      <div className={`h-0.5 flex-1 ${isDarkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
+                      <span className={`text-[11px] font-black uppercase tracking-[0.2em] ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>{group.label}</span>
+                      <div className={`h-0.5 flex-1 ${isDarkMode ? 'bg-slate-700' : 'bg-slate-300'}`}></div>
                     </div>
                     
                     {group.items.filter(p => p.n.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors group">
+                      <div key={idx} className={`flex items-center justify-between p-3 rounded-xl transition-colors group ${isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-100'}`}>
                         <div onClick={() => togglePractice(p.n)} className="flex items-center gap-4 flex-1 cursor-pointer">
                           <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedPractices.includes(p.n) ? 'bg-blue-600 border-blue-600' : 'bg-transparent border-slate-300'}`}>
                             {selectedPractices.includes(p.n) && <Check className="text-white" size={14} strokeWidth={4} />}
@@ -761,7 +764,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                           <input 
                             type="text" 
                             placeholder="+ Agregar laboratorio..." 
-                            className="flex-1 bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none" 
+                            className={`flex-1 border rounded-xl px-4 py-2 text-xs focus:ring-1 focus:ring-blue-500 outline-none ${isDarkMode ? 'bg-slate-900/50 border-slate-800' : 'bg-slate-50 border-slate-200'}`} 
                             onKeyDown={e => {
                               if (e.key === 'Enter' && e.target.value.trim()) {
                                 const p = e.target.value.trim();
@@ -779,7 +782,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                 ));
               })() : (
                 practicesByType[selectedType]?.filter(p => p.n.toLowerCase().includes(searchQuery.toLowerCase())).map((p, idx) => (
-                  <div key={idx} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800/40 transition-colors group">
+                  <div key={idx} className={`flex items-center justify-between p-3 rounded-xl transition-colors group ${isDarkMode ? 'hover:bg-slate-800/40' : 'hover:bg-slate-100'}`}>
                     <div onClick={() => togglePractice(p.n)} className="flex items-center gap-4 flex-1 cursor-pointer">
                       <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-all ${selectedPractices.includes(p.n) ? 'bg-blue-600 border-blue-600' : 'bg-transparent border-slate-300'}`}>
                         {selectedPractices.includes(p.n) && <Check className="text-white" size={14} strokeWidth={4} />}
@@ -806,7 +809,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                           setCurrentOrderId(null);
                           setQuantities(q => ({...q, [p.n]: Math.max(1, (q[p.n] || 1) - 1)}));
                         }} 
-                        className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                        className={`w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
                       >
                         <Minus size={14} />
                       </button>
@@ -815,7 +818,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
                         onClick={() => {
                           setQuantities(q => ({...q, [p.n]: (q[p.n] || 1) + 1}));
                         }} 
-                        className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400"
+                        className={`w-6 h-6 flex items-center justify-center rounded-lg text-slate-400 ${isDarkMode ? 'hover:bg-slate-700' : 'hover:bg-slate-200'}`}
                       >
                         <Plus size={14} />
                       </button>
@@ -910,7 +913,7 @@ const NewOrderPage = ({ userProfile: propProfile }) => {
               </div>
               <div className="text-center space-y-2">
                 <h3 className="text-xl font-black text-[var(--text-main)]">Procesando...</h3>
-                <p className="text-blue-500 font-bold uppercase tracking-widest text-[10px] bg-blue-50 dark:bg-blue-900/30 px-4 py-2 rounded-full inline-block">
+                <p className={`font-bold uppercase tracking-widest text-[10px] px-4 py-2 rounded-full inline-block ${isDarkMode ? 'text-blue-400 bg-blue-900/30' : 'text-blue-500 bg-blue-50'}`}>
                   {loadingStatus || 'Espere un momento'}
                 </p>
               </div>

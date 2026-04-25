@@ -40,7 +40,8 @@ import {
   setDoc, 
   serverTimestamp,
   startAfter,
-  getCountFromServer
+  getCountFromServer,
+  arrayUnion
 } from 'firebase/firestore';
 import * as pdfjsLib from 'pdfjs-dist';
 import { extractPatientsFromImage, extractPatientsFromText } from '../utils/aiService';
@@ -48,12 +49,13 @@ import { extractPatientsFromImage, extractPatientsFromText } from '../utils/aiSe
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.6.205/build/pdf.worker.min.mjs`;
 
-export default function PatientsPage({ isAdmin = false, isSecretaria = false, isDirectora = false, currentUser }) {
+export default function PatientsPage({ isAdmin = false, isSecretaria = false, isDirectora = false, currentUser, isDarkMode }) {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [lastVisible, setLastVisible] = useState(null);
   const [isMoreLoading, setIsMoreLoading] = useState(false);
+  const [filterInsurance, setFilterInsurance] = useState('');
   const [totalPatients, setTotalPatients] = useState(0);
   const [error, setError] = useState(null);
 
@@ -61,7 +63,12 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importResults, setImportResults] = useState([]);
   const [importLoading, setImportLoading] = useState(false);
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
+  // States for Selection & Bulk Actions
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [isPasting, setIsPasting] = useState(false);
+
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -72,7 +79,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
     }, 500);
 
     return () => clearTimeout(delayDebounceFn);
-  }, [currentUser, searchTerm]);
+  }, [currentUser, searchTerm, filterInsurance]);
 
   const loadPatients = async (isLoadMore = false) => {
     if (!currentUser) return;
@@ -106,12 +113,19 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
           constraints.push(where('name', '>=', term));
           constraints.push(where('name', '<=', term + '\uf8ff'));
         }
-      } else {
-        // Use DNI as a stable sort that always exists
+      } 
+
+      // 3. Insurance Filter
+      if (filterInsurance.trim()) {
+        constraints.push(where('insurance', '==', filterInsurance.trim().toUpperCase()));
+      }
+
+      // 4. Default Sort (Only if no filters are active to avoid index requirement)
+      if (!searchTerm.trim() && !filterInsurance.trim()) {
         constraints.push(orderBy('dni', 'asc'));
       }
 
-      // 3. Pagination
+      // 4. Pagination
       constraints.push(limit(25));
       if (isLoadMore && lastVisible) {
         constraints.push(startAfter(lastVisible));
@@ -143,6 +157,10 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
   };
 
   const handleDeletePatient = async (id, name) => {
+    if (!isAdmin) {
+      alert('Solo los administradores pueden eliminar pacientes.');
+      return;
+    }
     const patientName = name || 'este paciente';
     if (window.confirm(`¿Estás seguro de eliminar al paciente ${patientName}? Esta acción no se puede deshacer.`)) {
       try {
@@ -170,16 +188,39 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
         } else if (fileOrPasted.type === 'application/pdf') {
           const reader = new FileReader();
           reader.onload = async (e) => {
-            const typedarray = new Uint8Array(e.target.result);
-            const pdf = await pdfjsLib.getDocument(typedarray).promise;
-            let fullText = "";
-            for (let i = 1; i <= pdf.numPages; i++) {
-              const page = await pdf.getPage(i);
-              const content = await page.getTextContent();
-              fullText += content.items.map(item => item.str).join(" ") + "\n";
+            try {
+              const typedarray = new Uint8Array(e.target.result);
+              const pdf = await pdfjsLib.getDocument(typedarray).promise;
+              const totalPages = pdf.numPages;
+              setImportProgress({ current: 0, total: totalPages });
+              
+              let allPatients = [];
+              const BATCH_SIZE = 15; // Pages per AI call
+              
+              for (let i = 1; i <= totalPages; i += BATCH_SIZE) {
+                const endPage = Math.min(i + BATCH_SIZE - 1, totalPages);
+                setImportProgress({ current: i, total: totalPages });
+                
+                let batchText = "";
+                for (let p = i; p <= endPage; p++) {
+                  const page = await pdf.getPage(p);
+                  const content = await page.getTextContent();
+                  batchText += content.items.map(item => item.str).join(" ") + "\n";
+                }
+                
+                const batchData = await extractPatientsFromText(batchText);
+                if (batchData && Array.isArray(batchData)) {
+                  allPatients = [...allPatients, ...batchData];
+                  // Update results incrementally so user sees progress
+                  setImportResults(prev => [...prev, ...batchData]);
+                }
+              }
+              
+              setImportProgress({ current: totalPages, total: totalPages });
+            } catch (err) {
+              console.error("PDF Processing error:", err);
+              alert("Error al procesar el PDF: " + err.message);
             }
-            const data = await extractPatientsFromText(fullText);
-            setImportResults(data || []);
           };
           reader.readAsArrayBuffer(fileOrPasted);
         }
@@ -214,58 +255,95 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
   const saveImportedPatients = async () => {
     if (importResults.length === 0) return;
     setImportLoading(true);
+    setImportProgress({ current: 0, total: importResults.length });
+    
     try {
-      const batch = writeBatch(db);
-      
-      for (const p of importResults) {
-        const cleanDni = p.dni.toString().replace(/\D/g, '');
-        if (!cleanDni) continue;
+      const CHUNK_SIZE = 100; // Operaciones por lote
+      for (let i = 0; i < importResults.length; i += CHUNK_SIZE) {
+        const chunk = importResults.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
         
-        const patientRef = doc(db, 'patients', cleanDni);
+        setImportProgress({ current: i, total: importResults.length });
         
-        // Get existing patient to merge professionalIds
-        const docSnap = await getDoc(patientRef);
-        let currentProfIds = [currentUser.uid];
-        let existingData = {};
+        for (const p of chunk) {
+          const cleanDni = p.dni?.toString().replace(/\D/g, '');
+          if (!cleanDni) continue;
+          
+          const patientRef = doc(db, 'patients', cleanDni);
+          
+          const patientData = {
+            dni: cleanDni,
+            name: p.nombre?.toUpperCase() || '',
+            nombre: p.nombre?.toUpperCase() || '',
+            insurance: p.obraSocial?.toUpperCase() || '',
+            obraSocial: p.obraSocial?.toUpperCase() || '',
+            email: p.email?.toLowerCase() || null,
+            telefono: p.telefono || '',
+            updatedAt: serverTimestamp(),
+            lastImportedBy: currentUser.uid
+          };
 
-        if (docSnap.exists()) {
-          existingData = docSnap.data();
-          const prevIds = existingData.professionalIds || [];
-          if (!prevIds.includes(currentUser.uid)) {
-            currentProfIds = [...prevIds, currentUser.uid];
-          } else {
-            currentProfIds = prevIds;
-          }
+          batch.set(patientRef, {
+            ...patientData,
+            professionalIds: arrayUnion(currentUser.uid)
+          }, { merge: true });
         }
-
-        // Standardize fields for dual compatibility
-        const patientData = {
-          ...existingData,
-          dni: cleanDni,
-          name: p.nombre?.toUpperCase() || existingData.name || '',
-          nombre: p.nombre?.toUpperCase() || existingData.nombre || '',
-          insurance: p.obraSocial?.toUpperCase() || existingData.insurance || '',
-          obraSocial: p.obraSocial?.toUpperCase() || existingData.obraSocial || '',
-          email: p.email?.toLowerCase() || existingData.email || null,
-          telefono: p.telefono || existingData.telefono || '',
-          professionalIds: currentProfIds,
-          updatedAt: serverTimestamp(),
-          lastImportedBy: currentUser.uid
-        };
-
-        batch.set(patientRef, patientData, { merge: true });
+        
+        await batch.commit();
       }
 
-      await batch.commit();
-      alert(`Se importaron/actualizaron ${importResults.length} pacientes.`);
+      setImportProgress({ current: importResults.length, total: importResults.length });
+      alert(`Se importaron/actualizaron ${importResults.length} pacientes correctamente.`);
       setIsImportModalOpen(false);
       setImportResults([]);
+      loadPatients();
     } catch (err) {
       console.error("Error saving patients:", err);
-      alert("Error al guardar en la base de datos.");
+      alert("Error al guardar en la base de datos: " + err.message);
     } finally {
       setImportLoading(false);
+      setImportProgress({ current: 0, total: 0 });
     }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`¿Está seguro de eliminar ${selectedIds.length} pacientes? Esta acción no se puede deshacer.`)) return;
+
+    if (!isAdmin) {
+      alert('Solo los administradores pueden realizar borrados masivos.');
+      return;
+    }
+    setIsBulkDeleting(true);
+    try {
+      const batch = writeBatch(db);
+      selectedIds.forEach(id => {
+        batch.delete(doc(db, 'patients', id));
+      });
+      await batch.commit();
+      setSelectedIds([]);
+      alert(`${selectedIds.length} pacientes eliminados correctamente.`);
+      loadPatients(); // Refresh
+    } catch (err) {
+      console.error("Bulk delete error:", err);
+      alert("Error al eliminar pacientes.");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === patients.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(patients.map(p => p.id));
+    }
+  };
+
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
   };
 
   return (
@@ -278,6 +356,17 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
         </div>
         
         <div className="flex flex-col md:flex-row items-center gap-4 w-full md:w-auto">
+            <motion.button 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              onClick={handleBulkDelete}
+              disabled={isBulkDeleting}
+              className={`w-full md:w-auto px-6 py-3.5 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 ${!isAdmin ? 'hidden' : ''}`}
+            >
+              {isBulkDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
+              Eliminar {selectedIds.length}
+            </motion.button>
+
           {/* Smart Importer Button */}
           <button 
             onClick={() => setIsImportModalOpen(true)}
@@ -296,7 +385,20 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
               placeholder="Buscar por nombre o DNI..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 bg-[var(--bg-card)] border-2 border-slate-200 dark:border-main rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all outline-none font-medium text-slate-700 dark:text-slate-200 shadow-sm"
+              className="input-field pl-12 shadow-sm"
+            />
+          </div>
+
+          <div className="relative w-full md:w-60 group">
+            <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-slate-400 group-focus-within:text-blue-500 transition-colors">
+              <Building2 size={20} />
+            </div>
+            <input
+              type="text"
+              placeholder="Filtrar por Mutual..."
+              value={filterInsurance}
+              onChange={(e) => setFilterInsurance(e.target.value)}
+              className="input-field pl-12 shadow-sm"
             />
           </div>
         </div>
@@ -324,7 +426,10 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
         </motion.div>
         
         {(!isAdmin && !isDirectora && !isSecretaria) && (
-          <div className="md:col-span-3 flex items-center gap-3 px-6 py-4 bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800/30 rounded-2xl text-blue-700 dark:text-blue-400">
+          <div className={`
+            md:col-span-3 flex items-center gap-3 px-6 py-4 border rounded-2xl 
+            ${isDarkMode ? 'bg-blue-900/20 border-blue-800/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-700'}
+          `}>
             <Info size={20} className="shrink-0" />
             <p className="text-sm font-bold">Estás viendo solo los pacientes vinculados a tus informes o pedidos.</p>
           </div>
@@ -352,7 +457,15 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
           <div className="overflow-x-auto">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-[0.15em] text-[var(--text-sub)] border-b border-main">
+                <tr className="bg-[var(--bg-secondary)] text-[10px] uppercase font-black tracking-[0.15em] text-[var(--text-main)]/60 border-b border-main">
+                  <th className="px-6 py-5 text-left w-10">
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-main accent-blue-600 cursor-pointer"
+                      checked={patients.length > 0 && selectedIds.length === patients.length}
+                      onChange={toggleSelectAll}
+                    />
+                  </th>
                   <th className="px-6 py-5 text-left font-black">Paciente</th>
                   <th className="px-6 py-5 text-left font-black">DNI / ID</th>
                   <th className="px-6 py-5 text-left font-black">Obra Social</th>
@@ -367,11 +480,24 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                     animate={{ opacity: 1 }}
                     transition={{ delay: idx * 0.03 }}
                     key={patient.id} 
-                    className="group hover:bg-[var(--bg-secondary)]/50 transition-colors"
+                    className={`group hover:bg-[var(--bg-secondary)]/50 transition-colors ${selectedIds.includes(patient.id) ? (isDarkMode ? 'bg-blue-900/20' : 'bg-blue-50/50') : ''}`}
                   >
                     <td className="px-6 py-4">
+                      <input 
+                        type="checkbox" 
+                        className="w-4 h-4 rounded border-main accent-blue-600 cursor-pointer"
+                        checked={selectedIds.includes(patient.id)}
+                        onChange={() => toggleSelect(patient.id)}
+                      />
+                    </td>
+                    <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-black text-sm border border-white dark:border-slate-800 shadow-sm">
+                        <div className={`
+                          w-10 h-10 rounded-full flex items-center justify-center font-black text-sm border shadow-sm
+                          ${isDarkMode 
+                            ? 'bg-gradient-to-br from-blue-900/40 to-indigo-900/40 text-blue-400 border-slate-800' 
+                            : 'bg-gradient-to-br from-blue-100 to-indigo-100 text-blue-600 border-white'}
+                        `}>
                           {(patient.name || patient.nombre)?.charAt(0).toUpperCase() || '?'}
                         </div>
                         <div>
@@ -418,7 +544,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className={`flex items-center justify-end gap-2 ${(isAdmin || isDirectora) && !isSecretaria ? 'opacity-0 group-hover:opacity-100' : 'hidden'} transition-opacity`}>
+                      <div className={`flex items-center justify-end gap-2 ${isAdmin ? 'opacity-0 group-hover:opacity-100' : 'hidden'} transition-opacity`}>
                         <button 
                           onClick={() => handleDeletePatient(patient.id, patient.name || patient.nombre)}
                           className="p-2.5 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all duration-300 shadow-sm hover:shadow-red-500/20"
@@ -437,13 +563,18 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
       </div>
 
       {lastVisible && (
-        <div className="flex justify-center pt-4">
+        <div className="flex justify-center pt-8 pb-12">
           <button
             disabled={isMoreLoading}
             onClick={() => loadPatients(true)}
-            className="flex items-center gap-2 px-8 py-3 bg-white dark:bg-slate-800 border-2 border-blue-500 text-blue-600 dark:text-blue-400 font-black rounded-2xl hover:bg-blue-50 transition-all active:scale-95 shadow-lg shadow-blue-500/10 uppercase tracking-widest text-xs disabled:opacity-50"
+            className={`
+              flex items-center gap-3 px-10 py-4 font-black rounded-2xl transition-all active:scale-95 shadow-xl uppercase tracking-widest text-xs disabled:opacity-50 border-2
+              ${isDarkMode 
+                ? 'bg-slate-800 border-blue-500/50 text-blue-400 shadow-blue-900/40 hover:bg-slate-700' 
+                : 'bg-white border-blue-600 text-blue-600 shadow-blue-500/10 hover:bg-blue-600 hover:text-white'}
+            `}
           >
-            {isMoreLoading ? <Loader2 className="animate-spin" size={18} /> : <Plus size={18} />}
+            {isMoreLoading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
             {isMoreLoading ? 'Cargando...' : 'Cargar más pacientes'}
           </button>
         </div>
@@ -480,7 +611,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                 </div>
                 <button 
                   onClick={() => setIsImportModalOpen(false)}
-                  className="p-3 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-2xl transition-colors"
+                  className={`p-3 rounded-2xl transition-colors ${isDarkMode ? 'hover:bg-slate-800' : 'hover:bg-slate-100'}`}
                 >
                   <X size={24} className="text-slate-400" />
                 </button>
@@ -491,21 +622,21 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                 {importResults.length === 0 ? (
                   <div className="space-y-8">
                     {/* Instructions */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-800/30">
-                        <div className="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center font-black mb-3">1</div>
-                        <p className="text-xs font-bold text-blue-700 dark:text-blue-400 uppercase mb-1">Captura GACITUA</p>
-                        <p className="text-[10px] text-blue-600/70">Haz una captura de pantalla del listado de turnos.</p>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                      <div className={`p-6 rounded-[32px] border-2 shadow-sm ${isDarkMode ? 'bg-blue-900/20 border-blue-800/40' : 'bg-blue-100/50 border-blue-200'}`}>
+                        <div className="w-12 h-12 rounded-2xl bg-blue-600 text-white flex items-center justify-center text-xl font-black mb-5 shadow-lg shadow-blue-500/30">1</div>
+                        <p className={`text-base font-black uppercase mb-2 tracking-wider ${isDarkMode ? 'text-blue-100' : 'text-blue-900'}`}>Captura GACITUA</p>
+                        <p className={`text-xs font-bold leading-relaxed ${isDarkMode ? 'text-blue-300/80' : 'text-blue-800/80'}`}>Haz una captura de pantalla del listado de turnos.</p>
                       </div>
-                      <div className="p-4 rounded-2xl bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800/30">
-                        <div className="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center font-black mb-3">2</div>
-                        <p className="text-xs font-bold text-indigo-700 dark:text-indigo-400 uppercase mb-1">Pega o Sube</p>
-                        <p className="text-[10px] text-indigo-600/70">Presiona Ctrl+V aquí o sube un PDF de turnos.</p>
+                      <div className={`p-6 rounded-[32px] border-2 shadow-sm ${isDarkMode ? 'bg-indigo-900/20 border-indigo-800/40' : 'bg-indigo-100/50 border-indigo-200'}`}>
+                        <div className="w-12 h-12 rounded-2xl bg-indigo-600 text-white flex items-center justify-center text-xl font-black mb-5 shadow-lg shadow-indigo-500/30">2</div>
+                        <p className={`text-base font-black uppercase mb-2 tracking-wider ${isDarkMode ? 'text-indigo-100' : 'text-indigo-900'}`}>Pega o Sube</p>
+                        <p className={`text-xs font-bold leading-relaxed ${isDarkMode ? 'text-indigo-300/80' : 'text-indigo-800/80'}`}>Presiona Ctrl+V aquí o sube un PDF de turnos.</p>
                       </div>
-                      <div className="p-4 rounded-2xl bg-purple-50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800/30">
-                        <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-black mb-3">3</div>
-                        <p className="text-xs font-bold text-purple-700 dark:text-purple-400 uppercase mb-1">Confirma</p>
-                        <p className="text-[10px] text-purple-600/70">La IA extraerá DNI, Nombre, Mutual y Email.</p>
+                      <div className={`p-6 rounded-[32px] border-2 shadow-sm ${isDarkMode ? 'bg-purple-900/20 border-purple-800/40' : 'bg-purple-100/50 border-purple-200'}`}>
+                        <div className="w-12 h-12 rounded-2xl bg-purple-600 text-white flex items-center justify-center text-xl font-black mb-5 shadow-lg shadow-purple-500/30">3</div>
+                        <p className={`text-base font-black uppercase mb-2 tracking-wider ${isDarkMode ? 'text-purple-100' : 'text-purple-900'}`}>Confirma</p>
+                        <p className={`text-xs font-bold leading-relaxed ${isDarkMode ? 'text-purple-300/80' : 'text-purple-800/80'}`}>La IA extraerá DNI, Nombre, Mutual y Email.</p>
                       </div>
                     </div>
 
@@ -514,7 +645,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                       onClick={() => fileInputRef.current?.click()}
                       className={`
                         relative border-4 border-dashed rounded-[32px] p-12 flex flex-col items-center justify-center gap-6 transition-all cursor-pointer
-                        ${isPasting || importLoading ? 'border-blue-500 bg-blue-50/50 scale-[0.98]' : 'border-slate-200 dark:border-slate-800 hover:border-blue-400 hover:bg-blue-50/10'}
+                        ${isPasting || importLoading ? 'border-blue-500 bg-blue-50/50 scale-[0.98]' : (isDarkMode ? 'border-slate-800 hover:border-blue-400 hover:bg-blue-50/10' : 'border-slate-200 hover:border-blue-400 hover:bg-blue-50/10')}
                       `}
                     >
                       <input 
@@ -532,22 +663,40 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                             <BrainCircuit className="absolute inset-0 m-auto text-blue-600 animate-pulse" size={32} />
                           </div>
                           <div className="text-center">
-                            <p className="text-lg font-black text-blue-600 animate-pulse">PROCESANDO CON IA...</p>
-                            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">Leyendo datos de pacientes</p>
+                            <p className="text-lg font-black text-blue-600 animate-pulse">
+                              {importProgress.total > 0 
+                                ? (importResults.length > 0 && importProgress.total === importResults.length
+                                  ? `GUARDANDO PACIENTE ${importProgress.current} DE ${importProgress.total}...`
+                                  : `PROCESANDO PÁGINA ${importProgress.current} DE ${importProgress.total}...`)
+                                : 'PROCESANDO CON IA...'}
+                            </p>
+                            <p className="text-xs font-bold text-slate-400 uppercase tracking-[0.2em]">
+                              {importProgress.total === importResults.length && importResults.length > 0
+                                ? 'Sincronizando con la base de datos'
+                                : (importResults.length > 0 
+                                  ? `${importResults.length} pacientes detectados hasta ahora` 
+                                  : 'Leyendo datos de pacientes')}
+                            </p>
                           </div>
                         </div>
                       ) : (
                         <>
-                          <div className="w-24 h-24 bg-blue-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
+                          <div className={`w-24 h-24 bg-blue-600 text-white rounded-full flex items-center justify-center shadow-2xl shadow-blue-500/40 border-4 transition-transform group-hover:scale-105 ${isDarkMode ? 'border-slate-700' : 'border-white'}`}>
                             <Upload size={40} />
                           </div>
-                          <div className="text-center space-y-2">
-                            <p className="text-xl font-black text-[var(--text-main)]">Presiona <kbd className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded-lg border border-main text-sm">Ctrl + V</kbd> aquí</p>
-                            <p className="text-sm font-medium text-slate-400">o haz clic para subir imagen o PDF</p>
+                          <div className="text-center space-y-4">
+                            <p className={`text-3xl font-black ${isDarkMode ? 'text-white' : 'text-slate-900'}`}>
+                              Presiona <kbd className={`inline-block px-4 py-2 rounded-2xl shadow-2xl font-mono text-base mx-2 border-b-4 ${isDarkMode ? 'bg-white text-slate-900 border-slate-300' : 'bg-slate-900 text-white border-slate-700'}`}>Ctrl + V</kbd> aquí
+                            </p>
+                            <p className={`text-sm font-black uppercase tracking-[0.3em] ${isDarkMode ? 'text-blue-400' : 'text-blue-600'}`}>o haz clic para subir imagen o PDF</p>
                           </div>
-                          <div className="flex items-center gap-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">
-                            <span className="flex items-center gap-2"><Check size={14} className="text-green-500" /> Captura GACITUA</span>
-                            <span className="flex items-center gap-2"><Check size={14} className="text-green-500" /> PDF de Turnos</span>
+                          <div className="flex items-center gap-10 text-[11px] font-black uppercase tracking-[0.2em]">
+                            <span className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full border-2 shadow-sm ${isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-600 border-slate-200'}`}>
+                              <Check size={16} className="text-green-500" /> CAPTURA GACITUA
+                            </span>
+                            <span className={`flex items-center gap-2.5 px-4 py-1.5 rounded-full border-2 shadow-sm ${isDarkMode ? 'bg-slate-800 text-slate-300 border-slate-700' : 'bg-white text-slate-600 border-slate-200'}`}>
+                              <Check size={16} className="text-green-500" /> PDF DE TURNOS
+                            </span>
                           </div>
                         </>
                       )}
@@ -574,12 +723,12 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                     </div>
                     <div className="border border-main rounded-2xl overflow-hidden shadow-sm">
                       <table className="w-full text-left">
-                        <thead className="bg-slate-50 dark:bg-slate-800/50">
+                        <thead className={isDarkMode ? 'bg-slate-800/50' : 'bg-slate-100'}>
                           <tr>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">DNI</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Nombre</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Obra Social</th>
-                            <th className="px-4 py-3 text-[10px] font-black text-slate-400 uppercase">Email</th>
+                            <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>DNI</th>
+                            <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nombre</th>
+                            <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Obra Social</th>
+                            <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Email</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -640,11 +789,11 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
               </div>
 
               {importResults.length > 0 && (
-                <div className="p-8 border-t border-main bg-slate-50 dark:bg-slate-900/20 flex gap-4">
+                <div className={`p-8 border-t border-main flex gap-4 ${isDarkMode ? 'bg-slate-900/20' : 'bg-slate-50'}`}>
                   <button 
                     disabled={importLoading}
                     onClick={() => setIsImportModalOpen(false)}
-                    className="flex-1 py-4 bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-300 transition-all"
+                    className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all ${isDarkMode ? 'bg-slate-800 text-slate-400 hover:bg-slate-700' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
                   >
                     Cancelar
                   </button>

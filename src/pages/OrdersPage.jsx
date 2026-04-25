@@ -53,7 +53,7 @@ const defaultRPPractices = [
   { n: "Otomicroscopia", c: "31-01-22" }
 ];
 
-const OrdersPage = ({ userProfile: propProfile }) => {
+const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
   const [patientData, setPatientData] = useState({
     name: '',
     dni: '',
@@ -576,7 +576,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Nuevo Pedido Online</h1>
-          <p className="text-slate-500 dark:text-slate-400">Complete los datos y seleccione los estudios para el RP.</p>
+          <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Complete los datos y seleccione los estudios para el RP.</p>
         </div>
         <div className="flex gap-3 flex-wrap">
           <button 
@@ -696,7 +696,7 @@ const OrdersPage = ({ userProfile: propProfile }) => {
                     </div>
                     <div className="flex flex-col flex-1">
                       <span className={`text-sm font-semibold transition-colors ${selectedPractices.includes(p.n) ? 'text-blue-600' : 'text-[var(--text-main)]'}`}>{p.n}</span>
-                      {p.c && <span className="text-[10px] font-mono text-slate-400 dark:text-slate-500">{p.c}</span>}
+                      {p.c && <span className={`text-[10px] font-mono ${isDarkMode ? 'text-slate-500' : 'text-slate-400'}`}>{p.c}</span>}
                       {selectedPractices.includes(p.n) && (
                         <input type="text" placeholder="Indicación particular..." className="mt-1 text-[11px] bg-transparent border-b border-blue-200 outline-none text-blue-600 placeholder:text-slate-300" value={indications[p.n] || ''} onChange={e => setIndications({...indications, [p.n]: e.target.value})} onClick={e => e.stopPropagation()} />
                       )}
@@ -721,9 +721,9 @@ const OrdersPage = ({ userProfile: propProfile }) => {
                   <div key={cp} className="flex items-center justify-between p-4 bg-[var(--bg-card)] rounded-2xl border border-main shadow-sm">
                     <div className="flex items-center gap-3">
                       <div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-sm font-bold text-[var(--text-main)]">{cp}</span>
-                      {quantities[cp] > 1 && <span className="text-xs font-black text-blue-600 bg-blue-50 dark:bg-blue-900/30 px-2 py-0.5 rounded-lg">x{quantities[cp]}</span>}
+                      {quantities[cp] > 1 && <span className={`text-xs font-black px-2 py-0.5 rounded-lg ${isDarkMode ? 'text-blue-400 bg-blue-900/30' : 'text-blue-600 bg-blue-50'}`}>x{quantities[cp]}</span>}
                     </div>
-                    <button onClick={() => setCustomPractices(prev => prev.filter(p => p !== cp))} className="p-2 text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"><Trash2 size={18} /></button>
+                    <button onClick={() => setCustomPractices(prev => prev.filter(p => p !== cp))} className={`p-2 text-red-400 rounded-xl transition-all ${isDarkMode ? 'hover:bg-red-900/20' : 'hover:bg-red-50'}`}><Trash2 size={18} /></button>
                   </div>
                 ))}
               </div>

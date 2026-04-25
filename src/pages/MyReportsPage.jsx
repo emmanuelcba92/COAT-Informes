@@ -45,7 +45,7 @@ import { db, auth } from '../services/firebase';
 
 
 
-const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp }) => {
+const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp, isDarkMode }) => {
   const navigate = useNavigate();
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -712,7 +712,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
           </div>
         </div>
 
-        <div className="md:col-span-3 bg-[var(--bg-card)] p-4 rounded-[2.5rem] border-2 border-slate-200 dark:border-main flex items-center gap-4 shadow-xl shadow-slate-200/50 dark:shadow-none">
+        <div className={`md:col-span-3 p-4 rounded-[2.5rem] border-2 flex items-center gap-4 shadow-xl ${isDarkMode ? 'bg-[var(--bg-card)] border-main shadow-none' : 'bg-white border-slate-200 shadow-slate-200/50'}`}>
           <div className="flex-1 relative group">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
             <input 

@@ -80,6 +80,7 @@ const AdminPage = () => {
   const [driveFolderId, setDriveFolderId] = useState("");
   const [ordersFolderId, setOrdersFolderId] = useState("");
   const [autoSaveToDrive, setAutoSaveToDrive] = useState(false);
+  const [showPrivacyToggle, setShowPrivacyToggle] = useState(true);
   // Full config/settings object — used for report required-fields toggles
   const [config, setConfig] = useState({});
   const [isSavingSettings, setIsSavingSettings] = useState(false);
@@ -271,8 +272,9 @@ const AdminPage = () => {
           setToken(data.token || "");
           setDriveFolderId(data.driveFolderId || "");
           setOrdersFolderId(data.ordersFolderId || "");
-          setAutoSaveToDrive(data.autoSaveToDrive || false);
-          setConfig(data); // full config object for feature toggles
+          setAutoSaveToDrive(docSnap.data().autoSaveToDrive || false);
+          setShowPrivacyToggle(docSnap.data().showPrivacyToggle !== false);
+          setConfig(docSnap.data()); // full config object for feature toggles
         }
       },
     );
@@ -822,7 +824,8 @@ const AdminPage = () => {
         token,
         driveFolderId,
         ordersFolderId,
-        autoSaveToDrive
+        autoSaveToDrive,
+        showPrivacyToggle
       }, { merge: true });
       alert("Configuración guardada correctamente");
     } catch (err) {
@@ -2420,6 +2423,27 @@ const AdminPage = () => {
                 </div>
 
                 <div className="border-t border-main pt-8 space-y-6">
+                  <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+                      <ShieldCheck size={24} />
+                    </div>
+                    <div>
+                      <h4 className="font-bold">Privacidad de Pacientes</h4>
+                      <p className="text-[10px] text-gray-400">Mostrar botón de "Privacidad Activada" en informes</p>
+                    </div>
+                    <div className="ml-auto">
+                      <label className="relative inline-flex items-center cursor-pointer">
+                        <input 
+                          type="checkbox" 
+                          className="sr-only peer"
+                          checked={showPrivacyToggle}
+                          onChange={(e) => setShowPrivacyToggle(e.target.checked)}
+                        />
+                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-blue-500"></div>
+                      </label>
+                    </div>
+                  </div>
+
                   <div className="flex items-center gap-4">
                     <div className="w-12 h-12 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-orange-600 flex items-center justify-center">
                       <Database size={24} />

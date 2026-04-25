@@ -344,11 +344,11 @@ function App() {
             >
               <Routes>
                 <Route path="/" element={<Navigate to="/reports/new" replace />} />
-                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} />} />
-                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} />} />
-                <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isDirectora={isDirectora} currentUser={currentUser} />} />
+                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} isDarkMode={isDarkMode} />} />
+                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isDarkMode={isDarkMode} />} />
+                <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isDirectora={isDirectora} currentUser={currentUser} isDarkMode={isDarkMode} />} />
                 <Route path="/profile" element={<ProfilePage />} />
-                <Route path="/admin" element={isAdmin ? <AdminPage /> : <Navigate to="/reports/new" replace />} />
+                <Route path="/admin" element={isAdmin ? <AdminPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="*" element={<Navigate to="/reports/new" replace />} />
               </Routes>
             </motion.div>

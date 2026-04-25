@@ -2,13 +2,15 @@
 
 @layer base {
   :root {
-    --bg-page: #f1f1eb;
+    --bg-page: #f8fafc;
     --bg-card: #ffffff;
-    --bg-secondary: #e2e2da;
-    --text-main: #2d2d2a;
-    --text-sub: #71716a;
-    --border-main: #d8d8d1;
-    --hover-main: rgba(37, 99, 235, 0.08);
+    --privacy-bg: #ffffff;
+    --privacy-text: #0f172a;
+    --privacy-border: #3b82f6;
+    --text-main: #0f172a;
+    --text-sub: #475569;
+    --border-main: #e2e8f0;
+    --hover-main: rgba(37, 99, 235, 0.05);
   }
 
   :root.dark,
@@ -17,6 +19,9 @@
     --bg-page: #020617;
     --bg-card: #0f172a;
     --bg-secondary: #1e293b;
+    --privacy-bg: #1e293b;
+    --privacy-text: #f1f5f9;
+    --privacy-border: #60a5fa;
     --text-main: #f8fafc;
     --text-sub: #94a3b8;
     --border-main: #1e293b;
@@ -36,10 +41,20 @@
   }
   
   .input-field {
-    @apply w-full px-4 py-3 border rounded-2xl focus:ring-4 focus:ring-blue-500/5 focus:border-blue-500 outline-none transition-all duration-300 font-medium;
-    background-color: var(--bg-secondary);
-    border-color: var(--border-main);
-    color: var(--text-main);
+    @apply w-full px-4 py-3 border-2 rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all duration-300 font-bold;
+    background-color: #ffffff;
+    color: #0f172a; /* text-slate-900 */
+    border-color: #cbd5e1; /* border-slate-300 */
+  }
+
+  .dark .input-field {
+    background-color: #1e293b; /* bg-slate-800 */
+    color: #f8fafc; /* text-slate-50 */
+    border-color: #334155; /* border-slate-700 */
+  }
+  
+  .input-field::placeholder {
+    @apply text-slate-400 dark:text-slate-500 font-medium;
   }
 
   .input-error {

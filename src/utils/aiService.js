@@ -54,11 +54,13 @@ export const extractPatientsFromImage = async (base64Image) => {
       Extrae todos los pacientes visibles en la tabla.
       
       IMPORTANTE:
-      - La columna "H.C." contiene el número de DNI.
-      - La columna "Paciente" contiene Apellido y Nombre.
+      - La columna "HC" o "H.C." contiene el número de DNI.
+      - REGLA CRÍTICA: Solo extrae filas donde el número en "HC" tenga 6 o más dígitos. 
+      - IGNORA filas con números cortos (ej: 10, 161, etc.) ya que corresponden a códigos de profesionales, no a pacientes.
+      - La columna "Paciente" contiene el Nombre completo (Apellido y Nombre). Extráelo completo sin cortes.
       - La columna "Mutual" es la Obra Social.
       - La columna "Teléfono" es el teléfono del paciente.
-      - Si existe un email, extráelo en minúsculas.
+      - Si existe un email en la fila o cerca, extráelo en minúsculas.
       
       Devuelve los datos estrictamente en formato JSON como un array de objetos con las siguientes claves:
       dni (string, solo números), nombre (string, Apellido y Nombre), obraSocial (string), telefono (string), email (string | null).
@@ -114,9 +116,11 @@ export const extractPatientsFromText = async (pdfText) => {
       Extrae todos los pacientes y conviértelos a un formato estructurado JSON.
       
       INSTRUCCIONES CRÍTICAS:
-      1. MAPEO DE COLUMNAS:
-         - "H.C." es el DNI (extrae solo números).
-         - "Paciente" es el Nombre completo (normalmente APELLIDO NOMBRE).
+      1. FILTRADO Y MAPEO:
+         - "HC" o "H.C." es el DNI (extrae solo números).
+         - REGLA DE ORO: Solo procesa filas donde el DNI/HC tenga 6 o más dígitos.
+         - IGNORA filas con códigos cortos (2 o 3 dígitos) como 10, 161, etc. Estos son médicos, NO pacientes.
+         - "Paciente" es el Nombre completo (extrae todo el texto de esta columna).
          - "Mutual" es la Obra Social / Seguro Médico.
          - "Teléfono" es el teléfono de contacto.
       2. EXTRACCIÓN DE EMAIL:

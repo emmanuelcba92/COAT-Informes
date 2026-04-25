@@ -17,7 +17,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-const PracticesPage = () => {
+const PracticesPage = ({ isDarkMode }) => {
   const [selectedPractice, setSelectedPractice] = useState(null);
   const [editorContent, setEditorContent] = useState('');
   const [masterPractices, setMasterPractices] = useState([]);
@@ -176,7 +176,7 @@ const PracticesPage = () => {
           <>
             <div className="p-6 border-b border-main flex items-center justify-between bg-[var(--bg-page)]/50">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-600 flex items-center justify-center">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isDarkMode ? 'bg-blue-900/30 text-blue-400' : 'bg-blue-100 text-blue-600'}`}>
                   <Type size={20} />
                 </div>
                 <div>
@@ -207,12 +207,12 @@ const PracticesPage = () => {
             </div>
             
             <div className="flex-1 overflow-hidden p-6 flex flex-col gap-4">
-              <div className="flex items-start gap-2 p-3 bg-blue-50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900/20 rounded-xl text-blue-700 dark:text-blue-400 text-xs">
+              <div className={`flex items-start gap-2 p-3 border rounded-xl text-xs ${isDarkMode ? 'bg-blue-900/10 border-blue-900/20 text-blue-400' : 'bg-blue-50 border-blue-100 text-blue-700'}`}>
                 <Info size={16} className="mt-0.5 flex-shrink-0" />
                 <p>Usted puede editar el contenido de este modelo. Lo que guarde aquí será lo que aparezca por defecto al seleccionar esta práctica en la sección de generación de informes.</p>
               </div>
               
-              <div className="flex-1 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 transition-all bg-white text-black">
+              <div className={`flex-1 border rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 transition-all bg-white text-black ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}>
                 <ReactQuill 
                   theme="snow" 
                   value={editorContent} 
@@ -225,7 +225,7 @@ const PracticesPage = () => {
           </>
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-10 space-y-4">
-            <div className="w-20 h-20 bg-gray-50 dark:bg-slate-800 rounded-full flex items-center justify-center text-gray-300">
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center text-gray-300 ${isDarkMode ? 'bg-slate-800' : 'bg-gray-50'}`}>
               <Bookmark size={40} />
             </div>
             <div>

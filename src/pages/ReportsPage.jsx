@@ -25,7 +25,7 @@ import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'fi
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 
-const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
+const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) => {
   const toTitleCase = (str) => {
     if (!str) return '';
     return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -42,7 +42,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     includeTitle: true,
     customTitle: '',
     enableHeader: true,
-    sentToAdmin: false
+    sentToAdmin: false,
+    skipEmail: false
   });
 
   // Patient autocomplete logic
@@ -58,8 +59,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
             const autoEmail = data.email || data.patientEmail || '';
             setReportData(prev => ({
               ...prev,
-              patient: data.name || prev.patient,
-              socialWork: data.insurance || prev.socialWork,
+              patient: data.name || data.nombre || prev.patient,
+              socialWork: data.insurance || data.obraSocial || prev.socialWork,
               patientEmail: autoEmail || prev.patientEmail
             }));
             showToast('✓ Datos de paciente cargados');
@@ -192,6 +193,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         includeTitle: reportData.includeTitle,
         enableHeader: reportData.enableHeader,
         sentToAdmin: reportData.sentToAdmin,
+        skipEmail: reportData.skipEmail || false,
         pdfUrl: pdfUrl,
         fechaUpdatedAt: new Date().toISOString()
       };
@@ -296,7 +298,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
               includeTitle: data.includeTitle !== undefined ? data.includeTitle : true,
               customTitle: data.customTitle || '',
               enableHeader: data.enableHeader || false,
-              sentToAdmin: data.sentToAdmin || false
+              sentToAdmin: data.sentToAdmin || false,
+              skipEmail: data.skipEmail || false
             });
             setSelectedPractice(data.practicaNombre || '');
             setContent(data.contenidoTexto || '');
@@ -779,8 +782,8 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
         }
       }
 
-      // Envío al Paciente (si tiene email)
-      if (reportData.patientEmail) {
+      // Envío al Paciente (si tiene email y no se marcó "skipEmail")
+      if (reportData.patientEmail && !reportData.skipEmail) {
         try {
           await fetch(config.appsScriptUrl, {
             method: 'POST',
@@ -1105,7 +1108,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder="Solo números - buscar paciente"
                 value={reportData.dni}
-                onChange={e => setReportData({...reportData, dni: e.target.value.replace(/\D/g, '')})}
+                onChange={e => {
+                  const val = e.target.value.replace(/\D/g, '');
+                  setReportData(prev => ({ ...prev, dni: val }));
+                }}
               />
             </div>
             <div className="space-y-1 md:col-span-2">
@@ -1117,7 +1123,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder="Nombre y Apellido completo"
                 value={reportData.patient}
-                onChange={e => setReportData({...reportData, patient: toTitleCase(e.target.value)})}
+                onChange={e => {
+                  const val = toTitleCase(e.target.value);
+                  setReportData(prev => ({ ...prev, patient: val }));
+                }}
               />
             </div>
           </div>
@@ -1132,7 +1141,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 type="date"
                 className="input-field"
                 value={reportData.date}
-                onChange={e => setReportData({...reportData, date: e.target.value})}
+                onChange={e => {
+                  const val = e.target.value;
+                  setReportData(prev => ({ ...prev, date: val }));
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -1144,7 +1156,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder=""
                 value={reportData.socialWork}
-                onChange={e => setReportData({...reportData, socialWork: e.target.value.toUpperCase()})}
+                onChange={e => {
+                  const val = e.target.value.toUpperCase();
+                  setReportData(prev => ({ ...prev, socialWork: val }));
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -1156,7 +1171,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder="Médico que solicita..."
                 value={reportData.requester}
-                onChange={e => setReportData({...reportData, requester: toTitleCase(e.target.value)})}
+                onChange={e => {
+                  const val = toTitleCase(e.target.value);
+                  setReportData(prev => ({ ...prev, requester: val }));
+                }}
               />
             </div>
           </div>
@@ -1171,7 +1189,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className="input-field"
                 placeholder=""
                 value={reportData.reason}
-                onChange={e => setReportData({...reportData, reason: toTitleCase(e.target.value)})}
+                onChange={e => {
+                  const val = toTitleCase(e.target.value);
+                  setReportData(prev => ({ ...prev, reason: val }));
+                }}
               />
             </div>
             <div className="space-y-1">
@@ -1183,8 +1204,63 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
                 className={`input-field ${reportData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(reportData.patientEmail)) ? 'input-error' : ''}`}
                 placeholder={reportRequiredFields.reportRequiredEmail ? '' : 'Email...'}
                 value={reportData.patientEmail}
-                onChange={e => setReportData({...reportData, patientEmail: e.target.value})}
+                onChange={e => {
+                  const val = e.target.value;
+                  setReportData(prev => ({ ...prev, patientEmail: val }));
+                }}
               />
+              
+              {/* No enviar al paciente Toggle - ESTILO COAT */}
+              {config.showPrivacyToggle !== false && (
+                <div 
+                  className={`
+                    flex items-center justify-between px-6 py-5 mt-4 rounded-3xl border-2 transition-all duration-300 cursor-pointer
+                    ${reportData.skipEmail ? 'shadow-lg shadow-blue-500/5' : 'hover:shadow-md'}
+                  `}
+                  style={{ 
+                    backgroundColor: reportData.skipEmail 
+                      ? (isDarkMode ? 'rgba(30, 58, 138, 0.3)' : '#eff6ff') 
+                      : 'var(--bg-card)',
+                    borderColor: reportData.skipEmail ? '#2563eb' : 'var(--border-main)'
+                  }}
+                  onClick={() => setReportData(prev => ({ ...prev, skipEmail: !prev.skipEmail }))}
+                >
+                  <div className="flex items-center gap-4">
+                    <div className={`
+                      w-12 h-12 rounded-2xl flex items-center justify-center transition-all duration-300
+                      ${reportData.skipEmail ? 'bg-blue-600 text-white shadow-lg' : 'bg-[var(--bg-secondary)] text-blue-500 border border-main'}
+                    `}>
+                      <div className="relative">
+                        <Send size={24} className={reportData.skipEmail ? 'opacity-30' : ''} />
+                        {reportData.skipEmail && <X size={20} className="absolute inset-0 m-auto text-white font-black" />}
+                      </div>
+                    </div>
+                    <div className="select-none text-left">
+                      <p className="text-lg font-black uppercase tracking-tight leading-none text-[var(--text-main)]">
+                        {reportData.skipEmail ? 'PRIVACIDAD ACTIVADA' : 'NO ENVIAR AL PACIENTE'}
+                      </p>
+                      <p className="text-[11px] font-bold leading-tight mt-1.5 uppercase opacity-70 text-[var(--text-sub)]">
+                        {reportData.skipEmail ? 'El reporte NO llegará a su casilla' : 'Habilitar para evitar el envío automático'}
+                      </p>
+                    </div>
+                  </div>
+
+                <div 
+                  className={`
+                    relative w-16 h-8 rounded-full transition-all duration-500 border-2
+                    ${reportData.skipEmail ? 'bg-blue-600 border-blue-700' : 'bg-slate-200 dark:bg-slate-700 border-slate-300 dark:border-slate-600'}
+                  `}
+                >
+                  <div className={`
+                    absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow-md transition-all duration-500 flex items-center justify-center
+                    ${reportData.skipEmail ? 'translate-x-8' : 'translate-x-0'}
+                  `}>
+                    {reportData.skipEmail && <div className="w-2.5 h-2.5 bg-blue-600 rounded-full animate-pulse" />}
+                  </div>
+                </div>
+              </div>
+            )}
+
               <AnimatePresence>
                 {emailAutoFilledToast && (
                   <motion.div

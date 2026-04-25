@@ -73,13 +73,13 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
       >
         <div className="p-8 pb-4 text-center">
           <img src="/coat_logo.png" alt="COAT" className="w-20 h-20 mx-auto mb-4 object-contain" />
-          <h1 className="text-3xl font-bold mb-2 font-outfit" style={{ color: 'var(--text-main)' }}>Informes COAT</h1>
-          <p style={{ color: 'var(--text-sub)' }}>Ingrese sus credenciales de profesional</p>
+          <h1 className="text-3xl font-bold mb-2 font-outfit text-[var(--text-main)]">Informes COAT</h1>
+          <p className="text-[var(--text-sub)]">Ingrese sus credenciales de profesional</p>
         </div>
 
         <form onSubmit={handleSubmit} className="p-8 pt-4 space-y-6">
           <div className="space-y-2">
-            <label className="text-sm font-semibold ml-1" style={{ color: 'var(--text-main)' }}>Usuario</label>
+            <label className="text-sm font-semibold ml-1 text-[var(--text-main)]">Usuario</label>
             <div className="relative group">
               <User className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
               <input
@@ -87,18 +87,13 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="Usuario..."
-                className="w-full pl-11 pr-4 py-3 border-2 focus:border-blue-600 rounded-2xl outline-none transition-all"
-                style={{ 
-                  backgroundColor: 'var(--bg-secondary)', 
-                  borderColor: 'var(--border-main)',
-                  color: 'var(--text-main)'
-                }}
+                className="w-full pl-11 pr-4 py-3 border-2 focus:border-blue-600 rounded-2xl outline-none transition-all bg-[var(--bg-secondary)] border-[var(--border-main)] text-[var(--text-main)]"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <label className="text-sm font-semibold ml-1" style={{ color: 'var(--text-main)' }}>Contraseña</label>
+            <label className="text-sm font-semibold ml-1 text-[var(--text-main)]">Contraseña</label>
             <div className="relative group">
               <Lock className="absolute left-3 top-3 text-gray-400 group-focus-within:text-blue-600 transition-colors" size={20} />
               <input
@@ -106,12 +101,7 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full pl-11 pr-4 py-3 border-2 focus:border-blue-600 rounded-2xl outline-none transition-all"
-                style={{ 
-                  backgroundColor: 'var(--bg-secondary)', 
-                  borderColor: 'var(--border-main)',
-                  color: 'var(--text-main)'
-                }}
+                className="w-full pl-11 pr-4 py-3 border-2 focus:border-blue-600 rounded-2xl outline-none transition-all bg-[var(--bg-secondary)] border-[var(--border-main)] text-[var(--text-main)]"
               />
             </div>
           </div>
@@ -151,8 +141,8 @@ const LoginPage = ({ onLogin, isDarkMode, toggleTheme }) => {
           </button>
         </form>
 
-        <div className="p-6 border-t text-center" style={{ backgroundColor: 'var(--bg-secondary)', borderColor: 'var(--border-main)' }}>
-          <p className="text-xs" style={{ color: 'var(--text-sub)' }}>
+        <div className="p-6 border-t text-center bg-[var(--bg-secondary)] border-[var(--border-main)]">
+          <p className="text-xs text-[var(--text-sub)]">
             &copy; 2026 COAT • Centro Otoaudiológico de Alta Tecnología
           </p>
         </div>
