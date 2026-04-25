@@ -114,14 +114,46 @@
   content: "Grande" !important;
 }
 .ql-picker.ql-size .ql-picker-label[data-value="huge"]::before,
+.ql-container {
+  border-bottom-left-radius: 1.5rem;
+  border-bottom-right-radius: 1.5rem;
+  background-color: var(--bg-secondary);
+  border-color: var(--border-main) !important;
+}
+
+.ql-toolbar {
+  border-top-left-radius: 1.5rem;
+  border-top-right-radius: 1.5rem;
+  background-color: var(--bg-card);
+  border-color: var(--border-main) !important;
+}
+
+.dark .ql-toolbar .ql-stroke {
+  stroke: var(--text-main);
+}
+.dark .ql-toolbar .ql-fill {
+  fill: var(--text-main);
+}
+.dark .ql-toolbar .ql-picker {
+  color: var(--text-main);
+}
+
 .ql-editor {
   min-height: 250px;
   font-family: 'Inter', sans-serif !important;
   font-size: 14px !important;
-  line-height: 1.4 !important;
-  background-color: var(--bg-secondary);
-  color: var(--text-main);
+  line-height: 1.6 !important;
+  background-color: transparent;
+  color: var(--text-main) !important;
 }
+
+/* Forzar que el texto pegado o cargado de modelos sea legible en dark mode */
+.dark .ql-editor p, 
+.dark .ql-editor span,
+.dark .ql-editor li {
+  color: var(--text-main) !important;
+}
+
 
 .ql-editor p {
   margin-bottom: 0px !important;
