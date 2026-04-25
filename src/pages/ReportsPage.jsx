@@ -584,7 +584,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     const footerLines = [
       prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional'),
       isStaff ? '' : (prof.especialidad || prof.esp || 'Especialista'),
-      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'} ${prof.me ? ` | ME: ${prof.me}` : ''}`
+      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'}${prof.me && prof.me.trim() !== "" ? ` | ME: ${prof.me}` : ''}`
     ].filter(line => line !== '');
 
     footerLines.forEach((text, i) => {
