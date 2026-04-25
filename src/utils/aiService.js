@@ -1,9 +1,45 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const MODEL_NAME = "gemini-3.1-flash-lite-preview";
+const MODELS = [
+  "gemini-3.1-flash-lite-preview",
+  "gemini-2.5-flash-lite",
+  "gemini-2.0-flash",
+  "gemini-1.5-flash",
+  "gemini-1.5-pro"
+];
 
 const genAI = new GoogleGenerativeAI(API_KEY);
+
+/**
+ * Intenta ejecutar una tarea con los modelos disponibles en orden de prioridad
+ * @param {Function} task - Función que recibe el modelo y retorna el resultado
+ * @returns {Promise<any>} - Resultado de la tarea
+ */
+const tryWithFallbacks = async (task) => {
+  let lastError = null;
+  
+  for (const modelName of MODELS) {
+    try {
+      console.log(`Intentando con modelo: ${modelName}`);
+      const model = genAI.getGenerativeModel({ 
+        model: modelName,
+        generationConfig: {
+          responseMimeType: "application/json",
+        }
+      });
+      return await task(model);
+    } catch (error) {
+      console.warn(`Fallo con modelo ${modelName}:`, error.message);
+      lastError = error;
+      // Si es un error de cuota o modelo no encontrado, seguimos con el siguiente
+      continue;
+    }
+  }
+  
+  console.error("Todos los modelos fallaron.");
+  throw lastError;
+};
 
 /**
  * Procesa una imagen (captura de pantalla) para extraer datos de pacientes
@@ -11,14 +47,7 @@ const genAI = new GoogleGenerativeAI(API_KEY);
  * @returns {Promise<Array>} - Lista de pacientes extraídos
  */
 export const extractPatientsFromImage = async (base64Image) => {
-  try {
-    const model = genAI.getGenerativeModel({ 
-      model: MODEL_NAME,
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-
+  return tryWithFallbacks(async (model) => {
     const prompt = `
       Actúa como un experto en extracción de datos médicos. 
       Analiza la imagen adjunta que es una captura de pantalla de un sistema de turnos llamado GACITUA.
@@ -67,14 +96,9 @@ export const extractPatientsFromImage = async (base64Image) => {
 
     const response = await result.response;
     const text = response.text();
-    
-    // Limpiar el texto en caso de que venga con bloques de código markdown
     const jsonText = text.replace(/```json|```/g, "").trim();
     return JSON.parse(jsonText);
-  } catch (error) {
-    console.error("Error extracting from image:", error);
-    throw error;
-  }
+  });
 };
 
 /**
@@ -83,14 +107,7 @@ export const extractPatientsFromImage = async (base64Image) => {
  * @returns {Promise<Array>} - Lista de pacientes extraídos
  */
 export const extractPatientsFromText = async (pdfText) => {
-  try {
-    const model = genAI.getGenerativeModel({ 
-      model: MODEL_NAME,
-      generationConfig: {
-        responseMimeType: "application/json",
-      }
-    });
-
+  return tryWithFallbacks(async (model) => {
     const prompt = `
       Actúa como un experto en extracción de datos médicos.
       Analiza el siguiente texto extraído de un PDF o imagen de turnos de una clínica (GACITUA).
@@ -135,13 +152,10 @@ export const extractPatientsFromText = async (pdfText) => {
         }
       }
     });
+
     const response = await result.response;
     const text = response.text();
-    
     const jsonText = text.replace(/```json|```/g, "").trim();
     return JSON.parse(jsonText);
-  } catch (error) {
-    console.error("Error extracting from text:", error);
-    throw error;
-  }
+  });
 };
