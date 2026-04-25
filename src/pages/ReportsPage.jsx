@@ -502,6 +502,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile }) => {
     }
 
     // Lógica inteligente de tamaño de letra
+    doc.setFont("helvetica", "normal");
     const plainResult = cleanHtmlForPDF(reportData.result || content);
     const pageHeight = doc.internal.pageSize.height;
     const availableHeight = pageHeight - currentY - 70; // Espacio restante aprox.
