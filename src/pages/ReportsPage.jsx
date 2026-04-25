@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'firebase/firestore';
+import { AUDIT_ACTIONS, logAction } from '../services/auditService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -760,7 +761,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       let folderIdToSend = config.autoSaveToDrive ? config.driveFolderId : null;
 
       // Envío a Administración
-      if (config.adminEmail && !reportData.sentToAdmin) {
+      if (config.adminEmail) {
         try {
           await fetch(config.appsScriptUrl, {
             method: 'POST',
@@ -776,7 +777,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
               dni: reportData.dni
             })
           });
-          folderIdToSend = null; // Consumido
+          folderIdToSend = null; // Consumido con éxito
         } catch (e) {
           console.warn("Error enviando copia admin:", e);
         }
@@ -799,13 +800,13 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
               dni: reportData.dni
             })
           });
-          folderIdToSend = null; // Consumido
+          folderIdToSend = null; // Consumido con éxito
         } catch (e) {
           console.warn("Error enviando al paciente:", e);
         }
       }
 
-      // Backup a Drive solo (si no se envió antes)
+      // Backup a Drive solo (si no se envió antes con éxito)
       if (folderIdToSend) {
         try {
           await fetch(config.appsScriptUrl, {
@@ -831,6 +832,18 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       // Guardamos en el historial con el nuevo flag
       await saveToHistory(null, false);
       
+      // Auditoría
+      await logAction(
+        AUDIT_ACTIONS.SEND_REPORT,
+        reportData.patient.replace(/\s/g, '_'),
+        `Informe enviado: ${reportData.patient}`,
+        { 
+          sentToAdmin: !!config.adminEmail,
+          sentToPatient: (reportData.patientEmail && !reportData.skipEmail),
+          skipPatient: !!reportData.skipEmail
+        }
+      );
+
       showToast('¡Informe enviado con éxito!');
     } catch (err) {
       console.error("Error en handleSendReport:", err);

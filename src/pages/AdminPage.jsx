@@ -45,6 +45,7 @@ import {
   signOut,
 } from "firebase/auth";
 import { db } from "../services/firebase";
+import { AUDIT_ACTIONS, logAction } from "../services/auditService";
 import {
   collection,
   onSnapshot,
@@ -63,7 +64,6 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { supabase } from '../services/supabase';
-import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -152,6 +152,7 @@ const AdminPage = () => {
 
   // State for Audit Logs
   const [auditLogs, setAuditLogs] = useState([]);
+  const [isLoadingAudit, setIsLoadingAudit] = useState(false);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditSearch, setAuditSearch] = useState("");
 
@@ -822,7 +823,7 @@ const AdminPage = () => {
       await deleteDoc(doc(db, "practices", id));
       // LOG AUDIT
       await logAction(
-        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS, 
         id, 
         "Modelo de informe eliminado"
       );
@@ -844,7 +845,7 @@ const AdminPage = () => {
 
       // LOG AUDIT
       await logAction(
-        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS, 
         "global_settings", 
         "Configuración general del sistema"
       );
@@ -865,7 +866,7 @@ const AdminPage = () => {
 
       // LOG AUDIT
       await logAction(
-        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS, 
         "field_requirements", 
         "Requerimientos de campos en informes"
       );
@@ -993,6 +994,37 @@ const AdminPage = () => {
     setIsManageProfessionalModalOpen(true);
   };
 
+  const fetchAuditLogs = async () => {
+    setIsLoadingAudit(true);
+    try {
+      const ninetyDaysAgo = new Date();
+      ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+      const q = query(
+        collection(db, "audit_logs"),
+        where("timestamp", ">=", ninetyDaysAgo),
+        orderBy("timestamp", "desc"),
+        limit(500)
+      );
+      const snap = await getDocs(q);
+      const logs = snap.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      setAuditLogs(logs);
+    } catch (err) {
+      console.error("Error fetching audit logs:", err);
+    } finally {
+      setIsLoadingAudit(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === "audit") {
+      fetchAuditLogs();
+    }
+  }, [activeTab]);
+
   const handleSaveManagedUser = async () => {
     if (!targetProf) return;
     setIsProfSaving(true);
@@ -1003,7 +1035,7 @@ const AdminPage = () => {
 
       // LOG AUDIT
       await logAction(
-        AUDIT_ACTIONS.UPDATE_CONFIG, 
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS, 
         targetProf.id, 
         `Perfil de usuario actualizado: ${targetProf.nombre}`
       );
@@ -2712,6 +2744,96 @@ const AdminPage = () => {
                   </button>
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === "audit" && (
+          <div className="space-y-6">
+            <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm">
+              <div className="flex items-center justify-between mb-8">
+                <div>
+                  <h3 className="text-xl font-bold text-[var(--text-main)] flex items-center gap-2">
+                    <History className="text-blue-500" /> Historial de Auditoría
+                  </h3>
+                  <p className="text-sm text-gray-400">Registros de acciones críticas de los últimos 90 días (Inmutable)</p>
+                </div>
+                <button 
+                  onClick={fetchAuditLogs}
+                  disabled={isLoadingAudit}
+                  className="p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-2xl hover:bg-blue-100 transition-all"
+                >
+                  <RefreshCw size={20} className={isLoadingAudit ? "animate-spin" : ""} />
+                </button>
+              </div>
+
+              {isLoadingAudit ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-4">
+                  <Loader2 size={40} className="animate-spin text-blue-500" />
+                  <p className="text-xs font-black uppercase tracking-widest text-gray-400">Cargando registros...</p>
+                </div>
+              ) : auditLogs.length === 0 ? (
+                <div className="py-20 text-center bg-[var(--bg-secondary)] rounded-3xl border-2 border-dashed border-main">
+                  <ShieldCheck size={48} className="mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-400 font-medium">No se han encontrado registros de actividad reciente.</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[var(--bg-secondary)] border-b border-main">
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Fecha y Hora</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Usuario</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Acción</th>
+                        <th className="px-6 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400">Documento/Destino</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-main/50">
+                      {auditLogs.map((log) => (
+                        <tr key={log.id} className="hover:bg-blue-50/30 dark:hover:bg-blue-900/5 transition-colors group">
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-[var(--text-main)]">
+                                {log.timestamp?.seconds 
+                                  ? new Date(log.timestamp.seconds * 1000).toLocaleString('es-AR')
+                                  : 'Recién registrado'}
+                              </span>
+                              <span className="text-[10px] text-gray-400 font-mono">
+                                {log.id.substring(0, 8)}...
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-blue-600 dark:text-blue-400">{log.userName}</span>
+                              <span className="text-[10px] text-gray-400">{log.userEmail}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-tighter ${
+                              log.action?.includes('ELIMINAR') 
+                                ? 'bg-red-100 text-red-600' 
+                                : log.action?.includes('CAMBIO')
+                                ? 'bg-amber-100 text-amber-600'
+                                : 'bg-blue-100 text-blue-600'
+                            }`}>
+                              {log.action?.replace(/_/g, ' ') || 'ACCIÓN DESCONOCIDA'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col max-w-xs">
+                              <span className="text-xs font-medium text-[var(--text-sub)] truncate">{log.targetName}</span>
+                              {log.details?.type && (
+                                <span className="text-[9px] text-gray-400 uppercase tracking-tighter">{log.details.type}</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         )}

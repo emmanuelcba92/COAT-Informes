@@ -495,9 +495,13 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       
       // LOG AUDIT
       await logAction(
-        AUDIT_ACTIONS.DELETE_REPORT, 
-        report.id, 
-        report.pacienteNombre || report.n || "Informe"
+        AUDIT_ACTIONS.DELETE_REPORT,
+        report.id,
+        `Informe eliminado: ${report.patient || report.pacienteNombre || 'Desconocido'}`,
+        { 
+          date: report.date || report.d,
+          socialWork: report.socialWork || report.sw
+        }
       );
       
       showToast('Informe eliminado de la lista.');

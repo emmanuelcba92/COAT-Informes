@@ -603,8 +603,6 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
                         let val = e.target.value;
                         if (['dni', 'affiliateNumber'].includes(f.key)) {
                           val = val.replace(/\D/g, '');
-                        } else if (['name', 'insurance', 'diagnosis'].includes(f.key)) {
-                          val = toTitleCase(val);
                         }
                         setPatientData(prev => ({ ...prev, [f.key]: val }));
                       }} 
