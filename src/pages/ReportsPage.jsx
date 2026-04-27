@@ -135,7 +135,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
   const [emailMissingWarning, setEmailMissingWarning] = useState(false);
   const [allProfessionals, setAllProfessionals] = useState([]);
   const [selectedDelegate, setSelectedDelegate] = useState(null);
-  const isAdmin = initialProfile?.role === 'admin' || initialProfile?.role === 'directora_medica';
+  const isAdmin = initialProfile?.role === 'admin';
   const navigate = useNavigate();
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get('edit');
