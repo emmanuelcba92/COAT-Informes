@@ -25,6 +25,7 @@ import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'fi
 import { AUDIT_ACTIONS, logAction } from '../services/auditService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { extractPatientsFromImage } from '../utils/aiService';
 
 const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) => {
   const toTitleCase = (str) => {
@@ -171,6 +172,47 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
     setTimeout(() => setToast(prev => ({ ...prev, show: false })), 4000);
+  };
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData.items;
+    let imageItem = null;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        imageItem = items[i];
+        break;
+      }
+    }
+
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target.result.split(',')[1];
+        showToast('Procesando imagen con IA...', 'info');
+        try {
+          const results = await extractPatientsFromImage(base64);
+          if (results && results.length > 0) {
+            const patient = results[0];
+            setReportData(prev => ({
+              ...prev,
+              dni: patient.dni || prev.dni,
+              patient: patient.nombre || prev.patient,
+              socialWork: patient.obraSocial || prev.socialWork,
+              patientEmail: patient.email || prev.patientEmail
+            }));
+            showToast('✓ Datos extraídos correctamente');
+          } else {
+            showToast('No se encontraron datos de pacientes en la imagen', 'error');
+          }
+        } catch (err) {
+          console.error("AI Error:", err);
+          showToast('Error al procesar la imagen con IA', 'error');
+        }
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   // Guardar en el historial corregido para manejar EDICIÓN
@@ -1289,8 +1331,11 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
           {/* Row 1: DNI (buscar paciente) + Paciente */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <div className="space-y-1">
-              <label className="text-xs font-bold uppercase opacity-60">
-                DNI {reportRequiredFields.reportRequiredDni ? '*' : '(Opcional)'}
+              <label className="text-xs font-bold uppercase opacity-60 flex items-center justify-between w-full">
+                <span>DNI {reportRequiredFields.reportRequiredDni ? '*' : '(Opcional)'}</span>
+                <span className="text-[9px] text-blue-500 font-black normal-case opacity-100 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
+                  Pegar captura (CTRL + V) para autocompletar
+                </span>
               </label>
               <input
                 type="text"
@@ -1298,6 +1343,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 className="input-field"
                 placeholder="Solo números - buscar paciente"
                 value={reportData.dni}
+                onPaste={handlePaste}
                 onChange={e => {
                   const val = e.target.value.replace(/\D/g, '');
                   setReportData(prev => ({ ...prev, dni: val }));
@@ -1427,7 +1473,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                     </div>
                     <div className="select-none text-left">
                       <p className="text-lg font-black uppercase tracking-tight leading-none text-[var(--text-main)]">
-                        {reportData.skipEmail ? 'PRIVACIDAD ACTIVADA' : 'NO ENVIAR AL PACIENTE'}
+                        {reportData.skipEmail ? 'PRIVACIDAD ACTIVADA' : 'HABILITAR PARA NO ENVIAR COPIA AL PACIENTE'}
                       </p>
                       <p className="text-[11px] font-bold leading-tight mt-1.5 uppercase opacity-70 text-[var(--text-sub)]">
                         {reportData.skipEmail ? 'El reporte NO llegará a su casilla' : 'Habilitar para evitar el envío automático'}
