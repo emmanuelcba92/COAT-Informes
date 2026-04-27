@@ -107,29 +107,29 @@ const MetricsPage = ({ isDarkMode }) => {
           <p className="text-sm opacity-60 font-medium">Panel de productividad y gestión de autoría</p>
         </div>
         
-        <div className="bg-white dark:bg-[#1a1a1a] border border-main p-4 rounded-2xl flex items-center gap-4 group hover:border-blue-500/50 transition-all shadow-sm">
+        <div className="card p-4 flex items-center gap-4 group hover:border-blue-500/50 transition-all">
           <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
             <BarChart3 size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Total Informes</p>
-            <p className="text-2xl font-black tracking-tight">{totalReports}</p>
+            <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalReports}</p>
           </div>
         </div>
 
-        <div className="bg-white dark:bg-[#1a1a1a] border border-main p-4 rounded-2xl flex items-center gap-4 group hover:border-amber-500/50 transition-all shadow-sm">
+        <div className="card p-4 flex items-center gap-4 group hover:border-amber-500/50 transition-all">
           <div className="w-12 h-12 rounded-xl bg-amber-500/10 flex items-center justify-center text-amber-600 group-hover:scale-110 transition-transform">
             <UserCheck size={24} />
           </div>
           <div>
             <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Informes Delegados</p>
-            <p className="text-2xl font-black tracking-tight">{totalDelegated}</p>
+            <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalDelegated}</p>
           </div>
         </div>
       </div>
 
       {/* Toolbar */}
-      <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-white dark:bg-[#1a1a1a] p-3 rounded-2xl border border-main shadow-sm">
+      <div className="flex flex-col md:flex-row gap-4 items-center justify-between card p-3">
         <div className="relative w-full md:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
           <input 
@@ -137,7 +137,7 @@ const MetricsPage = ({ isDarkMode }) => {
             placeholder="Buscar por nombre de autor..." 
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-[var(--bg-page)] border border-main rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium transition-all"
+            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/50 border border-main rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium transition-all text-slate-900 dark:text-white"
           />
         </div>
 
@@ -157,22 +157,22 @@ const MetricsPage = ({ isDarkMode }) => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Productivity Table */}
         <div className="lg:col-span-2 space-y-4">
-          <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl border border-main overflow-hidden shadow-xl shadow-black/5">
+          <div className="card">
             <div className="p-6 border-b border-main flex items-center justify-between bg-gradient-to-r from-blue-600/5 to-transparent">
               <div>
-                <h3 className="text-xl font-black tracking-tight uppercase">Rendimiento por Autor Real</h3>
-                <p className="text-xs opacity-60">Desglose de informes realizados por usuario (incluye delegados)</p>
+                <h3 className="text-xl font-black tracking-tight uppercase text-slate-900 dark:text-white">Rendimiento por Autor Real</h3>
+                <p className="text-xs opacity-60 text-slate-600 dark:text-slate-400">Desglose de informes realizados por usuario (incluye delegados)</p>
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-slate-50 dark:bg-black/20 text-left">
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Autor Real</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">Total</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Desglose de Informes</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 tracking-widest">Productividad</th>
+                  <tr className="bg-slate-50/50 dark:bg-black/20 text-left">
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Autor Real</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest text-center">Total</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Desglose de Informes</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Productividad</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-main">
@@ -191,8 +191,8 @@ const MetricsPage = ({ isDarkMode }) => {
                               {item.name.substring(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-black tracking-tight uppercase text-sm truncate">{item.name}</p>
-                              <p className="text-[10px] opacity-50 font-bold uppercase tracking-tighter italic">
+                              <p className="font-black tracking-tight uppercase text-sm truncate text-slate-900 dark:text-white">{item.name}</p>
+                              <p className="text-[10px] opacity-60 font-bold uppercase tracking-tighter italic text-slate-500 dark:text-slate-400">
                                 {item.delegated > 0 ? `${item.delegated} delegados` : 'Personal directo'}
                               </p>
                             </div>
@@ -206,8 +206,8 @@ const MetricsPage = ({ isDarkMode }) => {
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1 max-w-[300px]">
                             {Object.entries(item.practices).map(([name, count], pidx) => (
-                              <div key={pidx} className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800/50 rounded-md border border-main group-hover:border-blue-500/30 transition-all">
-                                <span className="text-[9px] font-bold uppercase truncate max-w-[120px] opacity-70">{name}</span>
+                              <div key={pidx} className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700 transition-all">
+                                <span className="text-[9px] font-bold uppercase truncate max-w-[120px] text-slate-600 dark:text-slate-400">{name}</span>
                                 <span className="text-[10px] font-black text-blue-600">{count}</span>
                               </div>
                             ))}
@@ -238,12 +238,12 @@ const MetricsPage = ({ isDarkMode }) => {
 
         {/* Breakdown Card */}
         <div className="space-y-6">
-          <div className="bg-white dark:bg-[#1a1a1a] rounded-3xl border border-main p-6 shadow-xl shadow-black/5 relative overflow-hidden h-full">
+          <div className="card p-6 h-full relative overflow-hidden">
              <div className="absolute top-0 right-0 p-8 opacity-[0.03] rotate-12">
                <TrendingUp size={120} />
              </div>
 
-             <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-2">
+             <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-2 text-slate-900 dark:text-white">
                <Users className="text-blue-600" size={20} />
                Desglose de Gestión
              </h3>
@@ -259,10 +259,10 @@ const MetricsPage = ({ isDarkMode }) => {
                    <div className="grid grid-cols-1 gap-4">
                      {Object.values(admin.targets).map((target, tidx) => (
                        <div key={tidx} className="bg-slate-50 dark:bg-black/20 rounded-2xl border border-main overflow-hidden">
-                         <div className="flex items-center justify-between p-3 bg-white dark:bg-[#252525] border-b border-main shadow-sm">
+                         <div className="flex items-center justify-between p-3 bg-white/80 dark:bg-slate-800/50 border-b border-main shadow-sm">
                            <div className="flex items-center gap-2">
                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                             <p className="text-xs font-black uppercase truncate max-w-[150px]">{target.name}</p>
+                             <p className="text-xs font-black uppercase truncate max-w-[150px] text-slate-900 dark:text-white">{target.name}</p>
                            </div>
                            <div className="flex items-center gap-1.5">
                              <span className="text-xs font-black text-blue-600">{target.count}</span>
@@ -273,8 +273,8 @@ const MetricsPage = ({ isDarkMode }) => {
                          <div className="p-3 space-y-2 bg-white dark:bg-transparent">
                            {Object.entries(target.reports).map(([rType, rCount], ridx) => (
                              <div key={ridx} className="flex items-center justify-between text-[10px]">
-                                <div className="flex items-center gap-2 opacity-70">
-                                  <FileText size={12} className="text-slate-400" />
+                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                  <FileText size={12} />
                                   <span className="font-bold uppercase truncate max-w-[180px]">{rType}</span>
                                 </div>
                                 <span className="font-black bg-blue-600/10 text-blue-600 px-1.5 py-0.5 rounded">
