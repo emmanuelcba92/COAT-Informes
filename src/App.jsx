@@ -17,6 +17,7 @@ const ProfilePage = React.lazy(() => import('./pages/ProfilePage'));
 const AdminPage = React.lazy(() => import('./pages/AdminPage'));
 const OrdersMain = React.lazy(() => import('./pages/OrdersMain'));
 const PatientsPage = React.lazy(() => import('./pages/PatientsPage'));
+const MetricsPage = React.lazy(() => import('./pages/MetricsPage'));
 
 // Preload critical routes
 const preloadRoutes = () => {
@@ -189,6 +190,7 @@ function App() {
     { id: 'reports', label: 'Informes', icon: <Layout size={24} />, path: '/reports', show: true },
     { id: 'orders', label: 'Pedidos', icon: <ClipboardList size={24} />, path: '/orders', show: canSeeOrders },
     { id: 'patients', label: 'Pacientes', icon: <Users size={24} />, path: '/patients', show: true },
+    { id: 'metrics', label: 'Métricas', icon: <Activity size={24} />, path: '/metrics', show: isAdmin || isDirectora },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile', show: true },
     { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', show: isAdmin },
   ].filter(item => item.show);
@@ -353,6 +355,7 @@ function App() {
                 <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} isDarkMode={isDarkMode} />} />
                 <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isDarkMode={isDarkMode} />} />
                 <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isDirectora={isDirectora} currentUser={currentUser} isDarkMode={isDarkMode} />} />
+                <Route path="/metrics" element={isAdmin ? <MetricsPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/admin" element={isAdmin ? <AdminPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="*" element={<Navigate to="/reports/new" replace />} />

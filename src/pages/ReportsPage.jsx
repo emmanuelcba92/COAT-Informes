@@ -132,6 +132,9 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
   });
   const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
   const [emailMissingWarning, setEmailMissingWarning] = useState(false);
+  const [allProfessionals, setAllProfessionals] = useState([]);
+  const [selectedDelegate, setSelectedDelegate] = useState(null);
+  const isAdmin = initialProfile?.role === 'admin' || initialProfile?.role === 'directora_medica';
   const navigate = useNavigate();
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get('edit');
@@ -179,8 +182,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     }
     try {
       const data = {
-        profesionalId: localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid,
-        profesionalNombre: professional?.nombre || professional?.n || 'Médico',
+        profesionalId: selectedDelegate ? selectedDelegate.id : (localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid),
+        profesionalNombre: selectedDelegate ? (selectedDelegate.nombre || selectedDelegate.u) : (professional?.nombre || professional?.n || 'Médico'),
+        createdBy: auth.currentUser.uid,
+        createdByName: initialProfile?.nombre || initialProfile?.u || 'Admin',
         pacienteNombre: reportData.patient,
         pacienteDni: reportData.dni || '',
         obraSocial: reportData.socialWork,
@@ -241,11 +246,76 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     const fetchData = async () => {
       if (!auth.currentUser) return;
       try {
-        // Carga paralela de Prácticas y Configuración
-        const [practicesSnap, configSnap] = await Promise.all([
+        // Carga paralela de Prácticas, Configuración y Profesionales (si es admin)
+        const promises = [
           getDocs(collection(db, 'practices')),
           getDoc(doc(db, 'config', 'settings'))
-        ]);
+        ];
+
+        if (isAdmin) {
+          promises.push(getDocs(collection(db, 'users')));
+        }
+
+        const results = await Promise.all(promises);
+        const practicesSnap = results[0];
+        const configSnap = results[1];
+        
+        if (isAdmin && results[2]) {
+          const usersList = results[2].docs.map(doc => ({ id: doc.id, ...doc.data() }))
+            .filter(u => u.role !== 'admin' && u.role !== 'secretaria' && (u.nombre || u.u))
+            .reduce((acc, current) => {
+              const rawName = current.nombre || current.u || "";
+              const id = current.id;
+              
+              // Filtro manual para los IDs legacy reportados por el usuario
+              if (id === 'cromani_coat_com_ar' || id === 'ccuret_coat_com_ar') return acc;
+
+              const getWords = (n) => n.toUpperCase()
+                .replace(/^(DR\s*\.?|DRA\s*\.?|LIC\s*\.?|PROF\s*\.?|BIOQ\s*\.?|FON\s*\.?)\s+/g, '')
+                .replace(/(,\s*|DR\s*\.?|DRA\s*\.?|LIC\s*\.?|PROF\s*\.?|BIOQ\s*\.?|FON\s*\.?)/g, ' ')
+                .replace(/\./g, '')
+                .split(/\s+/)
+                .filter(word => word.length > 2);
+
+              const currentWords = getWords(rawName);
+              
+              // Buscar si ya existe alguien que comparta al menos 2 palabras significativas
+              const existingIdx = acc.findIndex(item => {
+                const itemWords = getWords(item.nombre || item.u || "");
+                const commonWords = currentWords.filter(w => itemWords.includes(w));
+                return commonWords.length >= 2;
+              });
+
+              if (existingIdx === -1) {
+                acc.push(current);
+              } else {
+                const existing = acc[existingIdx];
+                const isLegacyId = (uid) => uid.includes('_coat_com_ar');
+                
+                // Si el existente es legacy y el nuevo es UID real, reemplazar
+                if (isLegacyId(existing.id) && !isLegacyId(id)) {
+                  acc[existingIdx] = current;
+                } else if (!isLegacyId(existing.id) && isLegacyId(id)) {
+                  // Mantener el real
+                } else {
+                  // Si son del mismo tipo, el que tenga firma
+                  if (!existing.signatureBase64 && current.signatureBase64) {
+                    acc[existingIdx] = current;
+                  }
+                }
+              }
+              return acc;
+            }, [])
+            .sort((a, b) => {
+              // Ordenar ignorando títulos
+              const clean = (n) => (n || "").toUpperCase()
+                .replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '')
+                .replace(/^[.\s,]+/, '')
+                .trim();
+              return clean(a.nombre || a.u).localeCompare(clean(b.nombre || b.u));
+            });
+          setAllProfessionals(usersList);
+        }
 
         const list = practicesSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         setDbPractices(list);
@@ -429,7 +499,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
       const tempDoc = new DOMParser().parseFromString(text, 'text/html');
       return (tempDoc.body.textContent || "").trimEnd();
     };
-    const prof = professional || {};
+    const prof = selectedDelegate || professional || {};
     const pageWidth = doc.internal.pageSize.width;
     
     // Select Header
@@ -633,9 +703,15 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     doc.setFont("helvetica", "bold");
     doc.setFontSize(8);
     
-    const isStaff = prof.role === 'admin' || prof.role === 'secre';
+    const isStaff = prof.role === 'admin' || prof.role === 'secre' || prof.role === 'secretaria';
+    const profName = (() => {
+      const prefix = (isStaff ? '' : (prof.prefix ? prof.prefix + ' ' : ''));
+      const rawName = prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional');
+      const cleanName = (prof.prefix && !isStaff) ? rawName.replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '').replace(/^[.\s,]+/, '').trim() : rawName;
+      return prefix + cleanName;
+    })();
     const footerLines = [
-      prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional'),
+      profName,
       isStaff ? '' : (prof.especialidad || prof.esp || 'Especialista'),
       isStaff ? '' : `MP: ${prof.mp || prof.m || '-'}${prof.me && String(prof.me).trim() !== "" ? ` | ME: ${prof.me}` : ''}`
     ].filter(line => line !== '');
@@ -1148,6 +1224,67 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
               </div>
             )}
           </div>
+
+          {/* Delegación de Autoría (Solo Admin) */}
+          {isAdmin && allProfessionals.length > 0 && !isEditing && (
+            <motion.div 
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-blue-50/50 dark:bg-blue-900/10 p-5 rounded-2xl border border-blue-200/50 dark:border-blue-800/30 space-y-3"
+            >
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                <UserIcon size={18} />
+                <h3 className="text-xs font-black uppercase tracking-widest">Delegación de Autoría</h3>
+              </div>
+              <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                Usted está autenticado como administrador. Puede emitir este informe en nombre de otro profesional para fines administrativos y de facturación.
+              </p>
+              <div className="relative group">
+                <select
+                  className="w-full border border-main rounded-xl px-4 py-3 text-sm transition-all outline-none bg-white text-gray-900 dark:bg-slate-900 dark:text-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
+                  style={{ backgroundColor: isDarkMode ? '' : 'white', color: isDarkMode ? '' : '#111827' }}
+                  value={selectedDelegate?.id || ""}
+                  onChange={(e) => {
+                    const prof = allProfessionals.find(p => p.id === e.target.value);
+                    setSelectedDelegate(prof || null);
+                  }}
+                >
+                  <option value="" style={{ background: isDarkMode ? '#0f172a' : 'white', color: isDarkMode ? 'white' : '#111827' }}>
+                    -- Firmar como yo mismo ({initialProfile?.nombre || 'Admin'}) --
+                  </option>
+                  {allProfessionals.map(p => (
+                    <option 
+                      key={p.id} 
+                      value={p.id} 
+                      style={{ background: isDarkMode ? '#0f172a' : 'white', color: isDarkMode ? 'white' : '#111827' }}
+                    >
+                      {(() => {
+                        const prefix = p.prefix ? p.prefix + ' ' : '';
+                        const rawName = p.nombre || p.u || "";
+                        // Si ya tiene el campo prefix definido, limpiamos el nombre por si acaso traía títulos de antes
+                        const cleanName = p.prefix ? rawName.replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '').replace(/^[.\s,]+/, '').trim() : rawName;
+                        return prefix + cleanName;
+                      })()} ({p.especialidad || 'Sin especialidad'})
+                    </option>
+                  ))}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-50 text-gray-400 dark:text-gray-500">
+                  <ArrowRight size={14} className="rotate-90" />
+                </div>
+              </div>
+              {selectedDelegate && (
+                <div className="flex items-center gap-2 text-[10px] text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-900/20 w-fit px-3 py-1 rounded-full animate-pulse">
+                  <CheckCircle size={12} />
+                  <span>Actuando en nombre de: {(() => {
+                    const prefix = selectedDelegate.prefix ? selectedDelegate.prefix + ' ' : '';
+                    const rawName = selectedDelegate.nombre || selectedDelegate.u || "";
+                    const cleanName = selectedDelegate.prefix ? rawName.replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '').replace(/^[.\s,]+/, '').trim() : rawName;
+                    return prefix + cleanName;
+                  })()}</span>
+                </div>
+              )}
+            </motion.div>
+          )}
 
           {/* Row 1: DNI (buscar paciente) + Paciente */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

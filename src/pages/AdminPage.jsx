@@ -95,10 +95,11 @@ const AdminPage = () => {
     nombre: "",
     mp: "",
     me: "",
-    especialidad: "",
+    especialidad: "Otorrinolaringología",
     u: "",
     password: "",
-    role: "ORL",
+    role: "orl",
+    prefix: "",
   });
   const [loading, setLoading] = useState(true);
 
@@ -159,6 +160,7 @@ const AdminPage = () => {
   const [auditLimit, setAuditLimit] = useState(100);
   const [hasMoreAudit, setHasMoreAudit] = useState(true);
   const [lastAuditDoc, setLastAuditDoc] = useState(null);
+
 
 
   const autoCleanPerformed = useRef(false);
@@ -343,6 +345,8 @@ const AdminPage = () => {
         orders: ordersCount.data().count,
         loading: false,
       });
+
+
     } catch (err) {
       console.error("Error fetching global stats:", err);
       setGlobalStats((prev) => ({ ...prev, loading: false }));
@@ -685,9 +689,24 @@ const AdminPage = () => {
       rawRole = 'orl';
     }
     
-    const isStaff = rawRole === "admin" || rawRole === "secretaria" || rawRole === "secre";
+    // Función para Title Case + Limpieza
+    const formatName = (str) => {
+      if (!str) return "";
+      // Limpiar títulos previos
+      const clean = str
+        .replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '')
+        .replace(/^[.\s,]+/, '')
+        .trim();
+      
+      return clean.toLowerCase().split(' ').map(word => {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join(' ');
+    };
+
+    const isStaff = rawRole === "admin" || rawRole === "secretaria" || rawRole === "secre" || rawRole === "secretaría";
     return {
-      nombre: (u.nombre || u.n || u.u || "Profesional").toUpperCase().trim(),
+      nombre: formatName(u.nombre || u.n || u.u || "Profesional"),
+      prefix: u.prefix || "",
       email: (u.email || u.e || u.u || "").toLowerCase().trim(),
       especialidad: isStaff
         ? ""
@@ -701,24 +720,112 @@ const AdminPage = () => {
     };
   };
 
+  const handleUpdateUserPrefix = async (userId, newPrefix) => {
+    try {
+      const userRef = doc(db, "users", userId);
+      const targetUser = users.find(u => u.id === userId);
+      
+      // Al actualizar el prefijo, también limpiamos el nombre por si acaso
+      const rawName = targetUser.nombre || targetUser.n || targetUser.u || "";
+      const cleanName = rawName
+        .replace(/(DR|DRA|LIC|PROF(\.\sDR)?)\s*\.?\s*/gi, '')
+        .replace(/^[.\s,]+/, '')
+        .trim()
+        .toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
+      await updateDoc(userRef, { 
+        prefix: newPrefix,
+        nombre: cleanName
+      });
+      
+      // LOG AUDIT
+      await logAction(
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+        userId,
+        `Actualizado prefijo de ${cleanName} a: ${newPrefix || 'Ninguno'}`,
+        { targetUserId: userId, newPrefix, cleanName }
+      );
+    } catch (err) {
+      console.error("Error actualizando prefijo:", err);
+      alert("Error al actualizar prefijo: " + err.message);
+    }
+  };
+
   const handleUpdateUserRole = async (userId, newRole) => {
     try {
       const userRef = doc(db, "users", userId);
       const targetUser = users.find(u => u.id === userId);
       const userName = targetUser ? (targetUser.nombre || targetUser.u) : userId;
 
-      await setDoc(userRef, { role: newRole, rol: newRole }, { merge: true });
+      // También aprovechamos para limpiar el nombre si existe
+      const updateData = { role: newRole, rol: newRole };
+      if (targetUser && (targetUser.nombre || targetUser.n)) {
+        const rawName = targetUser.nombre || targetUser.n;
+        updateData.nombre = rawName
+          .replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '')
+          .replace(/^[.\s,]+/, '')
+          .trim()
+          .toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+      }
+
+      await updateDoc(userRef, updateData);
       
       // LOG AUDIT
       await logAction(
         AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
         userId,
-        `Cambio de rol de ${userName} a: ${newRole}`,
+        `Cambio de rol de ${userName} a: ${newRole} (Nombre normalizado)`,
         { targetUserId: userId, newRole, userName }
       );
     } catch (err) {
       console.error("Error actualizando rol:", err);
       alert("Error al actualizar rol: " + err.message);
+    }
+  };
+
+  const handleGlobalNameCleanup = async () => {
+    if (!window.confirm("¿Desea normalizar TODOS los nombres de usuario? (Pasará a Mayúscula/Minúscula y quitará prefijos incrustados)")) return;
+    
+    setLoading(true);
+    let count = 0;
+    try {
+      const batch = writeBatch(db);
+      users.forEach(u => {
+        const rawName = u.nombre || u.n || u.u || "";
+        // Detectar si tiene prefijo incrustado para extraerlo si el usuario no tiene prefijo aún
+        let detectedPrefix = u.prefix || "";
+        if (!detectedPrefix) {
+          const match = rawName.match(/^(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/i);
+          if (match) {
+            detectedPrefix = match[0].trim().replace(/\.?$/, '.') ;
+            // Normalizar el prefijo detectado
+            if (detectedPrefix.toUpperCase().startsWith("DR.")) detectedPrefix = "Dr.";
+            if (detectedPrefix.toUpperCase().startsWith("DRA.")) detectedPrefix = "Dra.";
+            if (detectedPrefix.toUpperCase().startsWith("LIC.")) detectedPrefix = "Lic.";
+          }
+        }
+
+        const cleanName = rawName
+          .replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '')
+          .replace(/^[.\s,]+/, '')
+          .trim()
+          .toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+        
+        if (cleanName) {
+          batch.update(doc(db, "users", u.id), {
+            nombre: cleanName,
+            prefix: detectedPrefix
+          });
+          count++;
+        }
+      });
+      await batch.commit();
+      alert(`Se han normalizado ${count} usuarios con éxito.`);
+    } catch (err) {
+      console.error("Error en limpieza global:", err);
+      alert("Error en limpieza: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -1152,14 +1259,18 @@ const AdminPage = () => {
       await setDoc(
         doc(db, "users", res.user.uid),
         {
-          nombre: manualUserForm.nombre.trim(),
+          nombre: manualUserForm.nombre
+            .replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '')
+            .trim()
+            .toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+          prefix: manualUserForm.prefix || "",
           u: manualUserForm.u.toLowerCase().trim(),
           email: email,
-          especialidad: manualUserForm.role || "ORL",
+          especialidad: manualUserForm.especialidad || "Otorrinolaringología",
           mp: "-",
           me: "-",
           isOfficial: true,
-          role: manualUserForm.role || "ORL",
+          role: manualUserForm.role || "orl",
           hasLetterhead: ["directora_medica", "admin"].includes(manualUserForm.role) ? true : false,
           canCustomizeModels: ["directora_medica", "admin"].includes(manualUserForm.role) ? true : false,
         },
@@ -1392,6 +1503,8 @@ const AdminPage = () => {
               </motion.div>
             </div>
 
+
+
             {/* Storage Detailed Info */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="bg-[var(--bg-card)] p-8 rounded-[2.5rem] border border-[var(--border-main)] shadow-sm">
@@ -1603,6 +1716,14 @@ const AdminPage = () => {
                   />
                 </label>
                 <button
+                  onClick={handleGlobalNameCleanup}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-amber-100 dark:bg-amber-900/20 text-amber-600 rounded-2xl font-bold text-sm hover:bg-amber-200 transition-colors"
+                  title="Limpiar y Normalizar todos los nombres"
+                >
+                  <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
+                  <span>Limpieza Global</span>
+                </button>
+                <button
                   onClick={() => setIsManualModalOpen(true)}
                   className="btn-primary flex items-center gap-2 py-2.5"
                 >
@@ -1643,10 +1764,23 @@ const AdminPage = () => {
                             <div className="w-10 h-10 bg-blue-100/30 text-blue-600 rounded-xl flex items-center justify-center font-black text-lg border border-main shadow-sm">
                               {user._std.nombre.charAt(0).toUpperCase()}
                             </div>
-                            <div className="min-w-0">
-                              <p className="font-bold text-[var(--text-main)] truncate">
-                                {user._std.nombre}
-                              </p>
+                            <div className="min-w-0 flex flex-col gap-1">
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={user._std.prefix}
+                                  onChange={(e) => handleUpdateUserPrefix(user.id, e.target.value)}
+                                  className="px-2 py-0.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded text-[9px] font-bold border-none outline-none focus:ring-1 focus:ring-blue-500/50"
+                                >
+                                  <option value="">-</option>
+                                  <option value="Dr.">Dr.</option>
+                                  <option value="Dra.">Dra.</option>
+                                  <option value="Lic.">Lic.</option>
+                                  <option value="Prof. Dr.">Prof. Dr.</option>
+                                </select>
+                                <p className="font-bold text-[var(--text-main)] truncate">
+                                  {user._std.nombre}
+                                </p>
+                              </div>
                               <p className="text-xs text-gray-400 truncate">
                                 {user._std.email}
                               </p>
@@ -2936,6 +3070,22 @@ const AdminPage = () => {
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
+                      Prefijo
+                    </label>
+                    <select
+                      value={targetProf.prefix || ""}
+                      onChange={(e) => setTargetProf({ ...targetProf, prefix: e.target.value })}
+                      className="input-field"
+                    >
+                      <option value="">Ninguno</option>
+                      <option value="Dr.">Dr.</option>
+                      <option value="Dra.">Dra.</option>
+                      <option value="Lic.">Lic.</option>
+                      <option value="Prof. Dr.">Prof. Dr.</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1 md:col-span-2">
+                    <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
                       Nombre
                     </label>
                     <input
@@ -2947,7 +3097,7 @@ const AdminPage = () => {
                       className="input-field"
                     />
                   </div>
-                  <div className="space-y-1">
+                  <div className="space-y-1 md:col-span-2">
                     <label className="text-[10px] font-black uppercase text-gray-400 ml-1">
                       Especialidad
                     </label>
@@ -2995,20 +3145,24 @@ const AdminPage = () => {
                     </label>
                     <select
                       className="input-field"
-                      value={targetProf.role || "ORL"}
+                      value={targetProf.role || "orl"}
                       onChange={(e) => {
                         const newRole = e.target.value;
                         setTargetProf({ ...targetProf, role: newRole });
                       }}
                     >
-                      <option value="Cabeza y cuello">Cabeza y cuello (Solo sus informes)</option>
-                      <option value="CX plástica">CX plástica (Solo sus informes)</option>
-                      <option value="Electrografías">Electrografías (Solo sus informes)</option>
-                      <option value="ORL">ORL (Solo sus informes)</option>
-                      <option value="Vestibular">Vestibular (Solo sus informes)</option>
-                      <option value="admin">Administrador (Acceso total)</option>
-                      <option value="directora_medica">Directora Médica (Acceso total + Membretes)</option>
-                      <option value="secretaria">Secretaría (Carga datos)</option>
+                      <optgroup label="Administración">
+                        <option value="admin">Administrador</option>
+                        <option value="directora_medica">Directora Médica</option>
+                        <option value="secretaria">Secretaría</option>
+                      </optgroup>
+                      <optgroup label="Especialidades">
+                        <option value="cabeza y cuello">Cabeza y cuello</option>
+                        <option value="cx plástica">CX Plástica</option>
+                        <option value="electrografías">Electrografías</option>
+                        <option value="orl">ORL</option>
+                        <option value="vestibular">Vestibular</option>
+                      </optgroup>
                     </select>
                   </div>
 
@@ -3368,7 +3522,28 @@ const AdminPage = () => {
                       placeholder="******"
                     />
                   </div>
-                  <div className="col-span-2 space-y-1">
+                  <div className="col-span-1 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      Prefijo
+                    </label>
+                    <select
+                      value={manualUserForm.prefix || ""}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          prefix: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                    >
+                      <option value="">Ninguno</option>
+                      <option value="Dr.">Dr.</option>
+                      <option value="Dra.">Dra.</option>
+                      <option value="Lic.">Lic.</option>
+                      <option value="Prof. Dr.">Prof. Dr.</option>
+                    </select>
+                  </div>
+                  <div className="col-span-1 space-y-1">
                     <label className="text-xs font-bold uppercase opacity-40 ml-1">
                       Rol de Acceso
                     </label>
@@ -3382,15 +3557,36 @@ const AdminPage = () => {
                       }
                       className="input-field appearance-none cursor-pointer"
                     >
-                      <option value="Cabeza y cuello">Cabeza y cuello</option>
-                      <option value="CX plástica">CX plástica</option>
-                      <option value="Electrografías">Electrografías</option>
-                      <option value="ORL">ORL</option>
-                      <option value="Vestibular">Vestibular</option>
-                      <option value="admin">Administrador (Control Total)</option>
-                      <option value="directora_medica">Directora Médica (Acceso Total)</option>
-                      <option value="secretaria">Secretaría (Acceso administrativo)</option>
+                      <optgroup label="Administración">
+                        <option value="admin">Administrador</option>
+                        <option value="directora_medica">Directora Médica</option>
+                        <option value="secretaria">Secretaría</option>
+                      </optgroup>
+                      <optgroup label="Especialidades">
+                        <option value="cabeza y cuello">Cabeza y cuello</option>
+                        <option value="cx plástica">CX Plástica</option>
+                        <option value="electrografías">Electrografías</option>
+                        <option value="orl">ORL</option>
+                        <option value="vestibular">Vestibular</option>
+                      </optgroup>
                     </select>
+                  </div>
+                  <div className="col-span-2 space-y-1">
+                    <label className="text-xs font-bold uppercase opacity-40 ml-1">
+                      Especialidad (Texto libre)
+                    </label>
+                    <input
+                      type="text"
+                      value={manualUserForm.especialidad}
+                      onChange={(e) =>
+                        setManualUserForm({
+                          ...manualUserForm,
+                          especialidad: e.target.value,
+                        })
+                      }
+                      className="input-field"
+                      placeholder="Otorrinolaringología"
+                    />
                   </div>
                 </div>
                 <button

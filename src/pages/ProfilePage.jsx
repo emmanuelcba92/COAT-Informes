@@ -31,6 +31,7 @@ import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 
 const ProfilePage = () => {
   const [profile, setProfile] = useState({
     nombre: '',
+    prefix: '',
     especialidad: '',
     mp: '',
     me: '',
@@ -100,6 +101,7 @@ const ProfilePage = () => {
         if (profileData) {
           const cleanProfile = {
             nombre: profileData.nombre || profileData.n || '',
+            prefix: profileData.prefix || '',
             especialidad: profileData.especialidad || profileData.esp || '',
             mp: profileData.mp || profileData.m || '',
             me: profileData.me || '',
@@ -220,9 +222,27 @@ const ProfilePage = () => {
       alert('Error: No se pudo cargar el perfil correctamente o el nombre está vacío. Intente recargar la página.');
       return;
     }
+    // Función para convertir a Title Case (Primer letra mayúscula, resto minúscula)
+    const toTitleCase = (str) => {
+      // Limpiar títulos previos que puedan estar en el string del nombre
+      const cleanName = str
+        .replace(/(DR|DRA|LIC|PROF)\s*\.?\s*/gi, '')
+        .replace(/^[.\s,]+/, '')
+        .trim();
+
+      return cleanName.toLowerCase().split(' ').map(word => {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+      }).join(' ');
+    };
+
     setIsSaving(true);
     try {
-      await setDoc(doc(db, 'users', auth.currentUser.uid), profile, { merge: true });
+      const formattedProfile = {
+        ...profile,
+        nombre: toTitleCase(profile.nombre.trim())
+      };
+      await setDoc(doc(db, 'users', auth.currentUser.uid), formattedProfile, { merge: true });
+      setProfile(formattedProfile);
       alert('Perfil guardado con éxito');
     } catch (err) {
       console.error("Save error:", err);
@@ -276,8 +296,22 @@ const ProfilePage = () => {
             </h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-gray-400 ml-1">Prefijo</label>
+                <select 
+                  value={profile.prefix || ""} 
+                  onChange={e => setProfile({...profile, prefix: e.target.value})} 
+                  className="input-field"
+                >
+                  <option value="">Ninguno</option>
+                  <option value="Dr.">Dr.</option>
+                  <option value="Dra.">Dra.</option>
+                  <option value="Lic.">Lic.</option>
+                  <option value="Prof. Dr.">Prof. Dr.</option>
+                </select>
+              </div>
+              <div className="space-y-1">
                 <label className="text-xs font-black uppercase text-gray-400 ml-1">Nombre y Apellido</label>
-                <input type="text" value={profile.nombre} onChange={e => setProfile({...profile, nombre: e.target.value})} className="input-field" placeholder="Dr. Nome Apellido" />
+                <input type="text" value={profile.nombre} onChange={e => setProfile({...profile, nombre: e.target.value})} className="input-field" placeholder="Nombre Apellido" />
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-black uppercase text-gray-400 ml-1">Especialidad</label>
@@ -290,6 +324,27 @@ const ProfilePage = () => {
               <div className="space-y-1">
                 <label className="text-xs font-black uppercase text-gray-400 ml-1">Matrícula Nacional/Especialidad (ME)</label>
                 <input type="text" value={profile.me} onChange={e => setProfile({...profile, me: e.target.value})} className="input-field" />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-black uppercase text-gray-400 ml-1">Rol de Acceso / Especialidad</label>
+                <select 
+                  value={profile.role || ""} 
+                  onChange={e => setProfile({...profile, role: e.target.value, rol: e.target.value})} 
+                  className="input-field"
+                >
+                  <optgroup label="Especialidades">
+                    <option value="cabeza y cuello">Cabeza y cuello</option>
+                    <option value="cx plástica">CX Plástica</option>
+                    <option value="electrografías">Electrografías</option>
+                    <option value="orl">ORL</option>
+                    <option value="vestibular">Vestibular</option>
+                  </optgroup>
+                  <optgroup label="Administración">
+                    <option value="admin">Administrador</option>
+                    <option value="directora_medica">Directora Médica</option>
+                    <option value="secretaria">Secretaría</option>
+                  </optgroup>
+                </select>
               </div>
             </div>
           </section>
@@ -467,7 +522,7 @@ const ProfilePage = () => {
                   {/* Professional signature on paper */}
                   <div className="mt-auto self-end flex flex-col items-center min-w-[300px] pt-8 text-center" style={{marginRight: '15mm'}}>
                     {profile.signatureBase64 && <img src={profile.signatureBase64} alt="Firma" className="max-h-20 w-auto mb-2 mix-blend-multiply" />}
-                    <p className="font-bold text-[10pt] text-slate-900 leading-tight">{profile.nombre}</p>
+                    <p className="font-bold text-[10pt] text-slate-900 leading-tight">{(profile.prefix ? profile.prefix + ' ' : '') + profile.nombre}</p>
                     <p className="text-[9pt] text-slate-700 leading-tight">{profile.especialidad || 'Especialista'}</p>
                     <p className="text-[8pt] text-slate-500 leading-tight">MP: {profile.mp} {profile.me ? ` | ME: ${profile.me}` : ''}</p>
                   </div>
