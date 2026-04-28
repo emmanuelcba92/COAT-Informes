@@ -10,14 +10,14 @@ import {
 const NewOrderPage = React.lazy(() => import('./NewOrderPage'));
 const MyOrdersPage = React.lazy(() => import('./MyOrdersPage'));
 
-const OrdersMain = ({ userProfile, isAdmin = false, isSecretaria = false, isDarkMode }) => {
+const OrdersMain = ({ userProfile, isAdmin = false, isSecretaria = false, isSuperSecretaria = false, isDarkMode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
 
   const tabs = [
-    { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria },
-    { id: 'history', label: isSecretaria ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
+    { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria || isSuperSecretaria },
+    { id: 'history', label: (isSecretaria && !isSuperSecretaria) ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
   ].filter(tab => tab.show);
 
   return (
@@ -26,10 +26,10 @@ const OrdersMain = ({ userProfile, isAdmin = false, isSecretaria = false, isDark
       <div className="min-h-[400px]">
         <Suspense fallback={<div className="p-10 text-center opacity-50 text-[var(--text-main)]">Cargando sección de pedidos...</div>}>
           <Routes>
-            <Route path="new" element={!isSecretaria ? <NewOrderPage userProfile={userProfile} isDarkMode={isDarkMode} /> : <Navigate to="/orders/history" replace />} />
-            <Route path="history" element={<MyOrdersPage userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isDarkMode={isDarkMode} />} />
-            <Route index element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
-            <Route path="*" element={<Navigate to={isSecretaria ? "history" : "new"} replace />} />
+            <Route path="new" element={(!isSecretaria || isSuperSecretaria) ? <NewOrderPage userProfile={userProfile} isAdmin={isAdmin} isSuperSecretaria={isSuperSecretaria} isDarkMode={isDarkMode} /> : <Navigate to="/orders/history" replace />} />
+            <Route path="history" element={<MyOrdersPage userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretaria} isDarkMode={isDarkMode} />} />
+            <Route index element={(isSecretaria && !isSuperSecretaria) ? <Navigate to="history" replace /> : <Navigate to="new" replace />} />
+            <Route path="*" element={(isSecretaria && !isSuperSecretaria) ? <Navigate to="history" replace /> : <Navigate to="new" replace />} />
           </Routes>
         </Suspense>
       </div>

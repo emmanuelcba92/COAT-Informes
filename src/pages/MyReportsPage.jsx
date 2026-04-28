@@ -43,10 +43,11 @@ import {
 import { supabase } from '../services/supabase';
 import { db, auth } from '../services/firebase';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
+import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
 
 
 
-const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp, isDarkMode }) => {
+const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp, isSuperSecretaria = false, isDarkMode }) => {
   const navigate = useNavigate();
   
   const toTitleCase = (str) => {
@@ -67,7 +68,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
   // isAdmin is now received as a prop
   const isSecretaria = isSecretariaProp || userProfile?.role?.toLowerCase().includes('secre');
-  const canSelectProfessional = isAdmin || isSecretaria;
+  const canSelectProfessional = isAdmin || isSecretaria || isSuperSecretaria;
 
   const [selectedProfId, setSelectedProfId] = useState('all');
 
@@ -114,62 +115,21 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
   useEffect(() => {
     const fetchProfs = async () => {
       try {
-        const q = query(collection(db, 'users'), orderBy('nombre', 'asc'));
-        const snap = await getDocs(q);
-        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const querySnapshot = await getDocs(collection(db, 'users'));
+        const rawUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
-        // De-duplication logic (same as Admin)
-        const uniqueUsers = {};
-        list.forEach(u => {
-          // Extraer email de campo o de ID si es un slug legacy
-          let email = (u.email || u.e || u.u || '').toLowerCase().trim();
-          
-          if (!email && u.id && u.id.includes('_')) {
-            email = u.id.replace(/_/g, '.');
-            if (!email.includes('@')) email += '@coat.com.ar';
-          }
-          
-          const key = email || u.id;
-          if (!key) return;
-
-          if (!uniqueUsers[key]) {
-            uniqueUsers[key] = u;
-          } else {
-            const existing = uniqueUsers[key];
-            const currentHasName = !!(u.nombre || u.n);
-            const existingHasName = !!(existing.nombre || existing.n);
-            // Prioridad: 1. Tiene nombre, 2. Es ID oficial (28 chars)
-            if (currentHasName && !existingHasName) {
-              uniqueUsers[key] = u;
-            } else if (currentHasName === existingHasName && u.id.length === 28) {
-              uniqueUsers[key] = u;
-            }
-          }
-        });
-
-        const cleanList = Object.values(uniqueUsers)
-          .map(u => {
-            const rawName = u.nombre || u.n || u.u || 'Profesional';
-            let rawRole = (u.role || u.rol || '').toLowerCase().trim();
-            if (!rawRole || rawRole === 'médico' || rawRole === 'medico') rawRole = 'orl';
-            return {
-              ...u,
-              nombre: rawName.toUpperCase().trim(),
-              rol: rawRole
-            };
-          })
+        const filtered = deduplicateProfessionals(rawUsers)
           .filter(u => {
-            const name = u.nombre.toLowerCase();
-            const role = u.rol.toLowerCase();
-            const medicalRoles = ['cabeza y cuello', 'cx plástica', 'electrografías', 'orl', 'vestibular', 'directora_medica'];
-            const isMedicalRole = medicalRoles.includes(role) || role.includes('médico') || role.includes('fonoaudiología');
-            // Excluir si el nombre contiene "sercretaria" (con R), "secretaria" o "admin"
-            const isExcludedName = name.includes('sercretaria') || name.includes('secretaria') || name.includes('admin');
-            return isMedicalRole && !isExcludedName;
+            const r = (u.role || u.rol || '').toLowerCase();
+            return !['admin', 'secretaria', 'super_secretaria', 'secre', 'secretaría'].includes(r) && (u.nombre || u.n || u.u);
           })
-          .sort((a, b) => a.nombre.localeCompare(b.nombre));
-
-        setProfessionals(cleanList);
+          .map(u => ({
+            ...u,
+            displayName: formatDisplayName(u.nombre || u.n || u.u)
+          }))
+          .sort((a, b) => a.displayName.localeCompare(b.displayName));
+          
+        setProfessionals(filtered);
         
         if (!canSelectProfessional) {
           setSelectedProfId(user.uid);
@@ -302,7 +262,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       // 3. Save to Firestore
       const reportSaveData = {
         profesionalId: uploadData.profId,
-        profesionalNombre: selectedProf?.nombre || 'Externo',
+        profesionalNombre: selectedProf?.displayName || 'Externo',
         pacienteNombre: uploadData.patientName.toUpperCase(),
         pacienteDni: uploadData.patientDni || '',
         obraSocial: uploadData.socialWork.toUpperCase(),
@@ -385,7 +345,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
                   <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
                   <li><strong>Fecha:</strong> ${formatDateForEmail(uploadData.date)}</li>
-                  <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
+                  <li><strong>Profesional Responsable:</strong> ${selectedProf?.displayName || 'Externo'}</li>
                 </ul>
               </div>
 
@@ -407,7 +367,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                 <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
                 <li><strong>DNI:</strong> ${uploadData.patientDni || 'No informado'}</li>
                 <li><strong>Motivo/Estudio:</strong> ${displayTitle}</li>
-                <li><strong>Profesional Responsable:</strong> ${selectedProf?.nombre || 'Externo'}</li>
+                <li><strong>Profesional Responsable:</strong> ${selectedProf?.displayName || 'Externo'}</li>
               </ul>
             </div>
           `;
@@ -704,20 +664,25 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
             )}
 
             {canSelectProfessional && (
-            <div className="flex items-center gap-4 bg-[var(--bg-card)] p-2 rounded-2xl border border-main shadow-sm min-w-[240px]">
-                <div className="pl-3 text-blue-600">
-                <User size={18} />
-                </div>
-                <select 
-                className="flex-1 bg-transparent border-none outline-none font-bold text-[10px] pr-10 appearance-none cursor-pointer text-[var(--text-main)] uppercase"
-                value={selectedProfId || 'all'}
-                onChange={(e) => setSelectedProfId(e.target.value)}
+            <div className="relative group min-w-[300px]">
+                <select
+                  className="w-full pl-12 pr-10 py-3 bg-[var(--bg-secondary)] border-2 border-[var(--border-main)] rounded-xl text-[var(--text-main)] focus:ring-4 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer group-hover:border-blue-500/50 font-bold"
+                  value={selectedProfId}
+                  onChange={(e) => setSelectedProfId(e.target.value)}
                 >
-                <option value="all" className="bg-[var(--bg-card)]">👤 VER TODOS LOS PROFESIONALES</option>
-                {professionals.map(p => (
-                    <option key={p.id} value={p.id} className="bg-[var(--bg-card)] text-[var(--text-main)]">{p.nombre}</option>
-                ))}
+                  <option value="all">TODOS LOS PROFESIONALES</option>
+                  {professionals.map(prof => (
+                    <option key={prof.id} value={prof.id}>
+                      {prof.displayName || formatDisplayName(prof.nombre || prof.n || prof.u)}
+                    </option>
+                  ))}
                 </select>
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600">
+                  <User size={18} />
+                </div>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-main)] opacity-30 pointer-events-none">
+                  <ChevronDown size={18} />
+                </div>
             </div>
             )}
         </div>
@@ -867,7 +832,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                             <Printer className="w-5 h-5" />
                           </button>
 
-                          {(isAdmin || !isSecretaria) && report.tipoReporte !== 'externo' && (
+                          {(isAdmin || isSuperSecretaria || !isSecretaria) && report.tipoReporte !== 'externo' && (
                             <button 
                               onClick={() => handleEditReport(report)}
                               className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-all border border-blue-100 shadow-sm"
@@ -888,7 +853,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                             </button>
                           )}
 
-                          {(isAdmin || (!isSecretaria && user.uid === report.profesionalId)) && !isSecretaria && (
+                          {(isAdmin || isSuperSecretaria || (!isSecretaria && user.uid === report.profesionalId)) && (
                             <button 
                               onClick={() => handleDeleteReport(report)}
                               className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 transition-all border border-red-100 shadow-sm"

@@ -28,7 +28,7 @@ import { doc, getDoc, setDoc, collection, query, where, getDocs, limit, deleteDo
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 
 
-const ProfilePage = () => {
+const ProfilePage = ({ isAdmin }) => {
   const [profile, setProfile] = useState({
     nombre: '',
     prefix: '',
@@ -330,7 +330,8 @@ const ProfilePage = () => {
                 <select 
                   value={profile.role || ""} 
                   onChange={e => setProfile({...profile, role: e.target.value, rol: e.target.value})} 
-                  className="input-field"
+                  className={`input-field ${!isAdmin ? 'opacity-60 cursor-not-allowed bg-slate-50' : ''}`}
+                  disabled={!isAdmin}
                 >
                   <optgroup label="Especialidades">
                     <option value="cabeza y cuello">Cabeza y cuello</option>
@@ -342,6 +343,7 @@ const ProfilePage = () => {
                   <optgroup label="Administración">
                     <option value="admin">Administrador</option>
                     <option value="directora_medica">Directora Médica</option>
+                    <option value="super_secretaria">Super Secretaria</option>
                     <option value="secretaria">Secretaría</option>
                   </optgroup>
                 </select>

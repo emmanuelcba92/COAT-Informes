@@ -50,6 +50,7 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSecretaria, setIsSecretaria] = useState(false);
+  const [isSuperSecretaria, setIsSuperSecretaria] = useState(false);
   const [isDirectora, setIsDirectora] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -148,7 +149,11 @@ function App() {
               localStorage.setItem('audit_user_name', data.nombre);
             }
             const role = data.role?.toLowerCase() || '';
-            setIsSecretaria(role === 'secretaria' || role === 'secre' || role === 'secretaría');
+            const isSec = role === 'secretaria' || role === 'secre' || role === 'secretaría';
+            const isSuperSec = role === 'super_secretaria';
+            
+            setIsSecretaria(isSec || isSuperSec);
+            setIsSuperSecretaria(isSuperSec);
             setIsDirectora(role.includes('directora') || role.includes('director'));
           }
         }, (error) => {
@@ -181,16 +186,16 @@ function App() {
   const isAdmin = userProfile?.role === 'admin' || 
                   currentUser?.email?.toLowerCase() === 'egomez@coat.com.ar';
 
+  const isSuperSecretariaFinal = isSuperSecretaria || userProfile?.role === 'super_secretaria';
 
-
-  const canSeeOrders = ordersEnabled || isAdmin || isDirectora;
+  const canSeeOrders = ordersEnabled || isAdmin || isDirectora || isSuperSecretariaFinal;
   const canCustomizeModels = userProfile?.canCustomizeModels || isDirectora || isAdmin;
 
   const navItems = [
     { id: 'reports', label: 'Informes', icon: <Layout size={24} />, path: '/reports', show: true },
     { id: 'orders', label: 'Pedidos', icon: <ClipboardList size={24} />, path: '/orders', show: canSeeOrders },
     { id: 'patients', label: 'Pacientes', icon: <Users size={24} />, path: '/patients', show: true },
-    { id: 'metrics', label: 'Métricas', icon: <Activity size={24} />, path: '/metrics', show: isAdmin || isDirectora },
+    { id: 'metrics', label: 'Métricas', icon: <Activity size={24} />, path: '/metrics', show: isAdmin || isDirectora || isSuperSecretariaFinal },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile', show: true },
     { id: 'admin', label: 'Administración', icon: <Settings size={24} />, path: '/admin', show: isAdmin },
   ].filter(item => item.show);
@@ -299,12 +304,12 @@ function App() {
             {(location.pathname.startsWith('/reports') || location.pathname.startsWith('/orders')) && (
               <div className="hidden md:flex items-center gap-1 bg-[var(--bg-secondary)] p-1 rounded-xl border border-main">
                 {(location.pathname.startsWith('/reports') ? [
-                  { id: 'new', label: 'Generar Informe', icon: FilePlus, path: '/reports/new', show: !isSecretaria },
-                  { id: 'history', label: isSecretaria ? 'Ver Informes' : 'Historial', icon: History, path: '/reports/history', show: true },
-                  { id: 'models', label: 'Mis Modelos', icon: BookTemplate, path: '/reports/models', show: canCustomizeModels && !isSecretaria }
+                  { id: 'new', label: 'Generar Informe', icon: FilePlus, path: '/reports/new', show: !isSecretaria || isSuperSecretaria },
+                  { id: 'history', label: (isSecretaria && !isSuperSecretaria) ? 'Ver Informes' : 'Historial', icon: History, path: '/reports/history', show: true },
+                  { id: 'models', label: 'Mis Modelos', icon: BookTemplate, path: '/reports/models', show: canCustomizeModels && (!isSecretaria || isSuperSecretaria) }
                 ] : [
-                  { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria },
-                  { id: 'history', label: isSecretaria ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
+                  { id: 'new', label: 'Generar Pedido', icon: FilePlus, path: '/orders/new', show: !isSecretaria || isSuperSecretaria },
+                  { id: 'history', label: (isSecretaria && !isSuperSecretaria) ? 'Ver Pedidos' : 'Historial', icon: History, path: '/orders/history', show: true }
                 ]).filter(tab => tab.show).map((tab) => {
                   const isActive = location.pathname.startsWith(tab.path) || 
                                  (tab.id === 'new' && (location.pathname === '/reports' || location.pathname === '/orders'));
@@ -352,11 +357,11 @@ function App() {
             >
               <Routes>
                 <Route path="/" element={<Navigate to="/reports/new" replace />} />
-                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} canCustomizeModels={canCustomizeModels} isDarkMode={isDarkMode} />} />
-                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isDarkMode={isDarkMode} />} />
-                <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isDirectora={isDirectora} currentUser={currentUser} isDarkMode={isDarkMode} />} />
-                <Route path="/metrics" element={isAdmin ? <MetricsPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
-                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} canCustomizeModels={canCustomizeModels} isDarkMode={isDarkMode} />} />
+                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} isDarkMode={isDarkMode} />} />
+                <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} isDirectora={isDirectora} currentUser={currentUser} isDarkMode={isDarkMode} />} />
+                <Route path="/metrics" element={(isAdmin || isDirectora || isSuperSecretariaFinal) ? <MetricsPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
+                <Route path="/profile" element={<ProfilePage isAdmin={isAdmin} />} />
                 <Route path="/admin" element={isAdmin ? <AdminPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="*" element={<Navigate to="/reports/new" replace />} />
               </Routes>

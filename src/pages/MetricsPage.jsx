@@ -104,7 +104,7 @@ const MetricsPage = ({ isDarkMode }) => {
             <Activity className="text-blue-600" size={32} />
             Métricas
           </h1>
-          <p className="text-sm opacity-60 font-medium">Panel de productividad y gestión de autoría</p>
+          <p className="text-sm font-black text-slate-950 dark:text-slate-400">Panel de productividad y gestión de autoría</p>
         </div>
         
         <div className="card p-4 flex items-center gap-4 group hover:border-blue-500/50 transition-all">
@@ -112,7 +112,7 @@ const MetricsPage = ({ isDarkMode }) => {
             <BarChart3 size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Total Informes</p>
+            <p className="text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Total Informes</p>
             <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalReports}</p>
           </div>
         </div>
@@ -122,7 +122,7 @@ const MetricsPage = ({ isDarkMode }) => {
             <UserCheck size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-500 tracking-wider">Informes Delegados</p>
+            <p className="text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Informes Delegados</p>
             <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalDelegated}</p>
           </div>
         </div>
@@ -160,8 +160,8 @@ const MetricsPage = ({ isDarkMode }) => {
           <div className="card">
             <div className="p-6 border-b border-main flex items-center justify-between bg-gradient-to-r from-blue-600/5 to-transparent">
               <div>
-                <h3 className="text-xl font-black tracking-tight uppercase text-slate-900 dark:text-white">Rendimiento por Autor Real</h3>
-                <p className="text-xs opacity-60 text-slate-600 dark:text-slate-400">Desglose de informes realizados por usuario (incluye delegados)</p>
+                <h3 className="text-xl font-black tracking-tight uppercase text-slate-950 dark:text-white">Rendimiento por Autor Real</h3>
+                <p className="text-xs font-black text-slate-900 dark:text-slate-400">Desglose de informes realizados por usuario (incluye delegados)</p>
               </div>
             </div>
 
@@ -169,10 +169,10 @@ const MetricsPage = ({ isDarkMode }) => {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="bg-slate-50/50 dark:bg-black/20 text-left">
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Autor Real</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest text-center">Total</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Desglose de Informes</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-500 dark:text-slate-400 tracking-widest">Productividad</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Autor Real</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest text-center">Total</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Desglose de Informes</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Productividad</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-main">
@@ -191,8 +191,8 @@ const MetricsPage = ({ isDarkMode }) => {
                               {item.name.substring(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-black tracking-tight uppercase text-sm truncate text-slate-900 dark:text-white">{item.name}</p>
-                              <p className="text-[10px] opacity-60 font-bold uppercase tracking-tighter italic text-slate-500 dark:text-slate-400">
+                              <p className="font-black tracking-tight uppercase text-sm truncate text-slate-950 dark:text-white">{item.name}</p>
+                              <p className="text-[10px] font-black uppercase tracking-tighter italic text-slate-950 dark:text-slate-400">
                                 {item.delegated > 0 ? `${item.delegated} delegados` : 'Personal directo'}
                               </p>
                             </div>
@@ -207,7 +207,7 @@ const MetricsPage = ({ isDarkMode }) => {
                           <div className="flex flex-wrap gap-1 max-w-[300px]">
                             {Object.entries(item.practices).map(([name, count], pidx) => (
                               <div key={pidx} className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700 transition-all">
-                                <span className="text-[9px] font-bold uppercase truncate max-w-[120px] text-slate-600 dark:text-slate-400">{name}</span>
+                                <span className="text-[9px] font-black uppercase truncate max-w-[120px] text-slate-900 dark:text-slate-400">{name}</span>
                                 <span className="text-[10px] font-black text-blue-600">{count}</span>
                               </div>
                             ))}
@@ -273,7 +273,7 @@ const MetricsPage = ({ isDarkMode }) => {
                          <div className="p-3 space-y-2 bg-white dark:bg-transparent">
                            {Object.entries(target.reports).map(([rType, rCount], ridx) => (
                              <div key={ridx} className="flex items-center justify-between text-[10px]">
-                                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400">
+                                <div className="flex items-center gap-2 text-slate-900 dark:text-slate-400">
                                   <FileText size={12} />
                                   <span className="font-bold uppercase truncate max-w-[180px]">{rType}</span>
                                 </div>
@@ -290,8 +290,8 @@ const MetricsPage = ({ isDarkMode }) => {
                ))}
                
                {filteredStats.filter(s => s.delegated > 0).length === 0 && (
-                 <div className="text-center py-12 opacity-40 italic">
-                    <p className="text-sm font-bold">No se detectaron informes delegados recientemente.</p>
+                 <div className="text-center py-12 italic text-slate-900 dark:text-slate-400">
+                    <p className="text-sm font-black">No se detectaron informes delegados recientemente.</p>
                  </div>
                )}
              </div>

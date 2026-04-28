@@ -27,7 +27,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { extractPatientsFromImage } from '../utils/aiService';
 
-const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) => {
+const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: initialProfile, isDarkMode }) => {
   const toTitleCase = (str) => {
     if (!str) return '';
     return str.toLowerCase().split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
@@ -135,7 +135,6 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
   const [emailMissingWarning, setEmailMissingWarning] = useState(false);
   const [allProfessionals, setAllProfessionals] = useState([]);
   const [selectedDelegate, setSelectedDelegate] = useState(null);
-  const isAdmin = initialProfile?.role === 'admin';
   const navigate = useNavigate();
   const location = useLocation();
   const editId = new URLSearchParams(location.search).get('edit');
@@ -151,8 +150,10 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     
     const userRole = (professional?.role || '').toLowerCase().trim();
     
-    // Admin y Directora Médica ven todo para facilitar gestión y pruebas
-    if (userRole === 'admin' || userRole === 'directora_medica') {
+    // Admin, Super Secretaria y Directora Médica ven todo para facilitar gestión y pruebas
+    const canSeeAll = isAdmin || isSuperSecretaria || userRole === 'admin' || userRole === 'directora_medica';
+    
+    if (canSeeAll) {
       return [...dbPractices].sort((a, b) => (a.n || '').localeCompare(b.n || ''));
     }
     
@@ -165,7 +166,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     });
 
     return [...filtered].sort((a, b) => (a.n || '').localeCompare(b.n || ''));
-  }, [dbPractices, professional?.role]);
+  }, [dbPractices, professional?.role, isAdmin, isSuperSecretaria]);
   
   // Sistema de Notificaciones Toast
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
@@ -288,13 +289,15 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
     const fetchData = async () => {
       if (!auth.currentUser) return;
       try {
-        // Carga paralela de Prácticas, Configuración y Profesionales (si es admin)
+        // Carga paralela de Prácticas, Configuración y Profesionales (si tiene permisos de delegación)
+        const canDelegate = isAdmin || isSuperSecretaria || initialProfile?.role?.includes('directora') || initialProfile?.role?.includes('director');
+        
         const promises = [
           getDocs(collection(db, 'practices')),
           getDoc(doc(db, 'config', 'settings'))
         ];
 
-        if (isAdmin) {
+        if (canDelegate) {
           promises.push(getDocs(collection(db, 'users')));
         }
 
@@ -302,9 +305,13 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
         const practicesSnap = results[0];
         const configSnap = results[1];
         
-        if (isAdmin && results[2]) {
+        if (results[2]) {
           const usersList = results[2].docs.map(doc => ({ id: doc.id, ...doc.data() }))
-            .filter(u => u.role !== 'admin' && u.role !== 'secretaria' && (u.nombre || u.u))
+            .filter(u => {
+              const r = (u.role || "").toLowerCase();
+              const isManagement = ['admin', 'secretaria', 'super_secretaria', 'secre', 'secretaría'].includes(r);
+              return !isManagement && (u.nombre || u.u);
+            })
             .reduce((acc, current) => {
               const rawName = current.nombre || current.u || "";
               const id = current.id;
@@ -1202,7 +1209,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
         <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
       </div>
 
-      {professional?.role?.toLowerCase().includes('secre') ? (
+      {professional?.role?.toLowerCase().includes('secre') && !isSuperSecretaria ? (
         <div className="bg-[var(--bg-card)] p-12 rounded-3xl border border-main shadow-sm text-center space-y-6">
           <div className="w-20 h-20 bg-blue-50 dark:bg-blue-900/20 text-blue-500 rounded-full flex items-center justify-center mx-auto shadow-inner">
             <ClipboardList size={40} />
@@ -1268,7 +1275,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
           </div>
 
           {/* Delegación de Autoría (Solo Admin) */}
-          {isAdmin && allProfessionals.length > 0 && !isEditing && (
+          {(isAdmin || isSuperSecretaria || initialProfile?.role?.includes('directora') || initialProfile?.role?.includes('director')) && allProfessionals.length > 0 && !isEditing && (
             <motion.div 
               initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
@@ -1279,7 +1286,7 @@ const ReportsPage = ({ isSecretaria, userProfile: initialProfile, isDarkMode }) 
                 <h3 className="text-xs font-black uppercase tracking-widest">Delegación de Autoría</h3>
               </div>
               <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
-                Usted está autenticado como administrador. Puede emitir este informe en nombre de otro profesional para fines administrativos y de facturación.
+                Usted tiene permisos de gestión. Puede emitir este informe en nombre de otro profesional para fines administrativos y de facturación.
               </p>
               <div className="relative group">
                 <select

@@ -50,7 +50,7 @@ import { extractPatientsFromImage, extractPatientsFromText } from '../utils/aiSe
 // Configure PDF.js worker
 pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@5.6.205/build/pdf.worker.min.mjs`;
 
-export default function PatientsPage({ isAdmin = false, isSecretaria = false, isDirectora = false, currentUser, isDarkMode }) {
+export default function PatientsPage({ isAdmin = false, isSecretaria = false, isSuperSecretaria = false, isDirectora = false, currentUser, isDarkMode }) {
   const [patients, setPatients] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -98,7 +98,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
       setTotalPatients(totalSnapshot.data().count);
 
       // 1. Visibility constraints
-      if (!(isAdmin || isSecretaria)) {
+      if (!(isAdmin || isSecretaria || isSuperSecretaria)) {
         constraints.push(where('professionalIds', 'array-contains', currentUser.uid));
       }
 
@@ -158,8 +158,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
   };
 
   const handleDeletePatient = async (id, name) => {
-    if (!isAdmin) {
-      alert('Solo los administradores pueden eliminar pacientes.');
+    if (!isAdmin && !isSuperSecretaria) {
+      alert('No tienes permisos para eliminar pacientes.');
       return;
     }
     const patientName = name || 'este paciente';
@@ -326,8 +326,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
     if (selectedIds.length === 0) return;
     if (!window.confirm(`¿Está seguro de eliminar ${selectedIds.length} pacientes? Esta acción no se puede deshacer.`)) return;
 
-    if (!isAdmin) {
-      alert('Solo los administradores pueden realizar borrados masivos.');
+    if (!isAdmin && !isSuperSecretaria) {
+      alert('No tienes permisos para realizar borrados masivos.');
       return;
     }
     setIsBulkDeleting(true);
@@ -377,7 +377,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
               animate={{ scale: 1, opacity: 1 }}
               onClick={handleBulkDelete}
               disabled={isBulkDeleting}
-              className={`w-full md:w-auto px-6 py-3.5 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 ${!isAdmin ? 'hidden' : ''}`}
+              className={`w-full md:w-auto px-6 py-3.5 bg-red-500 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-600 transition-all flex items-center justify-center gap-2 shadow-lg shadow-red-500/20 ${(!isAdmin && !isSuperSecretaria) ? 'hidden' : ''}`}
             >
               {isBulkDeleting ? <Loader2 className="animate-spin" size={18} /> : <Trash2 size={18} />}
               Eliminar {selectedIds.length}
@@ -441,7 +441,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
           </div>
         </motion.div>
         
-        {(!isAdmin && !isDirectora && !isSecretaria) && (
+        {(!isAdmin && !isDirectora && !isSecretaria && !isSuperSecretaria) && (
           <div className={`
             md:col-span-3 flex items-center gap-3 px-6 py-4 border rounded-2xl 
             ${isDarkMode ? 'bg-blue-900/20 border-blue-800/30 text-blue-400' : 'bg-blue-50 border-blue-200 text-blue-700'}
@@ -560,7 +560,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                       </div>
                     </td>
                     <td className="px-6 py-4 text-right">
-                      <div className={`flex items-center justify-end gap-2 ${isAdmin ? 'opacity-0 group-hover:opacity-100' : 'hidden'} transition-opacity`}>
+                      <div className={`flex items-center justify-end gap-2 ${(isAdmin || isSuperSecretaria) ? 'opacity-0 group-hover:opacity-100' : 'hidden'} transition-opacity`}>
                         <button 
                           onClick={() => handleDeletePatient(patient.id, patient.name || patient.nombre)}
                           className="p-2.5 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-xl transition-all duration-300 shadow-sm hover:shadow-red-500/20"

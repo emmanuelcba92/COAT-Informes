@@ -23,13 +23,17 @@ import {
   Check,
   X,
   Download,
-  FileText
+  FileText,
+  Settings2,
+  ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, auth } from '../services/firebase';
-import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp, arrayUnion, getDocs } from 'firebase/firestore';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
+import { extractPatientsFromImage } from '../utils/aiService';
+import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
 
 const ICON_MAP = {
   Clipboard,
@@ -41,7 +45,7 @@ const ICON_MAP = {
   ClipboardList
 };
 
-const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
+const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecretaria = false, isDirectora = false, isDarkMode }) => {
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
 
@@ -72,7 +76,8 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
     diagnosis: '',
     date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
     patientEmail: '',
-    observations: ''
+    observations: '',
+    skipEmail: false
   });
 
   const [selectedPractices, setSelectedPractices] = useState([]);
@@ -85,6 +90,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
   const [isCleaning, setIsCleaning] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState(''); // New state for descriptive messages
+  const [isPasting, setIsPasting] = useState(false);
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
   const [profile, setProfile] = useState(propProfile || null);
   const [config, setConfig] = useState({ 
@@ -98,6 +104,9 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
   const [previewUrl, setPreviewUrl] = useState(null);
   const [orderMetadata, setOrderMetadata] = useState({ sentToAdmin: false });
   const isSavingRef = React.useRef(false);
+  const [allProfessionals, setAllProfessionals] = useState([]);
+  const [selectedDelegate, setSelectedDelegate] = useState(null);
+  const canDelegate = isAdmin || isSuperSecretaria || isDirectora;
 
   const showToast = (message, type = 'success') => {
     setToast({ show: true, message, type });
@@ -171,8 +180,82 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
 
   const [currentOrderId, setCurrentOrderId] = useState(null);
 
+  // Cargar profesionales para delegación con desduplicación agresiva
+  useEffect(() => {
+    if (canDelegate) {
+      const fetchProfessionals = async () => {
+        try {
+          const querySnapshot = await getDocs(collection(db, 'users'));
+          const rawUsers = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          const users = deduplicateProfessionals(rawUsers)
+            .filter(u => {
+              const role = (u.role || u.rol || '').toLowerCase();
+              const isManagement = ['admin', 'secretaria', 'super_secretaria', 'secre', 'secretaría'].includes(role);
+              return !isManagement && (u.nombre || u.n || u.u);
+            })
+            .map(u => ({
+              ...u,
+              displayName: formatDisplayName(u.nombre || u.n || u.u)
+            }))
+            .sort((a, b) => a.displayName.localeCompare(b.displayName));
+
+          setAllProfessionals(users);
+        } catch (err) {
+          console.error("Error fetching professionals:", err);
+        }
+      };
+      fetchProfessionals();
+    }
+  }, [canDelegate]);
+
+  const handlePaste = async (e) => {
+    const item = e.clipboardData.items[0];
+    if (item?.type.includes('image')) {
+      setIsPasting(true);
+      setLoadingStatus('Analizando captura...');
+      try {
+        const blob = item.getAsFile();
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          try {
+            const base64 = event.target.result.split(',')[1];
+            const patients = await extractPatientsFromImage(base64);
+            if (patients && patients.length > 0) {
+              const p = patients[0];
+              setPatientData(prev => ({
+                ...prev,
+                dni: p.dni || prev.dni,
+                name: p.nombre || prev.name,
+                insurance: p.obraSocial || prev.insurance,
+                patientEmail: p.email || prev.patientEmail,
+                telefono: p.telefono || prev.telefono
+              }));
+              showToast('¡Datos extraídos de la captura!');
+            } else {
+              showToast('No se detectaron pacientes en la imagen', 'error');
+            }
+          } catch (err) {
+            console.error("Paste processing error:", err);
+            showToast('Error al analizar la imagen', 'error');
+          } finally {
+            setIsPasting(false);
+            setLoadingStatus('');
+          }
+        };
+        reader.readAsDataURL(blob);
+      } catch (err) {
+        setIsPasting(false);
+        setLoadingStatus('');
+      }
+    }
+  };
+
   const saveOrderToDB = async () => {
     try {
+      const currentProfId = selectedDelegate?.id || auth.currentUser?.uid;
+      const currentProfName = selectedDelegate ? (selectedDelegate.nombre || selectedDelegate.n) : (profile?.nombre || profile?.n || auth.currentUser?.email);
+
       const orderData = {
         ...patientData,
         orderType: selectedType,
@@ -181,8 +264,9 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
         indications,
         customPractices,
         allPracticesInCategory: practicesByType[selectedType] || [],
-        profesionalId: auth.currentUser?.uid,
-        profesionalName: profile?.nombre || profile?.n || auth.currentUser?.email,
+        profesionalId: currentProfId,
+        profesionalName: currentProfName,
+        delegatedBy: selectedDelegate ? (profile?.nombre || profile?.n || auth.currentUser?.email) : null,
         updatedAt: serverTimestamp(),
         timestamp: new Date().toISOString()
       };
@@ -195,7 +279,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
         await logAction(
           AUDIT_ACTIONS.EDIT_ORDER,
           currentOrderId,
-          `Pedido editado: ${orderData.name} (${orderData.selectedPractices.join(', ')})`
+          `Pedido editado: ${orderData.name} (${orderData.practices.join(', ')})`
         );
 
         showToast("Pedido actualizado en historial");
@@ -216,7 +300,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
           await logAction(
             AUDIT_ACTIONS.CREATE_ORDER,
             docRef.id,
-            `Nuevo pedido: ${orderData.name} (${orderData.selectedPractices.join(', ')})`
+            `Nuevo pedido: ${orderData.name} (${orderData.practices.join(', ')})`
           );
 
           console.log("New order created with ID:", docRef.id);
@@ -368,7 +452,15 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
         customPractices,
         allPracticesInCategory: practicesByType[selectedType] || []
       };
-      const currentProfile = profile || propProfile || {};
+      let currentProfile = profile || propProfile || {};
+      if (selectedDelegate) {
+        const docRef = doc(db, 'users', selectedDelegate.id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          currentProfile = docSnap.data();
+        }
+      }
+
       const result = await generateOrderPDF(orderData, currentProfile, mode === 'preview' ? 'instance' : mode);
       
       if (mode === 'preview') {
@@ -445,7 +537,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
               <li><strong>Paciente:</strong> ${patientData.name}</li>
               <li><strong>Estudio/Prácticas:</strong> ${displayTitle}</li>
               <li><strong>Fecha:</strong> ${formatDateForEmail(patientData.date)}</li>
-              <li><strong>Profesional Responsable:</strong> ${profile?.nombre || 'Dr/a.'}</li>
+              <li><strong>Profesional Responsable:</strong> ${selectedDelegate ? (selectedDelegate.nombre || selectedDelegate.n) : (profile?.nombre || 'Dr/a.')}</li>
             </ul>
           </div>
 
@@ -499,6 +591,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
       }
 
       // Envío al Paciente
+      if (patientData.skipEmail) return; // No enviar si está marcado
       if (patientData.patientEmail) {
         setLoadingStatus('Enviando pedido al paciente...');
         try {
@@ -556,6 +649,71 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
+      
+      {/* SECCIÓN DE DELEGACIÓN - Solo Admin y Super Secretaria */}
+      {canDelegate && (
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-r from-blue-600/10 to-indigo-600/10 p-6 rounded-2xl border border-blue-500/20 shadow-xl backdrop-blur-sm mb-6"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="p-2 bg-blue-600 rounded-lg text-white">
+              <Settings2 size={24} />
+            </div>
+            <div>
+              <h3 className="text-lg font-bold text-[var(--text-main)]">DELEGACIÓN DE AUTORÍA</h3>
+              <p className="text-sm text-[var(--text-main)] opacity-70">Seleccione el profesional a nombre de quien se emitirá el pedido.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="relative group">
+              <select
+                className="w-full pl-12 pr-4 py-3 bg-[var(--bg-secondary)] border-2 border-[var(--border-main)] rounded-xl text-[var(--text-main)] focus:ring-4 focus:ring-blue-500/20 transition-all appearance-none cursor-pointer group-hover:border-blue-500/50"
+                value={selectedDelegate?.id || ''}
+                onChange={(e) => {
+                  const prof = allProfessionals.find(p => p.id === e.target.value);
+                  setSelectedDelegate(prof || null);
+                  setCurrentOrderId(null); // Reset flag if changing professional
+                }}
+              >
+                <option value="">A mi nombre ({profile?.nombre || profile?.n || 'Cargando...'})</option>
+                {allProfessionals.map(prof => (
+                  <option key={prof.id} value={prof.id}>
+                    A nombre de: {prof.displayName || formatDisplayName(prof.nombre || prof.n || prof.u)}
+                  </option>
+                ))}
+              </select>
+              <div className="absolute left-4 top-1/2 -translate-y-1/2 text-blue-600">
+                <User size={20} />
+              </div>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[var(--text-main)] opacity-30 pointer-events-none">
+                <ChevronDown size={20} />
+              </div>
+            </div>
+            {selectedDelegate && (
+              <motion.div 
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="flex items-center gap-3 px-4 py-3 bg-blue-600/20 rounded-xl border border-blue-500/30 text-blue-600"
+              >
+                <div className="p-1.5 bg-blue-600 rounded-full text-white">
+                  <Check size={14} />
+                </div>
+                <span className="font-medium text-sm">Actuando en representación de {selectedDelegate.nombre || selectedDelegate.n}</span>
+                <button 
+                  onClick={() => setSelectedDelegate(null)}
+                  className="ml-auto p-1 hover:bg-blue-600/20 rounded-lg transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </motion.div>
+            )}
+          </div>
+        </motion.div>
+      )}
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex gap-3 flex-wrap ml-auto">
           <button onClick={handleSendEmail} disabled={isSending || isGenerating || !isFormValid()} className="flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 font-bold">
@@ -616,6 +774,7 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
                       className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-secondary)] border border-main rounded-2xl text-xs focus:border-blue-500 outline-none transition-all text-[var(--text-main)]" 
                       placeholder={f.ph} 
                       value={patientData[f.key]} 
+                      onPaste={f.key === 'dni' ? handlePaste : undefined}
                       onChange={e => {
                         let val = e.target.value;
                         if (['dni', 'affiliateNumber'].includes(f.key)) {
@@ -624,6 +783,11 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
                         setPatientData(prev => ({ ...prev, [f.key]: val }));
                       }} 
                     />
+                    {f.key === 'dni' && isPasting && (
+                      <div className="absolute right-3 top-3">
+                        <Loader2 className="animate-spin text-blue-500" size={16} />
+                      </div>
+                    )}
                   </div>
                   {/* Email auto-filled / missing badges */}
                   {f.key === 'patientEmail' && (
@@ -673,6 +837,35 @@ const NewOrderPage = ({ userProfile: propProfile, isDarkMode }) => {
                     }} 
                   />
                 </div>
+              </div>
+
+              {/* PRIVACY CHECKBOX */}
+              <div className="pt-4">
+                <button
+                  type="button"
+                  onClick={() => setPatientData(prev => ({ ...prev, skipEmail: !prev.skipEmail }))}
+                  className={`
+                    w-full flex items-center justify-between p-4 rounded-2xl border-2 transition-all
+                    ${patientData.skipEmail 
+                      ? 'bg-red-500/10 border-red-500/50 text-red-600' 
+                      : 'bg-[var(--bg-secondary)] border-[var(--border-main)] text-[var(--text-main)] opacity-70 hover:opacity-100'}
+                  `}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className={`p-2 rounded-xl ${patientData.skipEmail ? 'bg-red-500 text-white shadow-lg shadow-red-500/30' : 'bg-slate-200 text-slate-500'}`}>
+                      <Mail size={18} />
+                    </div>
+                    <div className="text-left">
+                      <p className="text-[10px] font-black uppercase tracking-wider leading-none mb-1">Privacidad de Envío</p>
+                      <p className="text-xs font-bold">
+                        {patientData.skipEmail ? 'PRIVACIDAD ACTIVADA' : 'HABILITAR PARA NO ENVIAR COPIA AL PACIENTE'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-10 h-5 rounded-full relative transition-colors ${patientData.skipEmail ? 'bg-red-500' : 'bg-slate-300'}`}>
+                    <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${patientData.skipEmail ? 'left-6' : 'left-1'}`} />
+                  </div>
+                </button>
               </div>
             </div>
           </div>

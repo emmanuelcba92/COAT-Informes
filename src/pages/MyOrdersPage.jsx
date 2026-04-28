@@ -35,7 +35,7 @@ import { db, auth } from '../services/firebase';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 
-const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
+const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecretaria = false }) => {
   const navigate = useNavigate();
   const toTitleCase = (str) => {
     if (!str) return '';
@@ -418,7 +418,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
                         </button>
 
                         {/* Editar */}
-                        {!isSecretaria && (
+                        {(!isSecretaria || isSuperSecretaria) && (
                           <button 
                             onClick={() => handleEditOrder(order.id)}
                             className="p-2 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 border border-indigo-100 shadow-sm transition-all"
@@ -429,7 +429,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false }) => {
                         )}
 
                         {/* Eliminar */}
-                        {(isAdmin || (!isSecretaria && auth.currentUser?.uid === order.profesionalId)) && !isSecretaria && (
+                        {(isAdmin || isSuperSecretaria || (!isSecretaria && auth.currentUser?.uid === order.profesionalId)) && (
                           <button onClick={() => setDeleteModal({ show: true, order })} className="p-2 bg-red-50 text-red-600 rounded-xl hover:bg-red-100 border border-red-100 shadow-sm transition-all" title="Eliminar"><Trash2 size={18} /></button>
                         )}
                       </div>

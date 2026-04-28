@@ -65,6 +65,7 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import { supabase } from '../services/supabase';
+import { formatDisplayName } from '../utils/userNormalization';
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -105,6 +106,7 @@ const AdminPage = () => {
 
   // State for Users
   const [users, setUsers] = useState([]);
+  const [loadingResetId, setLoadingResetId] = useState(null);
   const [userSearch, setUserSearch] = useState("");
 
   // State for Practices
@@ -656,30 +658,48 @@ const AdminPage = () => {
   };
 
   const tabs = [
-    { id: "users", label: "Usuarios", icon: <Users size={20} /> },
-    { id: "stats", label: "Dashboard", icon: <Activity size={20} /> },
-    {
-      id: "practices",
-      label: "Gestión Informes",
-      icon: <Stethoscope size={20} />,
-    },
-    {
-      id: "orders",
-      label: "Gestión Pedidos",
-      icon: <ClipboardList size={20} />,
-    },
-    {
-      id: "settings",
-      label: "Configuración",
-      icon: <Settings2 size={20} />,
-    },
-    {
-      id: "audit",
-      label: "Auditoría",
-      icon: <History size={20} />,
-    },
+    { id: "users", icon: <Users size={18} />, label: "Usuarios" },
+    { id: "stats", icon: <Activity size={18} />, label: "Métricas" },
+    { id: "practices", icon: <FileText size={18} />, label: "Modelos" },
+    { id: "orders", icon: <ClipboardList size={18} />, label: "Gestión Pedidos" },
+    { id: "settings", icon: <Settings2 size={18} />, label: "Configuración" },
+    { id: "audit", icon: <History size={18} />, label: "Auditoría" },
   ];
 
+  const handleResetPassword = async (user) => {
+    const std = getStandardUser(user);
+    if (!std.email) return alert("El usuario no tiene un email válido.");
+    if (!appsScriptUrl) return alert("Configure la URL de Apps Script en la pestaña Configuración.");
+
+    if (!window.confirm(`¿Está seguro de restablecer la contraseña para ${std.nombre}? Se enviará un correo con la nueva clave temporal.`)) return;
+
+    setLoadingResetId(user.id);
+    try {
+      const response = await fetch(appsScriptUrl, {
+        method: "POST",
+        mode: "no-cors", 
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "resetPassword",
+          email: std.email,
+          token: token
+        }),
+      });
+
+      alert(`Petición enviada. Si el correo existe en el sistema, recibirá un mail en breve.`);
+      
+      await logAction(
+        AUDIT_ACTIONS.ADMIN_CHANGE_SETTINGS,
+        user.id,
+        `Reseteo de contraseña solicitado para: ${std.nombre} (${std.email})`
+      );
+    } catch (err) {
+      console.error("Error resetting password:", err);
+      alert("Error al enviar solicitud: " + err.message);
+    } finally {
+      setLoadingResetId(null);
+    }
+  };
 
   // Helper to get standardized user data
   const getStandardUser = (u) => {
@@ -1813,6 +1833,8 @@ const AdminPage = () => {
                                 ? "bg-red-100 text-red-600"
                                 : user._std.role === 'directora_medica'
                                 ? "bg-purple-100 text-purple-600"
+                                : user._std.role === 'super_secretaria'
+                                ? "bg-indigo-100 text-indigo-600"
                                 : user._std.role === 'secretaria'
                                 ? "bg-amber-100 text-amber-600"
                                 : "bg-blue-100 text-blue-600"
@@ -1821,6 +1843,7 @@ const AdminPage = () => {
                             <optgroup label="Administración">
                               <option value="admin">Administrador</option>
                               <option value="directora_medica">Directora Médica</option>
+                              <option value="super_secretaria">Super Secretaria</option>
                               <option value="secretaria">Secretaría</option>
                             </optgroup>
                             <optgroup label="Especialidades">
@@ -1834,6 +1857,14 @@ const AdminPage = () => {
                         </td>
                         <td className="px-6 py-4 text-right">
                           <div className="flex justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleResetPassword(user)}
+                              disabled={loadingResetId === user.id}
+                              className={`p-2 text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-xl transition-colors ${loadingResetId === user.id ? 'animate-pulse' : ''}`}
+                              title="Restablecer Contraseña"
+                            >
+                              {loadingResetId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Key size={18} />}
+                            </button>
                             <button
                               onClick={() => handleManageUser(user)}
                               className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-xl transition-colors"
@@ -3154,6 +3185,7 @@ const AdminPage = () => {
                       <optgroup label="Administración">
                         <option value="admin">Administrador</option>
                         <option value="directora_medica">Directora Médica</option>
+                        <option value="super_secretaria">Super Secretaria</option>
                         <option value="secretaria">Secretaría</option>
                       </optgroup>
                       <optgroup label="Especialidades">
