@@ -37,7 +37,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     patient: '',
     socialWork: '',
     dni: '',
-    date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
+    date: new Date().toLocaleDateString('en-CA'), // ISO-like but robust local date (YYYY-MM-DD)
     requester: '',
     reason: '',
     patientEmail: '',
@@ -142,6 +142,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const previewFlag = new URLSearchParams(location.search).get('preview');
   const [isEditing, setIsEditing] = useState(false);
   const [localReportId, setLocalReportId] = useState(editId || null);
+  const [loadingStatus, setLoadingStatus] = useState('');
   const isSavingRef = React.useRef(false);
 
   // Filtrado de modelos según especialidad/rol
@@ -534,6 +535,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
     await savePatientToHistory();
     setIsGenerating(true);
+    setLoadingStatus(mode === 'save' ? 'Guardando informe...' : (mode === 'print' ? 'Generando PDF...' : 'Procesando...'));
     // 0. Preparation
     const doc = new jsPDF({ compress: true });
     
@@ -625,7 +627,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
-    infoParts.push(`FECHA: ${new Date(reportData.date).toLocaleDateString('es-AR')}`);
+    const [yY, mM, dD] = reportData.date.split('-').map(Number);
+    const formattedDate = new Date(yY, mM - 1, dD).toLocaleDateString('es-AR');
+    infoParts.push(`FECHA: ${formattedDate}`);
     if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester}`);
     if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason}`);
 
@@ -786,10 +790,15 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
       window.open(pdfUrl, '_blank');
-      saveToHistory(null, false);
+      setLoadingStatus('Guardando copia en el historial...');
+      await saveToHistory(null, false);
+      setIsGenerating(false);
     } else if (mode === 'save') {
-      const fileName = `Informe_${reportData.patient.replace(/\s/g, '_')}.pdf`;
-      doc.save(fileName);
+      const pdfName = `Informe - ${reportData.patient} - ${new Date().toLocaleDateString('en-CA')}.pdf`;
+      doc.save(pdfName);
+      setLoadingStatus('Guardando copia en el historial...');
+      await saveToHistory(null, true);
+      setIsGenerating(false);
 
       // Si el botón de envío está desactivado globalmente, enviamos la copia a administración automáticamente al guardar
       if (config.showSendButton === false && config.appsScriptUrl) {
@@ -807,14 +816,13 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               professionalName: professional?.nombre || 'Profesional',
               patientName: reportData.patient,
               pdfBase64: pdfBase64,
-              fileName: fileName
+              fileName: pdfName
             })
           }).catch(e => console.error("Error auto-sending admin copy:", e));
         } catch (err) {
           console.error("Failed to prepare auto-send:", err);
         }
       }
-      saveToHistory(null, true);
     } else if (mode === 'blob') {
       setIsGenerating(false);
       return doc.output('blob');
@@ -837,6 +845,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     
     await savePatientToHistory();
     setIsSending(true);
+    setLoadingStatus('Preparando envío...');
     
     if (reportData.patientEmail && (!reportData.patientEmail.includes('@') || !reportData.patientEmail.includes('.'))) {
       showToast('Por favor ingrese un email de paciente válido o déjelo en blanco.', 'error');
@@ -927,6 +936,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
       // Envío a Administración
       if (config.adminEmail) {
+        setLoadingStatus('Enviando copia a administración...');
         try {
           await fetch(config.appsScriptUrl, {
             method: 'POST',
@@ -950,6 +960,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
       // Envío al Paciente (si tiene email y no se marcó "skipEmail")
       if (reportData.patientEmail && !reportData.skipEmail) {
+        setLoadingStatus('Enviando informe al paciente...');
         try {
           await fetch(config.appsScriptUrl, {
             method: 'POST',
@@ -973,6 +984,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
       // Backup a Drive solo (si no se envió antes con éxito)
       if (folderIdToSend) {
+        setLoadingStatus('Guardando copia en la nube...');
         try {
           await fetch(config.appsScriptUrl, {
             method: 'POST',
@@ -995,7 +1007,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       setReportData(updatedReportData);
       
       // Guardamos en el historial con el nuevo flag
+      setLoadingStatus('Finalizando guardado...');
       await saveToHistory(null, false);
+      setIsSending(false);
       
       // Auditoría
       await logAction(
@@ -1021,6 +1035,10 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   // Auxiliar para formatear fechas en el mail
   const formatDateForEmail = (date) => {
     if (!date) return '';
+    if (typeof date === 'string' && date.includes('-')) {
+      const [y, m, d] = date.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    }
     const d = date.seconds ? new Date(date.seconds * 1000) : new Date(date);
     return d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   };
@@ -1091,14 +1109,16 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     `;
 
     setIsSending(true);
+    setLoadingStatus('Generando informe para reenvío...');
     try {
-      const pdfDoc = generatePDF('instance');
+      const pdfDoc = await generatePDF('instance');
       if (!pdfDoc) {
         setIsSending(false);
         return;
       }
       const pdfBase64 = pdfDoc.output('datauristring').split(',')[1];
 
+      setLoadingStatus('Enviando informe al paciente...');
       await fetch(config.appsScriptUrl, {
         method: 'POST',
         mode: 'no-cors',
@@ -1704,6 +1724,38 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
                 />
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Loading Overlay */}
+      <AnimatePresence>
+        {(isGenerating || isSending) && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-[9999] flex items-center justify-center p-6"
+          >
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="bg-[var(--bg-card)] border border-white/20 rounded-[40px] p-10 shadow-2xl flex flex-col items-center gap-6 max-w-sm w-full"
+            >
+              <div className="relative">
+                <div className="absolute inset-0 bg-blue-500/20 blur-3xl rounded-full" />
+                <div className="relative w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center shadow-xl shadow-blue-500/40">
+                  <Loader2 className="text-white animate-spin" size={40} strokeWidth={2.5} />
+                </div>
+              </div>
+              <div className="text-center space-y-2">
+                <h3 className="text-xl font-black text-[var(--text-main)]">Procesando...</h3>
+                <p className="text-blue-500 bg-blue-50 dark:text-blue-400 dark:bg-blue-900/30 font-bold uppercase tracking-widest text-[10px] px-4 py-2 rounded-full inline-block">
+                  {loadingStatus || 'Espere un momento'}
+                </p>
+              </div>
+            </motion.div>
           </motion.div>
         )}
       </AnimatePresence>

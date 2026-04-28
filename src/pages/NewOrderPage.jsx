@@ -74,7 +74,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     insurance: '',
     affiliateNumber: '',
     diagnosis: '',
-    date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
+    date: new Date().toLocaleDateString('en-CA'), // ISO-like but robust local date (YYYY-MM-DD)
     patientEmail: '',
     observations: '',
     skipEmail: false
@@ -493,8 +493,8 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
 
       const formatDateForEmail = (dateStr) => {
         if (!dateStr) return '';
-        const [y, m, d] = dateStr.split('-');
-        return `${d}-${m}-${y}`;
+        const [y, m, d] = dateStr.split('-').map(Number);
+        return new Date(y, m - 1, d).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
       };
 
       const emailFooter = `

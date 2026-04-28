@@ -108,7 +108,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     reason: '',
     patientEmail: '',
     profId: canSelectProfessional ? '' : user.uid,
-    date: new Date().toISOString().split('T')[0]
+    date: new Date().toLocaleDateString('en-CA')
   });
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
 
@@ -411,7 +411,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       setUploadData({
         file: null, patientName: '', patientDni: '', socialWork: '', 
         requester: '', reason: '', patientEmail: '', profId: '',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toLocaleDateString('en-CA')
       });
       fetchReports(selectedProfId, true);
       
@@ -772,7 +772,14 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   <tr key={report.id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors group">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
-                        <span className="font-bold text-sm">{report.fecha}</span>
+                        <span className="font-bold text-sm">
+                          {report.fecha?.includes('-') 
+                            ? (() => {
+                                const [y, m, d] = report.fecha.split('-').map(Number);
+                                return new Date(y, m - 1, d).toLocaleDateString('es-AR');
+                              })()
+                            : report.fecha}
+                        </span>
                         <span className="text-[10px] text-gray-400">ID: {report.id.substring(0,8)}</span>
                       </div>
                     </td>

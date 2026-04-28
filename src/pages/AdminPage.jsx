@@ -548,7 +548,7 @@ const AdminPage = () => {
     console.log(`Iniciando auto-limpieza de pedidos (Antigüedad: ${days} días)`);
     const limitDate = new Date();
     limitDate.setDate(limitDate.getDate() - days);
-    const dateStr = limitDate.toISOString().split('T')[0];
+    const dateStr = limitDate.toLocaleDateString('en-CA');
 
     try {
       const q = query(

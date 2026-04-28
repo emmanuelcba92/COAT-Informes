@@ -60,7 +60,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
     insurance: '',
     affiliateNumber: '',
     diagnosis: '',
-    date: new Date(new Date().getTime() - new Date().getTimezoneOffset() * 60000).toISOString().split('T')[0],
+    date: new Date().toLocaleDateString('en-CA'), // ISO-like but robust local date (YYYY-MM-DD)
     patientEmail: '',
     observations: '',
     sentToAdmin: false
@@ -218,7 +218,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
               insurance: data.insurance || '',
               affiliateNumber: data.affiliateNumber || '',
               diagnosis: data.diagnosis || '',
-              date: data.date || new Date().toISOString().split('T')[0],
+              date: data.date || new Date().toLocaleDateString('en-CA'),
               patientEmail: data.patientEmail || '',
               observations: data.observations || '',
               sentToAdmin: data.sentToAdmin || false
