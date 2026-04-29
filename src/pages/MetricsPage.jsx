@@ -104,7 +104,7 @@ const MetricsPage = ({ isDarkMode }) => {
             <Activity className="text-blue-600" size={32} />
             Métricas
           </h1>
-          <p className="text-sm font-black text-slate-950 dark:text-slate-400">Panel de productividad y gestión de autoría</p>
+          <p className="text-sm font-black text-slate-600 dark:text-slate-400">Panel de productividad y gestión de autoría</p>
         </div>
         
         <div className="card p-4 flex items-center gap-4 group hover:border-blue-500/50 transition-all">
@@ -112,8 +112,8 @@ const MetricsPage = ({ isDarkMode }) => {
             <BarChart3 size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Total Informes</p>
-            <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalReports}</p>
+            <p className="text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest">Total Informes</p>
+            <p className="text-2xl font-black tracking-tight text-[var(--text-main)]">{totalReports}</p>
           </div>
         </div>
 
@@ -122,8 +122,8 @@ const MetricsPage = ({ isDarkMode }) => {
             <UserCheck size={24} />
           </div>
           <div>
-            <p className="text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Informes Delegados</p>
-            <p className="text-2xl font-black tracking-tight text-slate-900 dark:text-white">{totalDelegated}</p>
+            <p className="text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest">Informes Delegados</p>
+            <p className="text-2xl font-black tracking-tight text-[var(--text-main)]">{totalDelegated}</p>
           </div>
         </div>
       </div>
@@ -137,7 +137,7 @@ const MetricsPage = ({ isDarkMode }) => {
             placeholder="Buscar por nombre de autor..." 
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 bg-slate-50 dark:bg-slate-800/50 border border-main rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium transition-all text-slate-900 dark:text-white"
+            className="w-full pl-10 pr-4 py-2 bg-[var(--bg-secondary)] border border-main rounded-xl focus:ring-2 focus:ring-blue-500 outline-none font-medium transition-all text-[var(--text-main)]"
           />
         </div>
 
@@ -160,19 +160,19 @@ const MetricsPage = ({ isDarkMode }) => {
           <div className="card">
             <div className="p-6 border-b border-main flex items-center justify-between bg-gradient-to-r from-blue-600/5 to-transparent">
               <div>
-                <h3 className="text-xl font-black tracking-tight uppercase text-slate-950 dark:text-white">Rendimiento por Autor Real</h3>
-                <p className="text-xs font-black text-slate-900 dark:text-slate-400">Desglose de informes realizados por usuario (incluye delegados)</p>
+                <h3 className="text-xl font-black tracking-tight uppercase text-[var(--text-main)]">Rendimiento por Autor Real</h3>
+                <p className="text-xs font-black text-[var(--text-sub)]">Desglose de informes realizados por usuario (incluye delegados)</p>
               </div>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full border-collapse">
                 <thead>
-                  <tr className="bg-slate-50/50 dark:bg-black/20 text-left">
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Autor Real</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest text-center">Total</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Desglose de Informes</th>
-                    <th className="px-6 py-4 text-[10px] font-black uppercase text-slate-900 dark:text-slate-400 tracking-widest">Productividad</th>
+                  <tr className="bg-[var(--bg-secondary)] text-left border-b border-main">
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest">Autor Real</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest text-center">Total</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest">Desglose de Informes</th>
+                    <th className="px-6 py-4 text-[10px] font-black uppercase text-[var(--text-sub)] tracking-widest">Productividad</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-main">
@@ -191,23 +191,23 @@ const MetricsPage = ({ isDarkMode }) => {
                               {item.name.substring(0, 2).toUpperCase()}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-black tracking-tight uppercase text-sm truncate text-slate-950 dark:text-white">{item.name}</p>
-                              <p className="text-[10px] font-black uppercase tracking-tighter italic text-slate-950 dark:text-slate-400">
+                              <p className="font-black tracking-tight uppercase text-sm truncate text-[var(--text-main)]">{item.name}</p>
+                              <p className="text-[10px] font-black uppercase tracking-tighter italic text-[var(--text-sub)]">
                                 {item.delegated > 0 ? `${item.delegated} delegados` : 'Personal directo'}
                               </p>
                             </div>
                           </div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center min-w-[32px] h-8 bg-slate-100 dark:bg-slate-800 rounded-lg font-black text-sm">
+                          <span className="inline-flex items-center justify-center min-w-[32px] h-8 bg-slate-900 text-white dark:bg-slate-800 rounded-lg font-black text-sm">
                             {item.total}
                           </span>
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-wrap gap-1 max-w-[300px]">
                             {Object.entries(item.practices).map(([name, count], pidx) => (
-                              <div key={pidx} className="flex items-center gap-1.5 px-2 py-1 bg-slate-100 dark:bg-slate-800/50 rounded-md border border-slate-200 dark:border-slate-700 transition-all">
-                                <span className="text-[9px] font-black uppercase truncate max-w-[120px] text-slate-900 dark:text-slate-400">{name}</span>
+                              <div key={pidx} className="flex items-center gap-1.5 px-2 py-1 bg-[var(--bg-card)] rounded-md border border-main transition-all shadow-sm">
+                                <span className="text-[9px] font-black uppercase truncate max-w-[120px] text-[var(--text-main)]">{name}</span>
                                 <span className="text-[10px] font-black text-blue-600">{count}</span>
                               </div>
                             ))}
@@ -243,7 +243,7 @@ const MetricsPage = ({ isDarkMode }) => {
                <TrendingUp size={120} />
              </div>
 
-             <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-2 text-slate-900 dark:text-white">
+             <h3 className="text-lg font-black uppercase tracking-tight mb-6 flex items-center gap-2 text-[var(--text-main)]">
                <Users className="text-blue-600" size={20} />
                Desglose de Gestión
              </h3>
@@ -253,27 +253,26 @@ const MetricsPage = ({ isDarkMode }) => {
                  <div key={admin.id || idx} className="space-y-3">
                    <div className="flex items-center justify-between">
                      <p className="text-sm font-black uppercase text-blue-600">{admin.name}</p>
-                     <span className="text-[10px] font-black px-2 py-0.5 bg-blue-600/10 rounded-full uppercase">Autor Delegado</span>
+                     <span className="text-[10px] font-black px-2 py-0.5 bg-blue-600/10 text-blue-600 rounded-full uppercase">Autor Delegado</span>
                    </div>
                    
                    <div className="grid grid-cols-1 gap-4">
                      {Object.values(admin.targets).map((target, tidx) => (
-                       <div key={tidx} className="bg-slate-50 dark:bg-black/20 rounded-2xl border border-main overflow-hidden">
-                         <div className="flex items-center justify-between p-3 bg-white/80 dark:bg-slate-800/50 border-b border-main shadow-sm">
+                       <div key={tidx} className="bg-[var(--bg-secondary)] rounded-2xl border border-main overflow-hidden">
+                         <div className="flex items-center justify-between p-3 bg-[var(--bg-card)] border-b border-main shadow-sm">
                            <div className="flex items-center gap-2">
                              <div className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                             <p className="text-xs font-black uppercase truncate max-w-[150px] text-slate-900 dark:text-white">{target.name}</p>
+                             <p className="text-xs font-black uppercase truncate max-w-[150px] text-[var(--text-main)]">{target.name}</p>
                            </div>
                            <div className="flex items-center gap-1.5">
                              <span className="text-xs font-black text-blue-600">{target.count}</span>
                            </div>
                          </div>
                          
-                         {/* Detailed list of report types */}
-                         <div className="p-3 space-y-2 bg-white dark:bg-transparent">
+                         <div className="p-3 space-y-2">
                            {Object.entries(target.reports).map(([rType, rCount], ridx) => (
                              <div key={ridx} className="flex items-center justify-between text-[10px]">
-                                <div className="flex items-center gap-2 text-slate-900 dark:text-slate-400">
+                                <div className="flex items-center gap-2 text-[var(--text-sub)]">
                                   <FileText size={12} />
                                   <span className="font-bold uppercase truncate max-w-[180px]">{rType}</span>
                                 </div>
@@ -290,8 +289,8 @@ const MetricsPage = ({ isDarkMode }) => {
                ))}
                
                {filteredStats.filter(s => s.delegated > 0).length === 0 && (
-                 <div className="text-center py-12 italic text-slate-900 dark:text-slate-400">
-                    <p className="text-sm font-black">No se detectaron informes delegados recientemente.</p>
+                 <div className="text-center py-12 italic text-[var(--text-sub)]">
+                    <p className="text-sm font-black uppercase tracking-widest opacity-40">No se detectaron informes delegados recientemente.</p>
                  </div>
                )}
              </div>
