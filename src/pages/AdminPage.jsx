@@ -89,6 +89,7 @@ const AdminPage = () => {
   const [config, setConfig] = useState({});
   const [isSavingSettings, setIsSavingSettings] = useState(false);
   const [driveQuota, setDriveQuota] = useState(null);
+  const [driveError, setDriveError] = useState(false);
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
   const [isManualModalOpen, setIsManualModalOpen] = useState(false);
   const [pasteData, setPasteData] = useState("");
@@ -269,7 +270,7 @@ const AdminPage = () => {
       setLoading(false);
     });
 
-    fetchStorageStats();
+    // fetchStorageStats(); // Removed from here, moved to dedicated effect
     fetchGlobalStats();
 
     // Sync Settings
@@ -308,6 +309,35 @@ const AdminPage = () => {
       unsubscribeOrderSettings();
     };
   }, []);
+
+  // Dedicated effect for Drive Quota - ensures it fetches when URL is ready
+  useEffect(() => {
+    if (appsScriptUrl) {
+      const fetchDriveQuota = async () => {
+        setDriveError(false);
+        try {
+          const res = await fetch(appsScriptUrl);
+          if (res.ok) {
+            const data = await res.json();
+            setDriveQuota(data);
+          } else {
+            setDriveError(true);
+          }
+        } catch (e) {
+          console.error("Error fetching drive quota:", e);
+          setDriveError(true);
+        }
+      };
+      fetchDriveQuota();
+    }
+  }, [appsScriptUrl]);
+
+  // Dedicated effect for Storage Stats - triggered when entering Stats tab or on mount
+  useEffect(() => {
+    if (activeTab === "stats") {
+      fetchStorageStats();
+    }
+  }, [activeTab]);
 
   // ESTADOS PARA MANTENIMIENTO Y ALMACENAMIENTO
   const [storageStats, setStorageStats] = useState({
@@ -358,29 +388,19 @@ const AdminPage = () => {
   const fetchStorageStats = async () => {
     setStorageStats((prev) => ({ ...prev, loading: true }));
     try {
-      // 1. Firebase (Database) - Calculamos peso de Informes, Pedidos y Pacientes
-      const [reportsSnap, ordersSnap, patientsSnap] = await Promise.all([
-        getDocs(collection(db, "reports")),
-        getDocs(collection(db, "orders")),
-        getDocs(collection(db, "patients")),
+      // 1. Firebase Stats (Optimized: Using Count instead of full fetch)
+      const [reportsCount, ordersCount, patientsCount] = await Promise.all([
+        getCountFromServer(collection(db, "reports")),
+        getCountFromServer(collection(db, "orders")),
+        getCountFromServer(collection(db, "patients")),
       ]);
 
-      const fbCount = reportsSnap.size + ordersSnap.size + patientsSnap.size;
+      const fbCount = reportsCount.data().count + ordersCount.data().count + patientsCount.data().count;
 
-      let reportsBytes = 0;
-      reportsSnap.forEach((doc) => {
-        reportsBytes += JSON.stringify(doc.data()).length;
-      });
-
-      let ordersBytes = 0;
-      ordersSnap.forEach((doc) => {
-        ordersBytes += JSON.stringify(doc.data()).length;
-      });
-
-      let patientsBytes = 0;
-      patientsSnap.forEach((doc) => {
-        patientsBytes += JSON.stringify(doc.data()).length;
-      });
+      // Estimación de peso para evitar descargar miles de documentos (1KB por doc prom)
+      const reportsBytes = reportsCount.data().count * 1024;
+      const ordersBytes = ordersCount.data().count * 800;
+      const patientsBytes = patientsCount.data().count * 500;
 
       const totalBytes = reportsBytes + ordersBytes + patientsBytes;
 
@@ -402,7 +422,8 @@ const AdminPage = () => {
         );
       }
 
-      // 3. Google Drive (Quota)
+      // 3. Google Drive (Quota) - Logic moved to dedicated useEffect for reactivity
+      // But we still call it here if manually refreshing
       if (appsScriptUrl) {
         try {
           const res = await fetch(appsScriptUrl);
@@ -411,7 +432,7 @@ const AdminPage = () => {
             setDriveQuota(data);
           }
         } catch (e) {
-          console.error("Error auto-fetching drive quota:", e);
+          console.error("Error fetching drive quota:", e);
         }
       }
 
@@ -1675,6 +1696,12 @@ const AdminPage = () => {
                           ></motion.div>
                         </div>
                       </>
+                    ) : driveError ? (
+                      <div className="py-10 text-center">
+                        <ShieldAlert className="mx-auto text-amber-500" size={32} />
+                        <p className="text-xs text-amber-600 mt-2 uppercase font-black">Error al sincronizar cuota</p>
+                        <p className="text-[10px] text-gray-400 mt-1">Verifica la URL del Apps Script en Configuración</p>
+                      </div>
                     ) : (
                       <div className="py-10 text-center">
                         <Loader2 className="animate-spin mx-auto text-gray-300" size={32} />

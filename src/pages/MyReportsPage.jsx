@@ -38,12 +38,15 @@ import {
   doc, 
   limit,
   startAfter,
-  addDoc 
+  addDoc,
+  setDoc,
+  arrayUnion 
 } from 'firebase/firestore';
 import { supabase } from '../services/supabase';
 import { db, auth } from '../services/firebase';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
+import { extractPatientsFromImage } from '../utils/aiService';
 
 
 
@@ -111,6 +114,113 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     date: new Date().toLocaleDateString('en-CA')
   });
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
+  const [emailMissingWarning, setEmailMissingWarning] = useState(false);
+  const [isPasting, setIsPasting] = useState(false);
+
+  // Autocompletado de Paciente por DNI
+  useEffect(() => {
+    const searchPatient = async () => {
+      const cleanDni = uploadData.patientDni.trim();
+      if (cleanDni.length >= 7 && cleanDni.length <= 9) {
+        try {
+          const docRef = doc(db, 'patients', cleanDni);
+          const docSnap = await getDoc(docRef);
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            const autoEmail = data.email || data.patientEmail || '';
+            setUploadData(prev => ({
+              ...prev,
+              patientName: data.name || data.nombre || prev.patientName,
+              socialWork: data.insurance || data.obraSocial || prev.socialWork,
+              patientEmail: autoEmail || prev.patientEmail
+            }));
+            showToast('✓ Datos de paciente cargados');
+            if (!autoEmail) {
+              setEmailMissingWarning(true);
+              setTimeout(() => setEmailMissingWarning(false), 8000);
+            }
+          }
+        } catch (err) {
+          console.error("Error searching patient:", err);
+        }
+      }
+    };
+    const timer = setTimeout(searchPatient, 600);
+    return () => clearTimeout(timer);
+  }, [uploadData.patientDni]);
+
+  const savePatientToHistory = async () => {
+    const cleanDni = uploadData.patientDni.toString().replace(/\D/g, '');
+    if (!cleanDni || cleanDni.length < 7) return;
+    try {
+      const patientRef = doc(db, 'patients', cleanDni);
+      const patientName = uploadData.patientName.trim().toUpperCase();
+      const insuranceName = uploadData.socialWork.trim().toUpperCase();
+      
+      const payload = {
+        name: patientName,
+        nombre: patientName,
+        dni: cleanDni,
+        insurance: insuranceName,
+        obraSocial: insuranceName,
+        professionalIds: arrayUnion(uploadData.profId || user.uid),
+        lastUpdated: new Date().toISOString()
+      };
+      
+      if (uploadData.patientEmail && uploadData.patientEmail.trim()) {
+        payload.email = uploadData.patientEmail.trim();
+      }
+      
+      await setDoc(patientRef, payload, { merge: true });
+    } catch (err) {
+      console.error("Error saving patient to history:", err);
+    }
+  };
+
+  const handlePaste = async (e) => {
+    const items = e.clipboardData.items;
+    let imageItem = null;
+    for (let i = 0; i < items.length; i++) {
+      if (items[i].type.indexOf('image') !== -1) {
+        imageItem = items[i];
+        break;
+      }
+    }
+
+    if (imageItem) {
+      e.preventDefault();
+      const file = imageItem.getAsFile();
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        const base64 = event.target.result.split(',')[1];
+        setIsPasting(true);
+        showToast('Procesando imagen con IA...', 'info');
+        try {
+          const results = await extractPatientsFromImage(base64);
+          if (results && results.length > 0) {
+            const p = results[0];
+            setUploadData(prev => ({
+              ...prev,
+              patientDni: p.dni || prev.patientDni,
+              patientName: p.nombre || prev.patientName,
+              socialWork: p.obraSocial || prev.socialWork,
+              patientEmail: p.email || prev.patientEmail
+            }));
+            showToast('¡Datos extraídos de la captura!');
+          } else {
+            showToast('No se detectaron datos en la imagen', 'error');
+          }
+        } catch (err) {
+          console.error("Paste processing error:", err);
+          showToast('Error al analizar la imagen', 'error');
+        } finally {
+          setIsPasting(false);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   useEffect(() => {
     const fetchProfs = async () => {
@@ -226,6 +336,8 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
     setIsUploading(true);
     try {
+      await savePatientToHistory();
+      
       let downloadURL = '';
       let filePath = '';
       
@@ -985,14 +1097,20 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                     />
                   </div>
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">DNI *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1 flex justify-between items-center w-full">
+                      <span>DNI *</span>
+                      <span className="text-[8px] text-blue-500 font-bold normal-case bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
+                        Pegar captura (CTRL+V)
+                      </span>
+                    </label>
                     <input 
                       required
                       type="text" 
                       inputMode="numeric"
                       placeholder="Solo números"
-                      className="input-field"
+                      className={`input-field ${isPasting ? 'animate-pulse border-blue-400' : ''}`}
                       value={uploadData.patientDni}
+                      onPaste={handlePaste}
                       onChange={e => setUploadData({...uploadData, patientDni: e.target.value.replace(/\D/g, '')})}
                     />
                   </div>
@@ -1040,6 +1158,11 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                         value={uploadData.patientEmail}
                         onChange={e => setUploadData({...uploadData, patientEmail: e.target.value})}
                       />
+                      {emailMissingWarning && (
+                        <p className="text-[9px] text-amber-500 font-bold ml-1 animate-pulse">
+                          ⚠ Paciente sin email registrado
+                        </p>
+                      )}
                     </div>
                   </div>
 
