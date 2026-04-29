@@ -37,7 +37,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
   const drawHeader = async (targetDoc, orderTypeLabel) => {
     // Institutional COAT branding is ALWAYS shown on orders
     try {
-      const logoData = await optimizeImage('/coat_logo.png', 400);
+      const logoData = await optimizeImage('/coat_logo.png', 600);
       if (logoData) {
         targetDoc.addImage(logoData.data, 'PNG', 15, 8, 35, 35 / logoData.ratio, undefined, 'FAST');
       }
