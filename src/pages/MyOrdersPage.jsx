@@ -189,6 +189,14 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
                 <p style="margin: 3px 0; color: #555; font-size: 12px;">📞 Tel: (0351) 423-0530 / 423-9428</p>
                 <p style="margin: 3px 0; color: #555; font-size: 12px;">📱 WhatsApp: <a href="https://wa.me/5493543579794" style="color: #25d366; text-decoration: none; font-weight: bold;">3543579794</a></p>
                 <p style="margin: 3px 0; color: #555; font-size: 12px;">📧 Email: <a href="mailto:info@coat.com.ar" style="color: #2563eb; text-decoration: none;">info@coat.com.ar</a></p>
+                <div style="margin-top: 10px;">
+                  <a href="https://www.facebook.com/coatcordoba" style="text-decoration: none; display: inline-block; margin-right: 15px;">
+                    <img src="https://img.icons8.com/color/24/facebook-new.png" width="24" height="24" alt="Facebook" style="vertical-align: middle; border: 0;">
+                  </a>
+                  <a href="https://www.instagram.com/coatcordoba/" style="text-decoration: none; display: inline-block;">
+                    <img src="https://img.icons8.com/color/24/instagram-new.png" width="24" height="24" alt="Instagram" style="vertical-align: middle; border: 0;">
+                  </a>
+                </div>
               </td>
             </tr>
           </table>
@@ -201,7 +209,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
         <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
           <p>Estimado/a <strong>${order.name}</strong>,</p>
           <p>Esperamos que se encuentre bien.</p>
-          <p>Le informamos que ya está disponible el reenvío de su <strong>pedido médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          <p>Le informamos que ya está disponible su <strong>pedido médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
           
           <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0;"><strong>Detalles del pedido:</strong></p>

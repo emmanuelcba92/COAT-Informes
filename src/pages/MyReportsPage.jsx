@@ -449,21 +449,24 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
             <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
               <p>Estimado/a <strong>${uploadData.patientName.toUpperCase()}</strong>,</p>
               <p>Esperamos que se encuentre bien.</p>
-              <p>Le informamos que ya está disponible el nuevo informe correspondiente a su reciente consulta en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+              <p>Le informamos que ya está disponible su <strong>informe médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
               
               <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
                 <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
                 <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
                   <li><strong>Paciente:</strong> ${uploadData.patientName.toUpperCase()}</li>
-                  <li><strong>Estudio/Motivo:</strong> ${displayTitle}</li>
+                  <li><strong>Estudio/Prácticas:</strong> ${displayTitle}</li>
                   <li><strong>Fecha:</strong> ${formatDateForEmail(uploadData.date)}</li>
                   <li><strong>Profesional Responsable:</strong> ${selectedProf?.displayName || 'Externo'}</li>
                 </ul>
               </div>
 
-              <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros o consultarlo en su próxima visita.</p>
+              <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros.</p>
+              
               <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
+              
               ${emailFooter}
+              
               <p style="font-size: 11px; color: #999; margin-top: 30px;">
                 Este es un mensaje automático, por favor no responda a esta dirección de correo.
               </p>
@@ -672,19 +675,19 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
           <p>Estimado/a <strong>${report.pacienteNombre}</strong>,</p>
           <p>Esperamos que se encuentre bien.</p>
-          <p>Le informamos que ya está disponible el reenvío del <strong>informe médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
+          <p>Le informamos que ya está disponible su <strong>informe médico</strong> generado en COAT. Adjunto a este correo encontrará el documento en formato PDF.</p>
           
           <div style="background-color: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
             <p style="margin: 0;"><strong>Detalles del informe:</strong></p>
             <ul style="list-style: none; padding-left: 0; margin: 10px 0 0 0;">
               <li><strong>Paciente:</strong> ${report.pacienteNombre}</li>
-              <li><strong>Estudio:</strong> ${report.practicaNombre || 'Informe Médico'}</li>
+              <li><strong>Estudio/Prácticas:</strong> ${report.practicaNombre || 'Informe Médico'}</li>
               <li><strong>Fecha:</strong> ${formatDateForEmail(report.fecha)}</li>
               <li><strong>Profesional Responsable:</strong> ${report.profesionalNombre}</li>
             </ul>
           </div>
 
-          <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros o consultarlo en su próxima visita.</p>
+          <p>Si tiene alguna duda respecto al contenido del informe, por favor no dude en contactarse con nosotros.</p>
           
           <p>Atentamente,<br/><strong>Equipo de COAT.</strong></p>
           
