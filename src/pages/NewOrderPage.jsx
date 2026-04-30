@@ -209,6 +209,29 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     }
   }, [canDelegate]);
 
+  const handleNewOrder = () => {
+    setCurrentOrderId(null);
+    setPatientData({
+      name: '',
+      dni: '',
+      insurance: '',
+      affiliateNumber: '',
+      diagnosis: '',
+      date: new Date().toLocaleDateString('en-CA'),
+      patientEmail: '',
+      observations: '',
+      skipEmail: false
+    });
+    setSelectedPractices([]);
+    setQuantities({});
+    setIndications({});
+    setCustomPractices([]);
+    setNewCustomPractice('');
+    setSearchQuery('');
+    setPreviewUrl(null);
+    showToast('Formulario reiniciado');
+  };
+
   const handlePaste = async (e) => {
     const item = e.clipboardData.items[0];
     if (item?.type.includes('image')) {
@@ -466,6 +489,8 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
       if (mode === 'preview') {
         const url = result.output('bloburl');
         setPreviewUrl(url);
+      } else if (mode === 'save' || mode === 'print') {
+        handleNewOrder();
       }
       
       if (mode === 'instance') return result;
@@ -636,6 +661,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
       }
 
       showToast('¡Email enviado con éxito!');
+      handleNewOrder();
     } catch (err) { 
       console.error("Error en handleSendEmail:", err);
       showToast('Error al enviar el email.', 'error'); 
@@ -716,6 +742,12 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
 
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div className="flex gap-3 flex-wrap ml-auto">
+          <button 
+            onClick={handleNewOrder}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all font-bold"
+          >
+            <Plus size={18} /> <span>Limpiar Datos</span>
+          </button>
           <button onClick={handleSendEmail} disabled={isSending || isGenerating || !isFormValid()} className="flex items-center gap-2 px-4 py-2 border border-blue-600 text-blue-600 rounded-xl hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 font-bold">
             {isSending ? <Loader2 className="animate-spin" size={18} /> : <Mail size={18} />} <span>Enviar por Email</span>
           </button>
