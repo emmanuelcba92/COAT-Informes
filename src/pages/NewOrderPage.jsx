@@ -229,7 +229,11 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     setNewCustomPractice('');
     setSearchQuery('');
     setPreviewUrl(null);
-    showToast('Formulario reiniciado');
+    // Limpiar URL si estamos editando
+    if (location.search.includes('edit=')) {
+      navigate('/orders/new', { replace: true });
+    }
+    showToast('Formulario de pedido reiniciado');
   };
 
   const handlePaste = async (e) => {

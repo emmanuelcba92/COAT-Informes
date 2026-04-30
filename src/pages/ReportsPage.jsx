@@ -220,6 +220,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
   const handleNewReport = () => {
     setLocalReportId(null);
+    setIsEditing(false);
     setContent('');
     setPreviewUrl(null);
     setReportData({
@@ -237,7 +238,11 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       skipEmail: false
     });
     setSelectedPractice('');
-    showToast('Formulario reiniciado para un nuevo informe');
+    // Limpiar URL si estamos editando
+    if (location.search.includes('edit=')) {
+      navigate('/reports', { replace: true });
+    }
+    showToast('Formulario reiniciado');
   };
 
   // Guardar en el historial corregido para manejar EDICIÓN
@@ -834,7 +839,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       const pdfName = `Informe - ${reportData.patient} - ${new Date().toLocaleDateString('en-CA')}.pdf`;
       doc.save(pdfName);
       setLoadingStatus('Guardando copia en el historial...');
-      await saveToHistory(null, true);
+      await saveToHistory(null, false);
       setIsGenerating(false);
       handleNewReport();
 
