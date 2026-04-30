@@ -144,7 +144,6 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
 
       if (!localOrderId) {
         data.createdAt = new Date().toISOString();
-      }
         const docRef = await addDoc(collection(db, 'orders'), data);
         setLocalOrderId(docRef.id);
       } else {
@@ -638,6 +637,12 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
           <p className={`${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Complete los datos y seleccione los estudios para el RP.</p>
         </div>
         <div className="flex gap-3 flex-wrap">
+          <button 
+            onClick={handleNewOrder}
+            className="flex items-center gap-2 px-4 py-2 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-all font-bold"
+          >
+            <Plus size={18} /> <span>Limpiar Datos</span>
+          </button>
           <button 
             onClick={handleSendEmail} 
             disabled={isSending || isGenerating || !isFormValid()} 

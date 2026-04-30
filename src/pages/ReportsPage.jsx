@@ -1281,7 +1281,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               title="Nuevo informe para el mismo paciente"
             >
               <Plus size={18} />
-              <span className="hidden md:inline">Nuevo Informe</span>
+              <span className="hidden md:inline">Limpiar Datos</span>
             </button>
             <button 
               onClick={() => navigate('/reports/history')}
