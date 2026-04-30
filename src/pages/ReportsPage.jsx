@@ -18,7 +18,8 @@ import {
   ArrowRight,
   Settings,
   Download,
-  X
+  X,
+  Plus
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'firebase/firestore';
@@ -217,6 +218,28 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     }
   };
 
+  const handleNewReport = () => {
+    setLocalReportId(null);
+    setContent('');
+    setPreviewUrl(null);
+    setReportData({
+      patient: '',
+      socialWork: '',
+      dni: '',
+      date: new Date().toLocaleDateString('en-CA'),
+      requester: '',
+      reason: '',
+      patientEmail: '',
+      includeTitle: true,
+      customTitle: '',
+      enableHeader: true,
+      sentToAdmin: false,
+      skipEmail: false
+    });
+    setSelectedPractice('');
+    showToast('Formulario reiniciado para un nuevo informe');
+  };
+
   // Guardar en el historial corregido para manejar EDICIÓN
   const saveToHistory = async (pdfUrl = null, shouldNavigate = false) => {
     if (!auth.currentUser || !reportData.patient) return;
@@ -226,33 +249,35 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     }
     try {
       const data = {
-        profesionalId: selectedDelegate ? selectedDelegate.id : (localReportId ? (professional?.id || professional?.uid || auth.currentUser.uid) : auth.currentUser.uid),
+        profesionalId: selectedDelegate ? selectedDelegate.id : (professional?.id || professional?.uid || auth.currentUser.uid),
         profesionalNombre: selectedDelegate ? (selectedDelegate.nombre || selectedDelegate.u) : (professional?.nombre || professional?.n || 'Médico'),
-        createdBy: auth.currentUser.uid,
-        createdByName: initialProfile?.nombre || initialProfile?.u || 'Admin',
-        pacienteNombre: reportData.patient,
+        pacienteNombre: (reportData.patient || '').toUpperCase(),
         pacienteDni: reportData.dni || '',
-        obraSocial: reportData.socialWork,
-        fecha: reportData.date,
-        practicaNombre: selectedPractice,
-        tipoReporte: selectedPractice.toLowerCase().includes('fibro') ? 'fibro' : 'clinico',
+        pacienteEmail: reportData.patientEmail || '',
+        pacienteObraSocial: (reportData.socialWork || '').toUpperCase(),
+        practicaNombre: selectedPractice || '',
+        tipoReporte: (reportData.customTitle || selectedPractice || 'Informe'),
         contenidoTexto: content,
+        fecha: reportData.date,
+        pdfUrl: pdfUrl,
+        sentToAdmin: reportData.sentToAdmin || false,
+        fechaUpdatedAt: new Date().toISOString(),
         requester: reportData.requester || '',
         reason: reportData.reason || '',
-        patientEmail: reportData.patientEmail || '',
         includeTitle: reportData.includeTitle,
         enableHeader: reportData.enableHeader,
-        sentToAdmin: reportData.sentToAdmin,
-        skipEmail: reportData.skipEmail || false,
-        pdfUrl: pdfUrl,
-        fechaUpdatedAt: new Date().toISOString()
+        skipEmail: reportData.skipEmail || false
       };
+
+      // Siempre asegurar que exista fechaCreatedAt para que aparezca en el historial (ordenamiento)
+      if (!localReportId) {
+        data.fechaCreatedAt = new Date().toISOString();
+      }
 
       if (!localReportId) {
         if (isSavingRef.current) return;
         isSavingRef.current = true;
         try {
-          data.fechaCreatedAt = new Date().toISOString();
           const docRef = await addDoc(collection(db, 'reports'), data);
           setLocalReportId(docRef.id);
 
@@ -266,8 +291,16 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           isSavingRef.current = false;
         }
       } else {
-        const { setDoc, doc: fireDoc } = await import('firebase/firestore');
-        await setDoc(fireDoc(db, 'reports', localReportId), data, { merge: true });
+        const { setDoc, doc: fireDoc, getDoc: getFireDoc } = await import('firebase/firestore');
+        
+        // Antes de actualizar, verificar si falta fechaCreatedAt
+        const docRef = fireDoc(db, 'reports', localReportId);
+        const docSnap = await getFireDoc(docRef);
+        if (docSnap.exists() && !docSnap.data().fechaCreatedAt) {
+          data.fechaCreatedAt = docSnap.data().fecha || new Date().toISOString();
+        }
+
+        await setDoc(docRef, data, { merge: true });
 
         // LOG AUDIT
         await logAction(
@@ -389,8 +422,11 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         if (!professional) {
           const docSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
           if (docSnap.exists()) {
-            const profData = docSnap.data();
+            const snap = docSnap;
+            const profData = snap.data();
             setProfessional({
+              id: snap.id,
+              uid: snap.id,
               ...profData,
               nombre: profData.nombre || profData.n || 'Médico',
               especialidad: profData.especialidad || profData.esp || '',
@@ -793,12 +829,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       setLoadingStatus('Guardando copia en el historial...');
       await saveToHistory(null, false);
       setIsGenerating(false);
+      handleNewReport();
     } else if (mode === 'save') {
       const pdfName = `Informe - ${reportData.patient} - ${new Date().toLocaleDateString('en-CA')}.pdf`;
       doc.save(pdfName);
       setLoadingStatus('Guardando copia en el historial...');
       await saveToHistory(null, true);
       setIsGenerating(false);
+      handleNewReport();
 
       // Si el botón de envío está desactivado globalmente, enviamos la copia a administración automáticamente al guardar
       if (config.showSendButton === false && config.appsScriptUrl) {
@@ -1014,7 +1052,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       // Auditoría
       await logAction(
         AUDIT_ACTIONS.SEND_REPORT,
-        reportData.patient.replace(/\s/g, '_'),
+        localReportId || reportData.patient.replace(/\s/g, '_'),
         `Informe enviado: ${reportData.patient} (${displayTitle})`,
         { 
           sentToAdmin: !!config.adminEmail,
@@ -1024,6 +1062,8 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       );
 
       showToast('¡Informe enviado con éxito!');
+      handleNewReport();
+
     } catch (err) {
       console.error("Error en handleSendReport:", err);
       showToast('Error al procesar el envío.', 'error');
@@ -1229,9 +1269,28 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      <div className="bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-main">
-        <h1 className="text-xl font-bold text-[var(--text-main)]">Generador de Informes</h1>
-        <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
+      <div className="bg-[var(--bg-card)] p-4 rounded-3xl shadow-sm border border-main flex justify-between items-center">
+        <div>
+            <h1 className="text-xl font-bold text-[var(--text-main)]">Generador de Informes</h1>
+            <p className="text-[10px] text-[var(--text-sub)] uppercase tracking-widest font-bold">Herramienta de Diagnóstico Digital</p>
+        </div>
+        <div className="flex items-center gap-3">
+            <button
+              onClick={handleNewReport}
+              className="px-4 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl font-bold transition-all flex items-center gap-2"
+              title="Nuevo informe para el mismo paciente"
+            >
+              <Plus size={18} />
+              <span className="hidden md:inline">Nuevo Informe</span>
+            </button>
+            <button 
+              onClick={() => navigate('/reports/history')}
+              className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold shadow-lg shadow-blue-500/20 hover:bg-blue-700 transition-all flex items-center gap-2"
+            >
+              <ClipboardList size={18} />
+              <span className="hidden md:inline">Ver Historial</span>
+            </button>
+        </div>
       </div>
 
       {professional?.role?.toLowerCase().includes('secre') && !isSuperSecretaria ? (

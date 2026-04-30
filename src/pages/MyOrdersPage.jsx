@@ -379,14 +379,21 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
               <tbody className="divide-y border-main">
                 {filteredOrders.map((order) => (
                   <tr key={order.id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors">
-                     <td className="px-8 py-6">
-                       <span className="font-bold text-sm text-[var(--text-main)]">
-                         {(() => {
-                           const [y, m, d] = order.date.split('-').map(Number);
-                           return new Date(y, m - 1, d).toLocaleDateString();
-                         })()}
-                       </span>
-                     </td>
+                    <td className="px-8 py-6">
+                      <div className="flex flex-col">
+                        <span className="font-bold text-sm text-[var(--text-main)]">
+                          {(() => {
+                            const [y, m, d] = order.date.split('-').map(Number);
+                            const dateStr = new Date(y, m - 1, d).toLocaleDateString('es-AR');
+                            const timeStr = order.createdAt 
+                              ? ` - ${new Date(order.createdAt.seconds ? order.createdAt.seconds * 1000 : order.createdAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}`
+                              : '';
+                            return `${dateStr}${timeStr}`;
+                          })()}
+                        </span>
+                        <span className="text-[10px] text-gray-400 mt-1">ID: {order.id.substring(0,8)}</span>
+                      </div>
+                    </td>
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
                         <span className="font-black text-sm text-[var(--text-main)]">{toTitleCase(order.name)}</span>

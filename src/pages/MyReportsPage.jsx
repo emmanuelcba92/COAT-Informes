@@ -242,10 +242,10 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         setProfessionals(filtered);
         
         if (!canSelectProfessional) {
-          setSelectedProfId(user.uid);
-          setUploadData(prev => ({ ...prev, profId: user.uid }));
-        } else if (selectedProfId === null || selectedProfId === user.uid) {
-          // Si es admin y está en su propio ID o null, forzar 'all' al inicio
+          const profId = user.uid;
+          setSelectedProfId(profId);
+          setUploadData(prev => ({ ...prev, profId }));
+        } else if (selectedProfId === null) {
           setSelectedProfId('all');
         }
       } catch (err) {
@@ -303,17 +303,36 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         return;
       }
 
-      const snap = await getDocs(q);
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      if (reset) {
-        setReports(list);
-      } else {
-        setReports(prev => [...prev, ...list]);
+      try {
+        const snap = await getDocs(q);
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        if (reset) {
+          setReports(list);
+        } else {
+          setReports(prev => [...prev, ...list]);
+        }
+        
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+        setHasMore(list.length === PAGE_SIZE);
+      } catch (innerErr) {
+        // Fallback si falla por índice faltante
+        if (innerErr.message?.includes('index') || innerErr.code === 'failed-precondition') {
+          console.warn("Missing index for query. Falling back to date-only fetch.");
+          let fallbackQ;
+          if (profId && profId !== 'all') {
+            fallbackQ = query(collection(db, 'reports'), where('profesionalId', '==', profId), orderBy('fecha', 'desc'), limit(50));
+          } else {
+            fallbackQ = query(collection(db, 'reports'), orderBy('fecha', 'desc'), limit(50));
+          }
+          const snap = await getDocs(fallbackQ);
+          const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          setReports(list);
+          setHasMore(false);
+        } else {
+          throw innerErr;
+        }
       }
-      
-      setLastVisible(snap.docs[snap.docs.length - 1]);
-      setHasMore(list.length === PAGE_SIZE);
     } catch (err) {
       console.error("Error fetching reports:", err);
       showToast("Error al cargar informes técnicos.", "error");
@@ -744,10 +763,13 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
   };
 
   const filteredReports = reports.filter(r => {
+    const searchLower = searchTerm.toLowerCase();
     const matchesSearch = 
-      r.pacienteNombre?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      r.pacienteNombre?.toLowerCase().includes(searchLower) ||
       r.pacienteDni?.includes(searchTerm) ||
-      r.practicaNombre?.toLowerCase().includes(searchTerm.toLowerCase());
+      r.practicaNombre?.toLowerCase().includes(searchLower) ||
+      r.profesionalNombre?.toLowerCase().includes(searchLower) ||
+      r.contenidoTexto?.toLowerCase().includes(searchLower);
     
     if (filterType === 'all') return matchesSearch;
     return matchesSearch && r.tipoReporte === filterType;
@@ -887,15 +909,22 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   <tr key={report.id} className="hover:bg-[var(--bg-secondary)]/50 transition-colors group">
                     <td className="px-8 py-6">
                       <div className="flex flex-col">
-                        <span className="font-bold text-sm">
-                          {report.fecha?.includes('-') 
-                            ? (() => {
-                                const [y, m, d] = report.fecha.split('-').map(Number);
-                                return new Date(y, m - 1, d).toLocaleDateString('es-AR');
-                              })()
-                            : report.fecha}
-                        </span>
-                        <span className="text-[10px] text-gray-400">ID: {report.id.substring(0,8)}</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold text-sm">
+                            {report.fecha?.includes('-') 
+                              ? (() => {
+                                  const [y, m, d] = report.fecha.split('-').map(Number);
+                                  return new Date(y, m - 1, d).toLocaleDateString('es-AR');
+                                })()
+                              : report.fecha}
+                            {report.fechaCreatedAt && (
+                              <span className="ml-2 text-blue-600/60 dark:text-blue-400/60 font-medium">
+                                - {new Date(report.fechaCreatedAt).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                        <span className="text-[10px] text-gray-400 mt-1">ID: {report.id.substring(0,8)}</span>
                       </div>
                     </td>
                     <td className="px-8 py-6">

@@ -3054,8 +3054,8 @@ const AdminPage = () => {
                             </span>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex flex-col max-w-xs">
-                              <span className="text-xs font-medium text-[var(--text-sub)] truncate">{log.targetName}</span>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-medium text-[var(--text-sub)] break-words">{log.targetName}</span>
                               {log.details?.type && (
                                 <span className="text-[9px] text-gray-400 uppercase tracking-tighter">{log.details.type}</span>
                               )}

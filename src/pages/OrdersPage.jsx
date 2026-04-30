@@ -124,7 +124,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
     if (!auth.currentUser || !patientData.name) return;
     try {
       const data = {
-        profesionalId: localOrderId ? (profile?.id || profile?.uid || auth.currentUser.uid) : auth.currentUser.uid,
+        profesionalId: profile?.id || profile?.uid || auth.currentUser.uid,
         profesionalName: profile?.nombre || profile?.n || 'Médico',
         name: patientData.name.toUpperCase(),
         dni: patientData.dni || '',
@@ -144,10 +144,18 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
 
       if (!localOrderId) {
         data.createdAt = new Date().toISOString();
+      }
         const docRef = await addDoc(collection(db, 'orders'), data);
         setLocalOrderId(docRef.id);
       } else {
-        await setDoc(doc(db, 'orders', localOrderId), data, { merge: true });
+        const { getDoc: getFireDoc } = await import('firebase/firestore');
+        const docRef = doc(db, 'orders', localOrderId);
+        const docSnap = await getFireDoc(docRef);
+        if (docSnap.exists() && !docSnap.data().createdAt) {
+          data.createdAt = docSnap.data().date || new Date().toISOString();
+        }
+
+        await setDoc(docRef, data, { merge: true });
         if (shouldNavigate) {
           showToast("¡Pedido actualizado!");
           setTimeout(() => navigate('/orders/history'), 1500);
@@ -156,6 +164,29 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
     } catch (err) {
       console.error("Error saving order to history:", err);
     }
+  };
+
+  const handleNewOrder = () => {
+    setLocalOrderId(null);
+    setIsEditing(false);
+    setPatientData({
+      name: '',
+      dni: '',
+      insurance: '',
+      affiliateNumber: '',
+      diagnosis: '',
+      date: new Date().toLocaleDateString('en-CA'),
+      patientEmail: '',
+      observations: '',
+      sentToAdmin: false
+    });
+    setSelectedPractices([]);
+    setQuantities({});
+    setIndications({});
+    setCustomPractices([]);
+    setNewCustomPractice('');
+    setSearchQuery('');
+    showToast('Formulario reiniciado para un nuevo pedido');
   };
   
   const [selectedPractices, setSelectedPractices] = useState([]);
@@ -190,9 +221,13 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
     if (!profile && auth.currentUser) {
       const fetchFullProfile = async () => {
         try {
-          const docSnap = await getDoc(doc(db, 'users', auth.currentUser.uid));
-          if (docSnap.exists()) {
-            setProfile(docSnap.data());
+          const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+          if (snap.exists()) {
+            setProfile({
+              id: snap.id,
+              uid: snap.id,
+              ...snap.data()
+            });
           }
         } catch (err) {
           console.error("Error fetching full profile:", err);
@@ -510,11 +545,34 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
       doc.text("Urquiza 401 - X5000KPI Córdoba - Tel. (0351) 423-0530 - WhatsApp +54 3543 579794 - www.coat.com.ar", centerX, pageHeight - 12, { align: 'center' });
 
       if (mode === 'save') {
-        doc.save(`Pedido_${patientData.name || 'Paciente'}.pdf`);
+        const pdfName = `Pedido_${patientData.name.replace(/\s/g, '_')}_${new Date().toLocaleDateString('en-CA')}.pdf`;
+        doc.save(pdfName);
         await saveOrderToHistory(isEditing);
+
+        // Auto-save to Drive if enabled
+        if (config.autoSaveToDrive && config.appsScriptUrl) {
+          try {
+            const pdfBase64 = doc.output('datauristring').split(',')[1];
+            fetch(config.appsScriptUrl, {
+              method: 'POST',
+              mode: 'no-cors',
+              body: JSON.stringify({
+                token: config.token,
+                pdfBase64,
+                fileName: pdfName,
+                folderId: config.ordersFolderId,
+                dni: patientData.dni
+              })
+            }).catch(e => console.error("Error auto-saving order to Drive:", e));
+          } catch (err) {
+            console.error("Failed to auto-save to Drive:", err);
+          }
+        }
+        handleNewOrder();
       } else if (mode === 'print') {
         window.open(doc.output('bloburl'), '_blank');
         await saveOrderToHistory(false);
+        handleNewOrder();
       } else {
         return doc;
       }
@@ -564,6 +622,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
       await saveOrderToHistory(false);
       
       showToast('¡Pedido enviado con éxito!');
+      handleNewOrder();
     } catch (err) {
       showToast('Error al enviar email.', 'error');
     } finally {
