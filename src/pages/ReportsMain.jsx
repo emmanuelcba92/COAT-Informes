@@ -17,6 +17,7 @@ const ReportsMain = ({ currentUser, userProfile, isAdmin = false, isSecretaria =
   const navigate = useNavigate();
   const location = useLocation();
   const currentPath = location.pathname;
+  const isPreview = new URLSearchParams(location.search).get('preview') === 'true';
 
   const tabs = [
     { id: 'new', label: 'Generar Informe', icon: FilePlus, path: '/reports/new', show: !isSecretaria || isSuperSecretaria },
@@ -33,7 +34,7 @@ const ReportsMain = ({ currentUser, userProfile, isAdmin = false, isSecretaria =
       <div className="min-h-[400px]">
         <Suspense fallback={<div className="p-10 text-center opacity-50">Cargando sección...</div>}>
           <Routes>
-            <Route path="new" element={(!isSecretaria || isSuperSecretaria) ? <ReportsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretaria} userProfile={userProfile} isDarkMode={isDarkMode} /> : <Navigate to="/reports/history" replace />} />
+            <Route path="new" element={(!isSecretaria || isSuperSecretaria || isPreview) ? <ReportsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretaria} userProfile={userProfile} isDarkMode={isDarkMode} /> : <Navigate to="/reports/history" replace />} />
             <Route path="history" element={<MyReportsPage user={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretaria} isDarkMode={isDarkMode} />} />
             <Route path="models" element={canCustomizeModels && (!isSecretaria || isSuperSecretaria) ? <PracticesPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/history" replace />} />
             <Route index element={(isSecretaria && !isSuperSecretaria) ? <Navigate to="history" replace /> : <Navigate to="new" replace />} />

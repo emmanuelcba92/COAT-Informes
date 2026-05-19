@@ -23,6 +23,73 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, collection, getDocs, addDoc, setDoc, arrayUnion } from 'firebase/firestore';
+
+const cropSignatureCanvas = (img) => {
+  try {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.width;
+    tempCanvas.height = img.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(img, 0, 0);
+    
+    const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imgData.data;
+    const width = tempCanvas.width;
+    const height = tempCanvas.height;
+    
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    let found = false;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        
+        // Calcular brillo del píxel en escala de grises
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        
+        // Considerar fondo si es muy transparente (a < 50) o muy claro/blanco (gray > 200)
+        const isBackground = (a < 50) || (gray > 200);
+        
+        if (!isBackground) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          found = true;
+        }
+      }
+    }
+    
+    if (!found) return tempCanvas;
+    
+    // Dejar un pequeño margen de cortesía de 3 píxeles
+    minX = Math.max(0, minX - 3);
+    minY = Math.max(0, minY - 3);
+    maxX = Math.min(width - 1, maxX + 3);
+    maxY = Math.min(height - 1, maxY + 3);
+    
+    const cropW = maxX - minX + 1;
+    const cropH = maxY - minY + 1;
+    
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropW;
+    cropCanvas.height = cropH;
+    const cropCtx = cropCanvas.getContext('2d');
+    cropCtx.drawImage(tempCanvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+    
+    return cropCanvas;
+  } catch (e) {
+    console.error("Error cropping signature, returning original:", e);
+    return img;
+  }
+};
 import { AUDIT_ACTIONS, logAction } from '../services/auditService';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -141,6 +208,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const editId = new URLSearchParams(location.search).get('edit');
   const printFlag = new URLSearchParams(location.search).get('print');
   const previewFlag = new URLSearchParams(location.search).get('preview');
+  const isPreview = previewFlag === 'true';
   const [isEditing, setIsEditing] = useState(false);
   const [localReportId, setLocalReportId] = useState(editId || null);
   const [loadingStatus, setLoadingStatus] = useState('');
@@ -465,13 +533,13 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           if (docSnap.exists()) {
             const data = docSnap.data();
             setReportData({
-              patient: data.pacienteNombre || '',
-              socialWork: data.obraSocial || '',
-              dni: data.pacienteDni || '',
-              date: data.fecha || new Date().toISOString().split('T')[0],
+              patient: data.pacienteNombre || data.patient || '',
+              socialWork: data.pacienteObraSocial || data.obraSocial || '',
+              dni: data.pacienteDni || data.dni || '',
+              date: data.fecha || data.date || new Date().toISOString().split('T')[0],
               requester: data.requester || '',
               reason: data.reason || '',
-              patientEmail: data.patientEmail || '',
+              patientEmail: data.pacienteEmail || data.patientEmail || '',
               includeTitle: data.includeTitle !== undefined ? data.includeTitle : true,
               customTitle: data.customTitle || '',
               enableHeader: data.enableHeader || false,
@@ -525,11 +593,18 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     if ((printFlag === 'true' || previewFlag === 'true') && isEditing) {
       // Damos un pequeño respiro para asegurar que los estados se hayan seteado
       const timer = setTimeout(async () => {
-        // Generamos aunque falten cosas, la función generatePDF ya tiene fallbacks
-        const blob = await generatePDF('blob');
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          setPreviewUrl(url);
+        try {
+          // Generamos aunque falten cosas, la función generatePDF ya tiene fallbacks
+          const blob = await generatePDF('blob');
+          if (blob) {
+            const url = URL.createObjectURL(blob);
+            setPreviewUrl(url);
+          } else {
+            console.warn("generatePDF devolvió un blob vacío para la vista previa.");
+          }
+        } catch (err) {
+          console.error("Error en useEffect de auto-preview:", err);
+          showToast(`Error al generar vista previa: ${err.message}`, 'error');
         }
       }, 1000);
       return () => clearTimeout(timer);
@@ -565,14 +640,19 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   };
 
   const generatePDF = async (mode = 'print') => {
-    const r = reportRequiredFields;
-    if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
-    if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
-    if (r.reportRequiredSocialWork && !reportData.socialWork.trim()) { showToast('El campo Obra Social es obligatorio.', 'error'); return null; }
-    if (r.reportRequiredDni        && !reportData.dni.trim())        { showToast('El campo DNI es obligatorio.', 'error');         return null; }
-    if (r.reportRequiredRequester  && !reportData.requester.trim())  { showToast('El campo Solicitante es obligatorio.', 'error'); return null; }
-    if (r.reportRequiredReason     && !reportData.reason.trim())     { showToast('El campo Motivo es obligatorio.', 'error');      return null; }
-    if (r.reportRequiredEmail      && !reportData.patientEmail.trim()){ showToast('El campo Email es obligatorio.', 'error');     return null; }
+    try {
+      const r = reportRequiredFields;
+      // Do not enforce strict field validation for pure preview/print visual modes of saved documents
+      const isVisualMode = previewFlag === 'true' || printFlag === 'true' || mode === 'blob';
+      if (!isVisualMode) {
+        if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
+        if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
+        if (r.reportRequiredSocialWork && !reportData.socialWork.trim()) { showToast('El campo Obra Social es obligatorio.', 'error'); return null; }
+        if (r.reportRequiredDni        && !reportData.dni.trim())        { showToast('El campo DNI es obligatorio.', 'error');         return null; }
+        if (r.reportRequiredRequester  && !reportData.requester.trim())  { showToast('El campo Solicitante es obligatorio.', 'error'); return null; }
+        if (r.reportRequiredReason     && !reportData.reason.trim())     { showToast('El campo Motivo es obligatorio.', 'error');      return null; }
+        if (r.reportRequiredEmail      && !reportData.patientEmail.trim()){ showToast('El campo Email es obligatorio.', 'error');     return null; }
+      }
 
     await savePatientToHistory();
     setIsGenerating(true);
@@ -668,8 +748,23 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
-    const [yY, mM, dD] = reportData.date.split('-').map(Number);
-    const formattedDate = new Date(yY, mM - 1, dD).toLocaleDateString('es-AR');
+    let dateObj = new Date();
+    if (reportData.date) {
+      if (typeof reportData.date.toDate === 'function') {
+        dateObj = reportData.date.toDate();
+      } else if (reportData.date instanceof Date) {
+        dateObj = reportData.date;
+      } else {
+        const parts = reportData.date.toString().split('-');
+        if (parts.length === 3) {
+          const [yY, mM, dD] = parts.map(Number);
+          dateObj = new Date(yY, mM - 1, dD);
+        } else {
+          dateObj = new Date(reportData.date);
+        }
+      }
+    }
+    const formattedDate = isNaN(dateObj.getTime()) ? 'Sin fecha' : dateObj.toLocaleDateString('es-AR');
     infoParts.push(`FECHA: ${formattedDate}`);
     if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester}`);
     if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason}`);
@@ -759,36 +854,61 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         
         // Procesar imagen (sea URL o Base64 antigua) para asegurar que esté redimensionada y optimizada
         try {
-          imageData = await new Promise((resolve, reject) => {
+          const sigData = await new Promise((resolve, reject) => {
             const img = new Image();
             img.crossOrigin = "Anonymous";
             img.onload = () => {
+              const croppedCanvas = cropSignatureCanvas(img);
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
               // Redimensionar a un tamaño profesional razonable (max 600px de ancho)
               const maxWidth = 600;
-              const scale = Math.min(1, maxWidth / img.width);
-              canvas.width = img.width * scale;
-              canvas.height = img.height * scale;
-              ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-              resolve(canvas.toDataURL('image/png', 0.8));
+              const scale = Math.min(1, maxWidth / croppedCanvas.width);
+              canvas.width = croppedCanvas.width * scale;
+              canvas.height = croppedCanvas.height * scale;
+              ctx.drawImage(croppedCanvas, 0, 0, canvas.width, canvas.height);
+              resolve({
+                data: canvas.toDataURL('image/png', 0.8),
+                ratio: croppedCanvas.width / croppedCanvas.height
+              });
             };
             img.onerror = () => reject(new Error("Error al cargar imagen para redimensionar"));
-            
-            // Si es una URL de Supabase, la descargamos primero para evitar problemas de CORS/Blobs
-            // Pero Image() con crossOrigin suele manejar URLs directas si el bucket tiene CORS configurado.
-            // Para mayor seguridad con el flujo de jsPDF, usamos la URL o el Base64 directamente.
             img.src = imageData;
           });
-        } catch (err) {
-          console.error("Error optimizing signature image:", err);
-          // Si falla el redimensionamiento, intentamos usar la original como fallback
-        }
 
-        doc.addImage(imageData, 'PNG', 140, currentY, 35, 12, undefined, 'FAST');
-        currentY += 15;
+          // Calcular dimensiones proporcionales (Aumentadas para mayor visibilidad)
+          const maxW = 75;
+          const maxH = 30;
+          const imageRatio = sigData.ratio || 2.5;
+          let sigW = maxW;
+          let sigH = maxH;
+          if (imageRatio > maxW / maxH) {
+            sigW = maxW;
+            sigH = maxW / imageRatio;
+          } else {
+            sigH = maxH;
+            sigW = maxH * imageRatio;
+          }
+
+          // Centrado perfecto sobre X = 160
+          doc.addImage(sigData.data, 'PNG', 160 - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
+          currentY += sigH + 3;
+        } catch (err) {
+          console.error("Error optimizing signature image, trying direct addImage:", err);
+          // Si falla, intentamos agregarla directamente con un tamaño estándar y centrado
+          try {
+            const sigW = 65;
+            const sigH = 24;
+            doc.addImage(imageData, 'PNG', 160 - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
+            currentY += sigH + 3;
+          } catch (directErr) {
+            console.error("Failed to add signature image directly:", directErr);
+            currentY += 5; // Fallback sin firma
+          }
+        }
       } catch (e) {
         console.error("Error signature:", e);
+        currentY += 5;
       }
     } else {
         currentY += 5;
@@ -871,8 +991,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       return doc.output('blob');
     }
     
-    setIsGenerating(false);
-    return doc;
+      setIsGenerating(false);
+      return doc;
+    } catch (err) {
+      console.error("Error crítico en generatePDF:", err);
+      showToast(`Error al generar PDF: ${err.message}`, 'error');
+      setIsGenerating(false);
+      return null;
+    }
   };
 
   const handleSendReport = async () => {

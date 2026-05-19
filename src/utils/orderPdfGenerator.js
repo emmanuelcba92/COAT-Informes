@@ -1,21 +1,89 @@
 import jsPDF from 'jspdf';
 
+const cropSignatureCanvas = (img) => {
+  try {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = img.width;
+    tempCanvas.height = img.height;
+    const tempCtx = tempCanvas.getContext('2d');
+    tempCtx.drawImage(img, 0, 0);
+    
+    const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+    const data = imgData.data;
+    const width = tempCanvas.width;
+    const height = tempCanvas.height;
+    
+    let minX = width;
+    let minY = height;
+    let maxX = 0;
+    let maxY = 0;
+    let found = false;
+    
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        const idx = (y * width + x) * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        
+        // Calcular brillo del píxel en escala de grises
+        const gray = 0.299 * r + 0.587 * g + 0.114 * b;
+        
+        // Considerar fondo si es muy transparente (a < 50) o muy claro/blanco (gray > 200)
+        const isBackground = (a < 50) || (gray > 200);
+        
+        if (!isBackground) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+          found = true;
+        }
+      }
+    }
+    
+    if (!found) return tempCanvas;
+    
+    // Dejar un pequeño margen de cortesía de 3 píxeles
+    minX = Math.max(0, minX - 3);
+    minY = Math.max(0, minY - 3);
+    maxX = Math.min(width - 1, maxX + 3);
+    maxY = Math.min(height - 1, maxY + 3);
+    
+    const cropW = maxX - minX + 1;
+    const cropH = maxY - minY + 1;
+    
+    const cropCanvas = document.createElement('canvas');
+    cropCanvas.width = cropW;
+    cropCanvas.height = cropH;
+    const cropCtx = cropCanvas.getContext('2d');
+    cropCtx.drawImage(tempCanvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
+    
+    return cropCanvas;
+  } catch (e) {
+    console.error("Error cropping signature, returning original:", e);
+    return img;
+  }
+};
+
 const optimizeImage = async (src, maxWidth = 600) => {
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = "Anonymous";
     img.onload = () => {
+      const croppedCanvas = cropSignatureCanvas(img);
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      const scale = Math.min(1, maxWidth / img.width);
-      canvas.width = img.width * scale;
-      canvas.height = img.height * scale;
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const scale = Math.min(1, maxWidth / croppedCanvas.width);
+      canvas.width = croppedCanvas.width * scale;
+      canvas.height = croppedCanvas.height * scale;
+      ctx.drawImage(croppedCanvas, 0, 0, canvas.width, canvas.height);
       // Usamos JPEG para mejor compresión si no necesitamos transparencia absoluta, 
       // o PNG con calidad reducida. Para firmas, PNG es mejor para preservar trazos.
       resolve({ 
         data: canvas.toDataURL('image/png', 0.7), 
-        ratio: img.width / img.height 
+        ratio: croppedCanvas.width / croppedCanvas.height 
       });
     };
     img.onerror = () => resolve(null);
@@ -94,9 +162,20 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       try {
         const sigData = await optimizeImage(profile.signatureBase64, 500);
         if (sigData) {
-          const sigW = 40;
-          const sigH = Math.min(14, sigW / sigData.ratio);
-          targetDoc.addImage(sigData.data, 'PNG', signatureX + 12, signatureY - sigH - 2, sigW, sigH, undefined, 'FAST');
+          const maxW = 75;
+          const maxH = 28;
+          const imageRatio = sigData.ratio || 2.5;
+          let sigW = maxW;
+          let sigH = maxH;
+          if (imageRatio > maxW / maxH) {
+            sigW = maxW;
+            sigH = maxW / imageRatio;
+          } else {
+            sigH = maxH;
+            sigW = maxH * imageRatio;
+          }
+          // Centrar perfectamente a signatureX + 32 y ubicar a 3mm sobre el sello
+          targetDoc.addImage(sigData.data, 'PNG', signatureX + 32 - (sigW / 2), signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
         }
       } catch (e) {}
     }
