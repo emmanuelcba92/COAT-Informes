@@ -339,6 +339,7 @@ const ProfilePage = ({ isAdmin }) => {
                     <option value="electrografías">Electrografías</option>
                     <option value="orl">ORL</option>
                     <option value="vestibular">Vestibular</option>
+                    <option value="fonoaudiología">Fonoaudiología</option>
                   </optgroup>
                   <optgroup label="Administración">
                     <option value="admin">Administrador</option>

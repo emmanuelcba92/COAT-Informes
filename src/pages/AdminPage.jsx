@@ -197,7 +197,7 @@ const AdminPage = () => {
           const profile = docSnap.data();
           const role = profile.role?.toLowerCase() || "";
 
-          const medicalRoles = ['cabeza y cuello', 'cx plástica', 'electrografías', 'orl', 'vestibular', 'directora_medica'];
+          const medicalRoles = ['cabeza y cuello', 'cx plástica', 'electrografías', 'orl', 'vestibular', 'fonoaudiología', 'directora_medica'];
           const isMedicalRole = medicalRoles.includes(role) || role.includes('médico') || role.includes('fonoaudiología');
 
           const isAuthorized = role === "admin" || whiteList.includes(email);
@@ -1880,6 +1880,7 @@ const AdminPage = () => {
                               <option value="electrografías">Electrografías</option>
                               <option value="orl">ORL</option>
                               <option value="vestibular">Vestibular</option>
+                              <option value="fonoaudiología">Fonoaudiología</option>
                             </optgroup>
                           </select>
                         </td>
@@ -2073,6 +2074,7 @@ const AdminPage = () => {
                       { id: "electrografías", label: "Electrografías" },
                       { id: "orl", label: "ORL" },
                       { id: "vestibular", label: "Vestibular" },
+                      { id: "fonoaudiología", label: "Fonoaudiología" },
                       { id: "directora_medica", label: "Directora Médica" }
                     ].map(roleObj => (
                       <button
@@ -2495,7 +2497,8 @@ const AdminPage = () => {
                             { id: "cx plástica", label: "CX plástica" },
                             { id: "electrografías", label: "Electrografías" },
                             { id: "orl", label: "ORL" },
-                            { id: "vestibular", label: "Vestibular" }
+                            { id: "vestibular", label: "Vestibular" },
+                            { id: "fonoaudiología", label: "Fonoaudiología" }
                           ].map(roleObj => (
                             <button
                               key={roleObj.id}
@@ -2595,6 +2598,7 @@ const AdminPage = () => {
                                   { id: "electrografías", label: "Electrografías" },
                                   { id: "orl", label: "ORL" },
                                   { id: "vestibular", label: "Vestibular" },
+                                  { id: "fonoaudiología", label: "Fonoaudiología" },
                                   { id: "directora_medica", label: "Directora Médica" }
                                 ].map(roleObj => (
                                   <button
@@ -3628,6 +3632,7 @@ const AdminPage = () => {
                         <option value="electrografías">Electrografías</option>
                         <option value="orl">ORL</option>
                         <option value="vestibular">Vestibular</option>
+                        <option value="fonoaudiología">Fonoaudiología</option>
                       </optgroup>
                     </select>
                   </div>
