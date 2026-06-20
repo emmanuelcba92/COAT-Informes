@@ -346,7 +346,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
   }, [editId]);
 
   const [isSending, setIsSending] = useState(false);
-  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '', ordersFolderId: '', autoSaveToDrive: false });
+  const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '', driveFolderId: '', ordersFolderId: '', autoSaveToDrive: false });
   const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
 
   const showToast = (message, type = 'success') => {
@@ -656,7 +656,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
                 token: config.token,
                 pdfBase64,
                 fileName: pdfName,
-                folderId: config.ordersFolderId,
+                folderId: config.ordersFolderId || config.driveFolderId,
                 dni: patientData.dni
               })
             }).catch(e => console.error("Error auto-saving order to Drive:", e));
@@ -709,7 +709,7 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
           subject: `COAT - Pedido Médico Digital: ${patientData.name}`,
           message: `<p>Estimado/a <strong>${patientData.name}</strong>, le adjuntamos su pedido médico.</p>`,
           fileName: `Pedido_${patientData.name.replace(/\s/g, '_')}.pdf`,
-          folderId: config.autoSaveToDrive ? config.ordersFolderId : null,
+          folderId: config.autoSaveToDrive ? (config.ordersFolderId || config.driveFolderId) : null,
           dni: patientData.dni
         })
       });

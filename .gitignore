@@ -32,3 +32,6 @@ Thumbs.db
 
 # Firebase cache
 .firebase/
+
+# Scratch folder
+scratch/
