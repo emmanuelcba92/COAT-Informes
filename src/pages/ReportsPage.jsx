@@ -104,6 +104,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const [reportData, setReportData] = useState({
     patient: '',
     socialWork: '',
+    affiliateNumber: '',
     dni: '',
     date: new Date().toLocaleDateString('en-CA'), // ISO-like but robust local date (YYYY-MM-DD)
     requester: '',
@@ -131,6 +132,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               ...prev,
               patient: data.name || data.nombre || prev.patient,
               socialWork: data.insurance || data.obraSocial || prev.socialWork,
+              affiliateNumber: data.affiliateNumber || data.nroAfiliado || prev.affiliateNumber || '',
               patientEmail: autoEmail || prev.patientEmail
             }));
             showToast('✓ Datos de paciente cargados');
@@ -169,6 +171,8 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         dni: cleanDni,
         insurance: insuranceName,
         obraSocial: insuranceName,
+        affiliateNumber: reportData.affiliateNumber || '',
+        nroAfiliado: reportData.affiliateNumber || '',
         professionalIds: arrayUnion(professional?.id || professional?.uid || auth.currentUser.uid),
         lastUpdated: new Date().toISOString()
       };
@@ -194,6 +198,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     reportRequiredPatient:    true,
     reportRequiredDate:       true,
     reportRequiredSocialWork: true,
+    reportRequiredAffiliate:  false,
     reportRequiredDni:        false,
     reportRequiredRequester:  false,
     reportRequiredReason:     false,
@@ -271,6 +276,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               dni: patient.dni || prev.dni,
               patient: patient.nombre || prev.patient,
               socialWork: patient.obraSocial || prev.socialWork,
+              affiliateNumber: patient.affiliateNumber || patient.nroAfiliado || prev.affiliateNumber || '',
               patientEmail: patient.email || prev.patientEmail
             }));
             showToast('✓ Datos extraídos correctamente');
@@ -294,6 +300,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     setReportData({
       patient: '',
       socialWork: '',
+      affiliateNumber: '',
       dni: '',
       date: new Date().toLocaleDateString('en-CA'),
       requester: '',
@@ -328,6 +335,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         pacienteDni: reportData.dni || '',
         pacienteEmail: reportData.patientEmail || '',
         pacienteObraSocial: (reportData.socialWork || '').toUpperCase(),
+        pacienteNroAfiliado: reportData.affiliateNumber || '',
         practicaNombre: selectedPractice || '',
         tipoReporte: (reportData.customTitle || selectedPractice || 'Informe'),
         contenidoTexto: content,
@@ -484,6 +492,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             reportRequiredPatient:    cfgData.reportRequiredPatient    !== false ? true  : false,
             reportRequiredDate:       cfgData.reportRequiredDate       !== false ? true  : false,
             reportRequiredSocialWork: cfgData.reportRequiredSocialWork !== false ? true  : false,
+            reportRequiredAffiliate:  cfgData.reportRequiredAffiliate  === true,
             reportRequiredDni:        cfgData.reportRequiredDni        === true,
             reportRequiredRequester:  cfgData.reportRequiredRequester  === true,
             reportRequiredReason:     cfgData.reportRequiredReason     === true,
@@ -535,6 +544,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             setReportData({
               patient: data.pacienteNombre || data.patient || '',
               socialWork: data.pacienteObraSocial || data.obraSocial || '',
+              affiliateNumber: data.pacienteNroAfiliado || data.nroAfiliado || data.affiliateNumber || '',
               dni: data.pacienteDni || data.dni || '',
               date: data.fecha || data.date || new Date().toISOString().split('T')[0],
               requester: data.requester || '',
@@ -648,6 +658,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
         if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
         if (r.reportRequiredSocialWork && !reportData.socialWork.trim()) { showToast('El campo Obra Social es obligatorio.', 'error'); return null; }
+        if (r.reportRequiredAffiliate  && !reportData.affiliateNumber.trim()) { showToast('El campo Nro. Afiliado es obligatorio.', 'error'); return null; }
         if (r.reportRequiredDni        && !reportData.dni.trim())        { showToast('El campo DNI es obligatorio.', 'error');         return null; }
         if (r.reportRequiredRequester  && !reportData.requester.trim())  { showToast('El campo Solicitante es obligatorio.', 'error'); return null; }
         if (r.reportRequiredReason     && !reportData.reason.trim())     { showToast('El campo Motivo es obligatorio.', 'error');      return null; }
@@ -747,6 +758,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     doc.setFontSize(8.5);
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
+    if (reportData.affiliateNumber) infoParts.push(`Nro. Afiliado ${reportData.affiliateNumber}`);
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
     let dateObj = new Date();
     if (reportData.date) {
@@ -1589,8 +1601,8 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             </div>
           </div>
 
-          {/* Row 2: Fecha + Obra Social + Solicitante */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Row 2: Fecha + Obra Social + Nro. Afiliado + Solicitante */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div className="space-y-1">
               <label className="text-xs font-bold uppercase opacity-60">
                 Fecha {reportRequiredFields.reportRequiredDate ? '*' : '(Opc)'}
@@ -1617,6 +1629,21 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
                 onChange={e => {
                   const val = e.target.value;
                   setReportData(prev => ({ ...prev, socialWork: val }));
+                }}
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-bold uppercase opacity-60">
+                Nro. Afiliado {reportRequiredFields.reportRequiredAffiliate ? '*' : '(Opc)'}
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder=""
+                value={reportData.affiliateNumber}
+                onChange={e => {
+                  const val = e.target.value;
+                  setReportData(prev => ({ ...prev, affiliateNumber: val }));
                 }}
               />
             </div>

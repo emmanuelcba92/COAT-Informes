@@ -107,6 +107,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     patientName: '',
     patientDni: '',
     socialWork: '',
+    affiliateNumber: '',
     requester: '',
     reason: '',
     patientEmail: '',
@@ -133,6 +134,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
               ...prev,
               patientName: data.name || data.nombre || prev.patientName,
               socialWork: data.insurance || data.obraSocial || prev.socialWork,
+              affiliateNumber: data.affiliateNumber || data.nroAfiliado || prev.affiliateNumber || '',
               patientEmail: autoEmail || prev.patientEmail
             }));
             showToast('✓ Datos de paciente cargados');
@@ -164,6 +166,8 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         dni: cleanDni,
         insurance: insuranceName,
         obraSocial: insuranceName,
+        affiliateNumber: uploadData.affiliateNumber || '',
+        nroAfiliado: uploadData.affiliateNumber || '',
         professionalIds: arrayUnion(uploadData.profId || user.uid),
         lastUpdated: new Date().toISOString()
       };
@@ -205,6 +209,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
               patientDni: p.dni || prev.patientDni,
               patientName: p.nombre || prev.patientName,
               socialWork: p.obraSocial || prev.socialWork,
+              affiliateNumber: p.affiliateNumber || p.nroAfiliado || prev.affiliateNumber || '',
               patientEmail: p.email || prev.patientEmail
             }));
             showToast('¡Datos extraídos de la captura!');
@@ -397,6 +402,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         pacienteNombre: uploadData.patientName.toUpperCase(),
         pacienteDni: uploadData.patientDni || '',
         obraSocial: uploadData.socialWork.toUpperCase(),
+        pacienteNroAfiliado: uploadData.affiliateNumber || '',
         fecha: uploadData.date,
         fechaCreatedAt: new Date().toISOString(),
         pdfUrl: downloadURL,
@@ -544,6 +550,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       setIsUploadModalOpen(false);
       setUploadData({
         file: null, patientName: '', patientDni: '', socialWork: '', 
+        affiliateNumber: '',
         requester: '', reason: '', patientEmail: '', profId: '',
         date: new Date().toLocaleDateString('en-CA')
       });
@@ -1148,7 +1155,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   </div>
                 </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Obra Social (Opc)</label>
                       <input 
@@ -1157,6 +1164,16 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                         className="input-field"
                         value={uploadData.socialWork}
                         onChange={e => setUploadData({...uploadData, socialWork: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Nro. Afiliado (Opc)</label>
+                      <input 
+                        type="text" 
+                        placeholder=""
+                        className="input-field"
+                        value={uploadData.affiliateNumber}
+                        onChange={e => setUploadData({...uploadData, affiliateNumber: e.target.value})}
                       />
                     </div>
                     <div className="space-y-1">

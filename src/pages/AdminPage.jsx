@@ -2158,6 +2158,7 @@ const AdminPage = () => {
               { key: 'reportRequiredPatient',    label: 'Nombre del Paciente',  defaultOn: true },
               { key: 'reportRequiredDate',       label: 'Fecha',                defaultOn: true },
               { key: 'reportRequiredSocialWork', label: 'Obra Social',          defaultOn: true },
+              { key: 'reportRequiredAffiliate',  label: 'Nro. Afiliado',        defaultOn: false },
               { key: 'reportRequiredDni',        label: 'DNI',                  defaultOn: false },
               { key: 'reportRequiredRequester',  label: 'Solicitante',          defaultOn: false },
               { key: 'reportRequiredReason',     label: 'Motivo / Descripción', defaultOn: false },
