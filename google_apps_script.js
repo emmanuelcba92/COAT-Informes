@@ -24,6 +24,25 @@ function doPost(e) {
       return createResponse({ success: false, error: "Unauthorized" }, 401);
     }
 
+    // Acción de diagnóstico para verificar métodos del objeto Folder
+    if (data.action === "testFolder") {
+      try {
+        var folder = DriveApp.getRootFolder();
+        var props = [];
+        for (var p in folder) {
+          props.push(p);
+        }
+        return createResponse({
+          success: true,
+          methods: props,
+          typeof: typeof folder,
+          string: folder.toString()
+        });
+      } catch (err) {
+        return createResponse({ success: false, error: err.toString() });
+      }
+    }
+
     // Acción: Obtener cuota de almacenamiento
     if (data.action === "getQuota") {
       try {
@@ -101,7 +120,7 @@ function doPost(e) {
         emailSent = true;
       } catch (mailErr) {
         emailError = mailErr.toString();
-        Logger.log("Error al enviar email: " + emailError);
+        Logger.log("Error al enviar email: " + mailError);
       }
     }
 
