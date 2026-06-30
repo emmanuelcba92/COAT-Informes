@@ -55,6 +55,7 @@ function App() {
   const navigate = useNavigate();
   const location = useLocation();
   const [ordersEnabled, setOrdersEnabled] = useState(true);
+  const [fonoaudiologiaOrdersEnabled, setFonoaudiologiaOrdersEnabled] = useState(false);
 
   const [isDarkMode, setIsDarkMode] = useState(() => {
     return localStorage.getItem('theme') === 'dark';
@@ -127,6 +128,7 @@ function App() {
         unsubscribeSettings = onSnapshot(doc(db, 'config', 'order_settings'), (snap) => {
           if (snap.exists()) {
             setOrdersEnabled(snap.data().ordersEnabled ?? true);
+            setFonoaudiologiaOrdersEnabled(snap.data().fonoaudiologiaOrdersEnabled ?? false);
           }
         });
 
@@ -188,7 +190,11 @@ function App() {
 
   const isSuperSecretariaFinal = isSuperSecretaria || userProfile?.role === 'super_secretaria';
 
-  const canSeeOrders = ordersEnabled || isAdmin || isDirectora || isSuperSecretariaFinal;
+  const userRole = userProfile?.role?.toLowerCase() || '';
+  const isFonoaudiologia = userRole === 'fonoaudiología' || userRole === 'fonoaudiologia';
+
+  const canSeeOrders = (isAdmin || isDirectora || isSuperSecretariaFinal) || 
+                       (ordersEnabled && (!isFonoaudiologia || fonoaudiologiaOrdersEnabled));
   const canCustomizeModels = userProfile?.canCustomizeModels || isDirectora || isAdmin;
 
   const navItems = [
@@ -358,7 +364,7 @@ function App() {
               <Routes>
                 <Route path="/" element={<Navigate to="/reports/new" replace />} />
                 <Route path="/reports/*" element={<ReportsMain currentUser={currentUser} userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} canCustomizeModels={canCustomizeModels} isDarkMode={isDarkMode} />} />
-                <Route path="/orders/*" element={<OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} isDarkMode={isDarkMode} />} />
+                <Route path="/orders/*" element={canSeeOrders ? <OrdersMain userProfile={userProfile} isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="/patients" element={<PatientsPage isAdmin={isAdmin} isSecretaria={isSecretaria} isSuperSecretaria={isSuperSecretariaFinal} isDirectora={isDirectora} currentUser={currentUser} isDarkMode={isDarkMode} />} />
                 <Route path="/metrics" element={(isAdmin || isDirectora || isSuperSecretariaFinal) ? <MetricsPage isDarkMode={isDarkMode} /> : <Navigate to="/reports/new" replace />} />
                 <Route path="/profile" element={<ProfilePage isAdmin={isAdmin} />} />

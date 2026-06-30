@@ -1390,7 +1390,9 @@ const AdminPage = () => {
         u._std.nombre.toLowerCase().includes(search) ||
         u._std.email.toLowerCase().includes(search)
       );
-    });
+    })
+    .sort((a, b) => a._std.nombre.localeCompare(b._std.nombre, 'es', { sensitivity: 'base' }));
+
 
   const filteredPractices = practices.filter(
     (p) =>
@@ -2282,6 +2284,45 @@ const AdminPage = () => {
                     >
                       <div
                         className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.ordersEnabled !== false ? "translate-x-5" : ""}`}
+                      />
+                    </div>
+                  </div>
+                </label>
+
+                <label className="flex items-center justify-between p-4 bg-[var(--bg-secondary)] rounded-2xl cursor-pointer hover:bg-[var(--hover-main)] transition-all mt-4">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-bold text-[var(--text-main)]">
+                      Habilitar Pedidos para Fonoaudiología
+                    </span>
+                    <span className="text-[10px] text-gray-400 uppercase font-black">
+                      Si se apaga, usuarios con rol Fonoaudiología no tendrán acceso
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="checkbox"
+                      className="sr-only"
+                      checked={orderSettings.fonoaudiologiaOrdersEnabled ?? false}
+                      onChange={(e) => {
+                        const newValue = e.target.checked;
+                        const action = newValue ? "habilitar" : "deshabilitar";
+                        if (
+                          window.confirm(
+                            `¿Está seguro que desea ${action} el módulo de pedidos para usuarios de Fonoaudiología?`,
+                          )
+                        ) {
+                          handleSaveOrderSettings({
+                            ...orderSettings,
+                            fonoaudiologiaOrdersEnabled: newValue,
+                          });
+                        }
+                      }}
+                    />
+                    <div
+                      className={`w-10 h-5 rounded-full transition-all ${orderSettings.fonoaudiologiaOrdersEnabled === true ? "bg-green-600" : "bg-gray-300"}`}
+                    >
+                      <div
+                        className={`absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full transition-all ${orderSettings.fonoaudiologiaOrdersEnabled === true ? "translate-x-5" : ""}`}
                       />
                     </div>
                   </div>
@@ -3227,6 +3268,7 @@ const AdminPage = () => {
                         <option value="electrografías">Electrografías</option>
                         <option value="orl">ORL</option>
                         <option value="vestibular">Vestibular</option>
+                        <option value="fonoaudiología">Fonoaudiología</option>
                       </optgroup>
                     </select>
                   </div>
