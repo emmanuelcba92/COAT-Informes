@@ -73,17 +73,29 @@ const optimizeImage = async (src, maxWidth = 600) => {
     img.crossOrigin = "Anonymous";
     img.onload = () => {
       const croppedCanvas = cropSignatureCanvas(img);
+      
+      // Solo escalar si es realmente necesario (si supera el maxWidth)
+      let finalW = croppedCanvas.width;
+      let finalH = croppedCanvas.height;
+      
+      if (croppedCanvas.width > maxWidth) {
+        const scale = maxWidth / croppedCanvas.width;
+        finalW = maxWidth;
+        finalH = croppedCanvas.height * scale;
+      }
+
       const canvas = document.createElement('canvas');
+      canvas.width = finalW;
+      canvas.height = finalH;
       const ctx = canvas.getContext('2d');
-      const scale = Math.min(1, maxWidth / croppedCanvas.width);
-      canvas.width = croppedCanvas.width * scale;
-      canvas.height = croppedCanvas.height * scale;
-      ctx.drawImage(croppedCanvas, 0, 0, canvas.width, canvas.height);
-      // Usamos JPEG para mejor compresión si no necesitamos transparencia absoluta, 
-      // o PNG con calidad reducida. Para firmas, PNG es mejor para preservar trazos.
+      // Usar suavizado de alta calidad
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(croppedCanvas, 0, 0, finalW, finalH);
+      
       resolve({ 
-        data: canvas.toDataURL('image/png', 0.7), 
-        ratio: croppedCanvas.width / croppedCanvas.height 
+        data: canvas.toDataURL('image/png'), 
+        ratio: finalW / finalH 
       });
     };
     img.onerror = () => resolve(null);
@@ -175,16 +187,16 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
             sigW = maxH * imageRatio;
           }
           // Centrar perfectamente a signatureX + 32 y ubicar a 3mm sobre el sello
-          targetDoc.addImage(sigData.data, 'PNG', signatureX + 32 - (sigW / 2), signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
+          targetDoc.addImage(sigData.data, 'PNG', signatureX - 5, signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
         }
       } catch (e) {}
     }
     targetDoc.setTextColor(0);
     targetDoc.setFont("helvetica", "bold");
     targetDoc.setFontSize(10);
-    targetDoc.text((profile.nombre || profile.n || '').toUpperCase(), signatureX + 32, signatureY, { align: 'center' });
+    targetDoc.text((profile.nombre || profile.n || '').toUpperCase(), signatureX + 32, signatureY + 6, { align: 'center' });
     targetDoc.setFontSize(8);
-    targetDoc.text(profile.especialidad || profile.esp || '', signatureX + 32, signatureY + 4, { align: 'center' });
+    targetDoc.text(profile.especialidad || profile.esp || '', signatureX + 32, signatureY + 10, { align: 'center' });
     const mp = profile.mp || profile.m || '';
     const me = profile.me || '';
     let registrationText = "";
@@ -192,7 +204,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     else if (mp) registrationText = `MP: ${mp}`;
     else if (me) registrationText = `ME: ${me}`;
     
-    if (registrationText) targetDoc.text(registrationText, signatureX + 32, signatureY + 8, { align: 'center' });
+    if (registrationText) targetDoc.text(registrationText, signatureX + 32, signatureY + 14, { align: 'center' });
 
     // Footer line — ALWAYS shown at the very bottom
     targetDoc.setDrawColor(...coatBlue);
