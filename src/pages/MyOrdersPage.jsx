@@ -99,6 +99,19 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
     fetchOrders(selectedProfId, true);
   }, [selectedProfId]);
 
+  const isFirstRender = React.useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchOrders(selectedProfId, true);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const fetchOrders = async (profId, reset = false) => {
     setLoading(true);
     if (reset) {
@@ -108,21 +121,78 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
     
     try {
       let q;
-      const constraints = [orderBy('createdAt', 'desc'), limit(PAGE_SIZE)];
-      if (reset === false && lastVisible) constraints.splice(1, 0, startAfter(lastVisible));
+      const cleanSearch = searchTerm.trim();
 
-      if (profId && profId !== 'all') {
-        q = query(collection(db, 'orders'), where('profesionalId', '==', profId), ...constraints);
+      if (cleanSearch.length > 0) {
+        // Modo Búsqueda
+        const isNumeric = /^\d+$/.test(cleanSearch);
+        const searchUpper = cleanSearch.toUpperCase();
+
+        if (isNumeric) {
+          if (cleanSearch.length >= 7) {
+            q = query(
+              collection(db, 'orders'),
+              where('dni', '==', cleanSearch),
+              limit(100)
+            );
+          } else {
+            q = query(
+              collection(db, 'orders'),
+              where('dni', '>=', cleanSearch),
+              where('dni', '<=', cleanSearch + '\uf8ff'),
+              limit(100)
+            );
+          }
+        } else {
+          q = query(
+            collection(db, 'orders'),
+            where('name', '>=', searchUpper),
+            where('name', '<=', searchUpper + '\uf8ff'),
+            limit(100)
+          );
+        }
+
+        try {
+          const snap = await getDocs(q);
+          let list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          // Filtrar por profesional en memoria
+          if (profId && profId !== 'all') {
+            list = list.filter(o => o.profesionalId === profId);
+          }
+
+          // Ordenar por fecha descendente en memoria
+          list.sort((a, b) => {
+            const dateA = a.createdAt?.seconds ? new Date(a.createdAt.seconds * 1000) : new Date(a.createdAt || 0);
+            const dateB = b.createdAt?.seconds ? new Date(b.createdAt.seconds * 1000) : new Date(b.createdAt || 0);
+            return dateB - dateA;
+          });
+
+          setOrders(list);
+          setLastVisible(null);
+          setHasMore(false);
+        } catch (innerErr) {
+          console.error("Error in orders search query:", innerErr);
+          showToast("Error al realizar la búsqueda en servidor.", "error");
+        }
       } else {
-        q = query(collection(db, 'orders'), ...constraints);
-      }
+        // Modo Paginación Normal
+        const constraints = [orderBy('createdAt', 'desc'), limit(PAGE_SIZE)];
+        if (reset === false && lastVisible) constraints.splice(1, 0, startAfter(lastVisible));
 
-      const snap = await getDocs(q);
-      const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      
-      setOrders(prev => reset ? list : [...prev, ...list]);
-      setLastVisible(snap.docs[snap.docs.length - 1]);
-      setHasMore(list.length === PAGE_SIZE);
+        if (profId && profId !== 'all') {
+          q = query(collection(db, 'orders'), where('profesionalId', '==', profId), ...constraints);
+        } else {
+          q = query(collection(db, 'orders'), ...constraints);
+        }
+
+        const snap = await getDocs(q);
+        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        setOrders(prev => reset ? list : [...prev, ...list]);
+        setLastVisible(snap.docs[snap.docs.length - 1]);
+        setHasMore(list.length === PAGE_SIZE);
+      }
     } catch (err) {
       showToast("Error al cargar pedidos.", "error");
     } finally {

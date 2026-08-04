@@ -274,6 +274,19 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     fetchReports(selectedProfId, true);
   }, [selectedProfId, canSelectProfessional]);
 
+  const isFirstRender = React.useRef(true);
+
+  useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      fetchReports(selectedProfId, true);
+    }, 600);
+    return () => clearTimeout(timer);
+  }, [searchTerm]);
+
   const fetchReports = async (profId, reset = false) => {
     setLoading(true);
     if (reset) {
@@ -283,59 +296,116 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     
     try {
       let q;
-      const constraints = [
-        orderBy('fechaCreatedAt', 'desc'),
-        limit(PAGE_SIZE)
-      ];
+      const cleanSearch = searchTerm.trim();
 
-      if (reset === false && lastVisible) {
-        constraints.splice(1, 0, startAfter(lastVisible));
-      }
+      if (cleanSearch.length > 0) {
+        // Modo Búsqueda
+        const isNumeric = /^\d+$/.test(cleanSearch);
+        const searchUpper = cleanSearch.toUpperCase();
 
-      if (profId && profId !== 'all') {
-        q = query(
-          collection(db, 'reports'),
-          where('profesionalId', '==', profId),
-          ...constraints
-        );
-      } else if (canSelectProfessional) {
-        q = query(
-          collection(db, 'reports'),
-          ...constraints
-        );
-      } else {
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const snap = await getDocs(q);
-        const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        if (reset) {
-          setReports(list);
-        } else {
-          setReports(prev => [...prev, ...list]);
-        }
-        
-        setLastVisible(snap.docs[snap.docs.length - 1]);
-        setHasMore(list.length === PAGE_SIZE);
-      } catch (innerErr) {
-        // Fallback si falla por índice faltante
-        if (innerErr.message?.includes('index') || innerErr.code === 'failed-precondition') {
-          console.warn("Missing index for query. Falling back to date-only fetch.");
-          let fallbackQ;
-          if (profId && profId !== 'all') {
-            fallbackQ = query(collection(db, 'reports'), where('profesionalId', '==', profId), orderBy('fecha', 'desc'), limit(50));
+        if (isNumeric) {
+          if (cleanSearch.length >= 7) {
+            q = query(
+              collection(db, 'reports'),
+              where('pacienteDni', '==', cleanSearch),
+              limit(100)
+            );
           } else {
-            fallbackQ = query(collection(db, 'reports'), orderBy('fecha', 'desc'), limit(50));
+            q = query(
+              collection(db, 'reports'),
+              where('pacienteDni', '>=', cleanSearch),
+              where('pacienteDni', '<=', cleanSearch + '\uf8ff'),
+              limit(100)
+            );
           }
-          const snap = await getDocs(fallbackQ);
-          const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setReports(list);
-          setHasMore(false);
         } else {
-          throw innerErr;
+          q = query(
+            collection(db, 'reports'),
+            where('pacienteNombre', '>=', searchUpper),
+            where('pacienteNombre', '<=', searchUpper + '\uf8ff'),
+            limit(100)
+          );
+        }
+
+        try {
+          const snap = await getDocs(q);
+          let list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+          // Filtrar por profesional en memoria
+          if (profId && profId !== 'all') {
+            list = list.filter(r => r.profesionalId === profId);
+          }
+
+          // Ordenar por fecha descendente en memoria
+          list.sort((a, b) => {
+            const dateA = a.fechaCreatedAt ? new Date(a.fechaCreatedAt) : new Date(a.fecha || 0);
+            const dateB = b.fechaCreatedAt ? new Date(b.fechaCreatedAt) : new Date(b.fecha || 0);
+            return dateB - dateA;
+          });
+
+          setReports(list);
+          setLastVisible(null);
+          setHasMore(false);
+        } catch (innerErr) {
+          console.error("Error in search query:", innerErr);
+          showToast("Error al realizar la búsqueda en servidor.", "error");
+        }
+      } else {
+        // Modo Paginación Normal
+        const constraints = [
+          orderBy('fechaCreatedAt', 'desc'),
+          limit(PAGE_SIZE)
+        ];
+
+        if (reset === false && lastVisible) {
+          constraints.splice(1, 0, startAfter(lastVisible));
+        }
+
+        if (profId && profId !== 'all') {
+          q = query(
+            collection(db, 'reports'),
+            where('profesionalId', '==', profId),
+            ...constraints
+          );
+        } else if (canSelectProfessional) {
+          q = query(
+            collection(db, 'reports'),
+            ...constraints
+          );
+        } else {
+          setLoading(false);
+          return;
+        }
+
+        try {
+          const snap = await getDocs(q);
+          const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+          
+          if (reset) {
+            setReports(list);
+          } else {
+            setReports(prev => [...prev, ...list]);
+          }
+          
+          setLastVisible(snap.docs[snap.docs.length - 1]);
+          setHasMore(list.length === PAGE_SIZE);
+        } catch (innerErr) {
+          // Fallback si falla por índice faltante
+          if (innerErr.message?.includes('index') || innerErr.code === 'failed-precondition') {
+            console.warn("Missing index for query. Falling back to date-only fetch.");
+            let fallbackQ;
+            if (profId && profId !== 'all') {
+              fallbackQ = query(collection(db, 'reports'), where('profesionalId', '==', profId), orderBy('fecha', 'desc'), limit(50));
+            } else {
+              fallbackQ = query(collection(db, 'reports'), orderBy('fecha', 'desc'), limit(50));
+            }
+            const snap = await getDocs(fallbackQ);
+            const list = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            setReports(list);
+            setHasMore(false);
+          } else {
+            throw innerErr;
+          }
         }
       }
     } catch (err) {
