@@ -255,6 +255,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
                 dni: p.dni || prev.dni,
                 name: p.nombre || prev.name,
                 insurance: p.obraSocial || prev.insurance,
+                affiliateNumber: p.affiliateNumber || p.nroAfiliado || prev.affiliateNumber || '',
                 patientEmail: p.email || prev.patientEmail,
                 telefono: p.telefono || prev.telefono
               }));

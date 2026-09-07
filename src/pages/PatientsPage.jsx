@@ -285,6 +285,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
             nombre: p.nombre?.toUpperCase() || '',
             insurance: p.obraSocial?.toUpperCase() || '',
             obraSocial: p.obraSocial?.toUpperCase() || '',
+            affiliateNumber: (p.affiliateNumber || p.nroAfiliado || '').toString().trim(),
+            nroAfiliado: (p.affiliateNumber || p.nroAfiliado || '').toString().trim(),
             email: p.email?.toLowerCase() || null,
             telefono: p.telefono || '',
             updatedAt: serverTimestamp(),
@@ -744,6 +746,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                             <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>DNI</th>
                             <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Nombre</th>
                             <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Obra Social</th>
+                            <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>N° Afiliado</th>
                             <th className={`px-4 py-3 text-[10px] font-black uppercase ${isDarkMode ? 'text-slate-400' : 'text-slate-500'}`}>Email</th>
                           </tr>
                         </thead>
@@ -778,6 +781,19 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                                   onChange={(e) => {
                                     const next = [...importResults];
                                     next[idx].obraSocial = e.target.value.toUpperCase();
+                                    setImportResults(next);
+                                  }}
+                                  className="w-full bg-transparent text-xs text-slate-500 focus:outline-none"
+                                />
+                              </td>
+                              <td className="px-4 py-3">
+                                <input 
+                                  value={r.affiliateNumber || r.nroAfiliado || ''} 
+                                  placeholder="Sin nro"
+                                  onChange={(e) => {
+                                    const next = [...importResults];
+                                    next[idx].affiliateNumber = e.target.value;
+                                    next[idx].nroAfiliado = e.target.value;
                                     setImportResults(next);
                                   }}
                                   className="w-full bg-transparent text-xs text-slate-500 focus:outline-none"

@@ -1,12 +1,14 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
+const API_KEY = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_GEMINI_API_KEY) || (typeof process !== 'undefined' && process.env?.VITE_GEMINI_API_KEY) || "";
 const MODELS = [
+  "gemini-3.5-flash-lite",
+  "gemini-3.1-flash-lite",
+  "gemini-3.5-flash",
   "gemini-3.1-flash-lite-preview",
-  "gemini-2.5-flash-lite",
-  "gemini-2.0-flash",
-  "gemini-1.5-flash",
-  "gemini-1.5-pro"
+  "gemini-3.6-flash",
+  "gemini-flash-latest",
+  "gemini-2.5-flash-lite"
 ];
 
 const genAI = new GoogleGenerativeAI(API_KEY);
@@ -50,7 +52,7 @@ export const extractPatientsFromImage = async (base64Image) => {
   return tryWithFallbacks(async (model) => {
     const prompt = `
       Actúa como un experto en extracción de datos médicos. 
-      Analiza la imagen adjunta que es una captura de pantalla de un sistema de turnos llamado GACITUA.
+      Analiza la imagen adjunta que es una captura de pantalla de un sistema de turnos llamado GACITUA o similar.
       Extrae todos los pacientes visibles en la tabla.
       
       IMPORTANTE:
@@ -59,11 +61,12 @@ export const extractPatientsFromImage = async (base64Image) => {
       - IGNORA filas con números cortos (ej: 10, 161, etc.) ya que corresponden a códigos de profesionales, no a pacientes.
       - La columna "Paciente" contiene el Nombre completo (Apellido y Nombre). Extráelo completo sin cortes.
       - La columna "Mutual" es la Obra Social.
+      - NÚMERO DE AFILIADO: Puede figurar en una columna o dato como "Nro Afiliado", "N° Afiliado", "N Af", "N° Af.", "Nro. Af.", "Afiliado", "Carnet", "Credencial", "Beneficio", "N° Beneficio" o variaciones similares. Extráelo exactamente como figura. Si no se visualiza, asigna null.
       - La columna "Teléfono" es el teléfono del paciente.
       - Si existe un email en la fila o cerca, extráelo en minúsculas.
       
       Devuelve los datos estrictamente en formato JSON como un array de objetos con las siguientes claves:
-      dni (string, solo números), nombre (string, Apellido y Nombre), obraSocial (string), telefono (string), email (string | null).
+      dni (string, solo números), nombre (string, Apellido y Nombre), obraSocial (string), affiliateNumber (string | null), telefono (string | null), email (string | null).
       
       Si no puedes extraer nada, devuelve un array vacío [].
       Solo devuelve el JSON, sin texto adicional ni bloques de código.
@@ -88,9 +91,11 @@ export const extractPatientsFromImage = async (base64Image) => {
               dni: { type: "string" },
               nombre: { type: "string" },
               obraSocial: { type: "string" },
-              telefono: { type: "string" },
+              affiliateNumber: { type: ["string", "null"] },
+              telefono: { type: ["string", "null"] },
               email: { type: ["string", "null"] }
-            }
+            },
+            required: ["dni", "nombre", "obraSocial"]
           }
         }
       }
@@ -99,7 +104,15 @@ export const extractPatientsFromImage = async (base64Image) => {
     const response = await result.response;
     const text = response.text();
     const jsonText = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText);
+    return Array.isArray(parsed) ? parsed.map(p => {
+      const affVal = (p.affiliateNumber || p.nroAfiliado || '').toString().trim() || null;
+      return {
+        ...p,
+        affiliateNumber: affVal,
+        nroAfiliado: affVal
+      };
+    }) : [];
   });
 };
 
@@ -122,6 +135,7 @@ export const extractPatientsFromText = async (pdfText) => {
          - IGNORA filas con códigos cortos (2 o 3 dígitos) como 10, 161, etc. Estos son médicos, NO pacientes.
          - "Paciente" es el Nombre completo (extrae todo el texto de esta columna).
          - "Mutual" es la Obra Social / Seguro Médico.
+         - "Número de Afiliado": Busca columnas o textos con encabezados como "Nro Afiliado", "N° Afiliado", "N Af", "N° Af.", "Nro. Af.", "Afiliado", "Carnet", "Credencial", "Beneficio" o variaciones similares. Extráelo como cadena. Si no está presente, pon null.
          - "Teléfono" es el teléfono de contacto.
       2. EXTRACCIÓN DE EMAIL:
          - Busca patrones de correo electrónico (ej: usuario@gmail.com, nombre.apellido@dominio.ar).
@@ -132,7 +146,7 @@ export const extractPatientsFromText = async (pdfText) => {
       ${pdfText}
       
       Devuelve los datos estrictamente en formato JSON como un array de objetos con las siguientes claves:
-      dni, nombre, obraSocial, telefono, email.
+      dni, nombre, obraSocial, affiliateNumber, telefono, email.
       
       Si no encuentras el email para un paciente específico, pon null.
       Solo devuelve el JSON, sin texto adicional ni bloques de código.
@@ -149,9 +163,11 @@ export const extractPatientsFromText = async (pdfText) => {
               dni: { type: "string" },
               nombre: { type: "string" },
               obraSocial: { type: "string" },
-              telefono: { type: "string" },
+              affiliateNumber: { type: ["string", "null"] },
+              telefono: { type: ["string", "null"] },
               email: { type: ["string", "null"] }
-            }
+            },
+            required: ["dni", "nombre", "obraSocial"]
           }
         }
       }
@@ -160,6 +176,14 @@ export const extractPatientsFromText = async (pdfText) => {
     const response = await result.response;
     const text = response.text();
     const jsonText = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(jsonText);
+    const parsed = JSON.parse(jsonText);
+    return Array.isArray(parsed) ? parsed.map(p => {
+      const affVal = (p.affiliateNumber || p.nroAfiliado || '').toString().trim() || null;
+      return {
+        ...p,
+        affiliateNumber: affVal,
+        nroAfiliado: affVal
+      };
+    }) : [];
   });
 };
