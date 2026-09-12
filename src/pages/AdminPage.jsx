@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ClinicalEditor from '../components/ClinicalEditor';
 import {
   Activity,
   Users,
@@ -2107,22 +2106,11 @@ const AdminPage = () => {
                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest ml-2">
                     Informe Base (Plantilla HTML)
                   </label>
-                  <div className="bg-white rounded-3xl overflow-hidden border border-main min-h-[400px] flex flex-col">
-                    <ReactQuill
-                      key={selectedPractice?.id || "new"}
-                      theme="snow"
+                  <div className="rounded-3xl overflow-hidden min-h-[380px]">
+                    <ClinicalEditor
                       value={practiceForm.b}
-                      onChange={(val) => setPracticeForm({ ...practiceForm, b: val })}
-                      modules={{
-                        toolbar: [
-                          [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
-                          ['bold', 'italic', 'underline', 'strike'],
-                          [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                          [{ 'color': [] }, { 'background': [] }],
-                          ['clean']
-                        ],
-                      }}
-                      className="flex-1 border-none"
+                      onChange={(val) => setPracticeForm(prev => ({ ...prev, b: val }))}
+                      minHeight="380px"
                       placeholder="Escribe el contenido base del informe..."
                     />
                   </div>

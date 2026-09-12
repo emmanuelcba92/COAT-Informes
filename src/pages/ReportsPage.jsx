@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import autoTable from 'jspdf-autotable';
+import ClinicalEditor from '../components/ClinicalEditor';
 import { 
   FileText,
   FilePlus, 
@@ -806,42 +806,150 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       currentY += 10;
     }
 
-    // 4. Report Content with Intelligent Font Scaling
+    // 4. Report Content with Intelligent Table & Text Rendering
     doc.setFont("helvetica", "normal");
-    const plainResult = cleanHtmlForPDF(reportData.result || content);
+    const rawHtml = reportData.result || content || "";
     const pageHeight = doc.internal.pageSize.height;
     
-    // Alturas estimadas para la firma (aprox 40-50mm)
-    const signatureReservedSpace = 55; 
-    const footerReservedSpace = 20;
-    
-    // Espacio disponible en la primera hoja antes de tener que saltar o reducir letra
-    const availableHeightFirstPage = pageHeight - currentY - signatureReservedSpace - footerReservedSpace;
-    
-    // Probar primero con 11pt
-    let fontSize = 11;
-    doc.setFontSize(fontSize);
-    let contentLines = doc.splitTextToSize(plainResult, 185);
-    let lineHeight = 5.2; 
-    
-    // Si el texto a 11pt supera el espacio disponible para que entre en una sola hoja, bajamos a 10pt
-    if (contentLines.length * lineHeight > availableHeightFirstPage) {
-      fontSize = 10;
-      doc.setFontSize(fontSize);
-      contentLines = doc.splitTextToSize(plainResult, 185);
-      lineHeight = 4.5; // Altura de línea para 10pt
+    const parsedDoc = new DOMParser().parseFromString(rawHtml, 'text/html');
+    let nodes = Array.from(parsedDoc.body.children);
+    if (nodes.length === 0 && rawHtml.trim()) {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = rawHtml.split('\n').map(l => `<p>${l}</p>`).join('');
+      nodes = Array.from(tempDiv.children);
     }
 
-    contentLines.forEach(line => {
-      // Control de salto de página para el TEXTO
-      // Dejamos margen para el footer institucional
-      if (currentY > pageHeight - 25) {
-        doc.addPage();
-        currentY = 25;
+    for (const node of nodes) {
+      if (node.tagName.toLowerCase() === 'table') {
+        // Extraer datos de la tabla (headers y rows)
+        const headers = [];
+        const rows = [];
+        
+        const thElements = node.querySelectorAll('thead th, tr:first-child th');
+        if (thElements.length > 0) {
+          headers.push(Array.from(thElements).map(th => th.textContent.trim()));
+        }
+
+        const trElements = node.querySelectorAll('tr');
+        trElements.forEach((tr, index) => {
+          const ths = tr.querySelectorAll('th');
+          const tds = tr.querySelectorAll('td');
+          if (ths.length > 0 && tds.length === 0 && index === 0 && headers.length > 0) {
+            return;
+          }
+          const rowCells = Array.from(tr.querySelectorAll('td, th')).map(cell => cell.textContent.trim());
+          if (rowCells.some(c => c !== '')) {
+            rows.push(rowCells);
+          }
+        });
+
+        // Control de espacio antes de la tabla
+        if (currentY > pageHeight - 45) {
+          doc.addPage();
+          currentY = 25;
+        }
+
+        let headConfig = headers.length > 0 ? headers : undefined;
+        let bodyConfig = rows;
+
+        autoTable(doc, {
+          head: headConfig,
+          body: bodyConfig,
+          startY: currentY,
+          margin: { left: 10, right: 10 },
+          theme: 'plain',
+          styles: {
+            font: 'helvetica',
+            fontSize: 9,
+            textColor: [15, 23, 42],
+            lineColor: [0, 0, 0],
+            lineWidth: 0.25,
+            cellPadding: 3,
+            valign: 'middle',
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fontStyle: 'bold',
+            fillColor: [240, 243, 246],
+            textColor: [0, 0, 0],
+            lineColor: [0, 0, 0],
+            lineWidth: 0.3
+          },
+          alternateRowStyles: {
+            fillColor: [255, 255, 255]
+          }
+        });
+
+        if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
+          currentY = doc.lastAutoTable.finalY + 8;
+        } else {
+          currentY += 25;
+        }
+      } else {
+        // Párrafo, encabezado o lista
+        const tag = node.tagName.toLowerCase();
+        const isHeading = ['h1', 'h2', 'h3'].includes(tag);
+        const nodeText = cleanHtmlForPDF(node.outerHTML);
+
+        // Si el párrafo está vacío (salto de línea con Enter), respetamos el espacio vertical
+        if (!nodeText) {
+          currentY += 4.5;
+          continue;
+        }
+
+        let fontSize = 10.5;
+        let isBold = isHeading || !!node.querySelector('strong, b') || node.tagName.toLowerCase() === 'strong';
+        let lineHeight = 5.0;
+
+        // Detectar tamaño de letra personalizado (ej: 8pt, 14pt)
+        const sizeMatch = node.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
+        if (sizeMatch) {
+          fontSize = parseFloat(sizeMatch[1]);
+          lineHeight = Math.max(3.8, fontSize * 0.45 + 0.5);
+        } else if (isHeading) {
+          fontSize = tag === 'h1' ? 13 : (tag === 'h2' ? 11.5 : 10.5);
+          lineHeight = 5.5;
+          currentY += 2;
+        }
+
+        // Detectar alineación de texto (centro, derecha, justificado o izquierda)
+        let textAlign = 'left';
+        const nodeStyle = (node.getAttribute && node.getAttribute('style')) || '';
+        if (node.style?.textAlign) {
+          textAlign = node.style.textAlign;
+        } else if (nodeStyle.includes('text-align: center') || node.classList?.contains('has-text-align-center') || node.querySelector?.('[style*="text-align: center"], .has-text-align-center')) {
+          textAlign = 'center';
+        } else if (nodeStyle.includes('text-align: right') || node.classList?.contains('has-text-align-right') || node.querySelector?.('[style*="text-align: right"], .has-text-align-right')) {
+          textAlign = 'right';
+        } else if (nodeStyle.includes('text-align: justify') || node.classList?.contains('has-text-align-justify') || node.querySelector?.('[style*="text-align: justify"], .has-text-align-justify')) {
+          textAlign = 'justify';
+        }
+
+        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+        doc.setFontSize(fontSize);
+        
+        const lines = doc.splitTextToSize(nodeText, 185);
+        lines.forEach(line => {
+          if (currentY > pageHeight - 25) {
+            doc.addPage();
+            currentY = 25;
+          }
+          if (textAlign === 'center') {
+            doc.text(line, pageWidth / 2, currentY, { align: 'center' });
+          } else if (textAlign === 'right') {
+            doc.text(line, pageWidth - 10, currentY, { align: 'right' });
+          } else if (textAlign === 'justify') {
+            doc.text(line, 10, currentY, { align: 'justify', maxWidth: 185 });
+          } else {
+            doc.text(line, 10, currentY);
+          }
+          currentY += lineHeight;
+        });
+
+        // Espacio entre párrafos
+        currentY += isHeading ? 2.5 : 2.0;
       }
-      doc.text(line, 10, currentY);
-      currentY += lineHeight;
-    });
+    }
     
     // 5. Signature Area - ADAPTATIVA
     // Objetivo: Que no quede abajo del todo si el informe es corto (petición de obras sociales)
@@ -1812,25 +1920,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           <div className="space-y-2">
             <div className="flex items-center justify-between ml-1 text-sm font-semibold">
               <span>RESULTADOS / OBSERVACIONES</span>
-              <span className="text-[10px] text-gray-400 font-normal">Formato enriquecido activo</span>
+              <span className="text-[10px] text-blue-600 dark:text-blue-400 font-bold">Editor clínico con tablas activo</span>
             </div>
-            <div className="bg-[var(--bg-page)] rounded-2xl overflow-hidden border border-main min-h-[300px]">
-              <ReactQuill 
-                theme="snow"
-                value={content}
-                onChange={setContent}
-                modules={{
-                  toolbar: [
-                    [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
-                    ['bold', 'italic', 'underline', 'strike'],
-                    [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                    [{ 'color': [] }, { 'background': [] }],
-                    ['clean']
-                  ],
-                }}
-                className="quill-editor-custom"
-              />
-            </div>
+            <ClinicalEditor 
+              value={content}
+              onChange={setContent}
+              minHeight="350px"
+              placeholder="Escriba los resultados, agregue tablas u observaciones..."
+            />
           </div>
 
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-main">

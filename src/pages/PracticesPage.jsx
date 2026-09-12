@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import ReactQuill from 'react-quill';
-import 'react-quill/dist/quill.snow.css';
+import ClinicalEditor from '../components/ClinicalEditor';
 import { motion } from 'framer-motion';
 import { db, auth } from '../services/firebase';
 import { collection, onSnapshot, doc, getDoc, setDoc } from 'firebase/firestore';
@@ -115,15 +114,7 @@ const PracticesPage = ({ isDarkMode }) => {
     (p.c || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const quillModules = {
-    toolbar: [
-      [{ 'header': [1, 2, 3, false] }, { 'size': ['small', false, 'large', 'huge'] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      [{ 'color': [] }, { 'background': [] }],
-      ['clean']
-    ],
-  };
+
 
   if (isLoading) return <div className="p-20 text-center opacity-50"><Loader2 className="animate-spin mx-auto mb-2" /> Cargando modelos...</div>;
 
@@ -212,13 +203,11 @@ const PracticesPage = ({ isDarkMode }) => {
                 <p>Usted puede editar el contenido de este modelo. Lo que guarde aquí será lo que aparezca por defecto al seleccionar esta práctica en la sección de generación de informes.</p>
               </div>
               
-              <div className={`flex-1 border rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-blue-500/20 transition-all bg-white text-black ${isDarkMode ? 'border-slate-700' : 'border-gray-200'}`}>
-                <ReactQuill 
-                  theme="snow" 
+              <div className="flex-1 overflow-y-auto">
+                <ClinicalEditor 
                   value={editorContent} 
                   onChange={setEditorContent}
-                  modules={quillModules}
-                  className="h-full border-none"
+                  minHeight="380px"
                 />
               </div>
             </div>
