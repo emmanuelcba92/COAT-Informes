@@ -996,9 +996,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             img.src = imageData;
           });
 
-          // Calcular dimensiones proporcionales (Reducido ~13% para equilibrio visual)
-          const maxW = 65;
-          const maxH = 26;
+          // Calcular dimensiones proporcionales
+          const maxW = 55;
+          const maxH = 22;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
@@ -1017,8 +1017,8 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           console.error("Error optimizing signature image, trying direct addImage:", err);
           // Si falla, intentamos agregarla directamente con un tamaño estándar y centrado
           try {
-            const sigW = 56;
-            const sigH = 21;
+            const sigW = 48;
+            const sigH = 18;
             doc.addImage(imageData, 'PNG', 160 - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
             currentY += sigH + 3;
           } catch (directErr) {

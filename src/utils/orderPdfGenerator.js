@@ -174,8 +174,8 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       try {
         const sigData = await optimizeImage(profile.signatureBase64, 500);
         if (sigData) {
-          const maxW = 65;
-          const maxH = 24;
+          const maxW = 55;
+          const maxH = 20;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
