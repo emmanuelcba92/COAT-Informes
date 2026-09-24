@@ -174,8 +174,8 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       try {
         const sigData = await optimizeImage(profile.signatureBase64, 500);
         if (sigData) {
-          const maxW = 75;
-          const maxH = 28;
+          const maxW = 65;
+          const maxH = 24;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
@@ -187,7 +187,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
             sigW = maxH * imageRatio;
           }
           // Centrar perfectamente a signatureX + 32 y ubicar a 3mm sobre el sello
-          targetDoc.addImage(sigData.data, 'PNG', signatureX - 5, signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
+          targetDoc.addImage(sigData.data, 'PNG', signatureX + 32 - (sigW / 2), signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
         }
       } catch (e) {}
     }

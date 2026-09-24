@@ -597,8 +597,8 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
             img.src = prof.signatureBase64;
           });
           
-          const maxW = 80;
-          const maxH = 32;
+          const maxW = 68;
+          const maxH = 27;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
@@ -615,8 +615,8 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
         } catch (e) {
           // Fallback en caso de error
           try {
-            const sigW = 70;
-            const sigH = 26;
+            const sigW = 60;
+            const sigH = 22;
             doc.addImage(prof.signatureBase64, 'PNG', signatureX + 32 - (sigW / 2), signatureY - sigH - 4, sigW, sigH);
           } catch (err) {}
         }
