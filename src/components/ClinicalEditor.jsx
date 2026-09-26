@@ -110,10 +110,14 @@ const ClinicalEditor = ({
 
   // Sincronizar contenido si cambia externamente (ej: al elegir otra plantilla)
   useEffect(() => {
-    if (editor && value !== undefined) {
-      const currentHTML = editor.getHTML();
-      if (value !== currentHTML) {
-        editor.commands.setContent(value || '', false);
+    if (editor && !editor.isDestroyed && value !== undefined) {
+      try {
+        const currentHTML = editor.getHTML();
+        if (value !== currentHTML) {
+          editor.commands.setContent(value || '', false);
+        }
+      } catch (err) {
+        console.warn('ClinicalEditor sync warning:', err);
       }
     }
   }, [value, editor]);

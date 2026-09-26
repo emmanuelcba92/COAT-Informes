@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { formatDoctorDisplayName } from './doctorName';
 
 const cropSignatureCanvas = (img) => {
   try {
@@ -170,12 +171,14 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     }
 
     const signatureX = pageWidth - 80;
+    const sealCenterX = signatureX + 32;
+
     if (profile.signatureBase64) {
       try {
         const sigData = await optimizeImage(profile.signatureBase64, 500);
         if (sigData) {
-          const maxW = 55;
-          const maxH = 20;
+          const maxW = 51.41;
+          const maxH = 19.28;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
@@ -186,25 +189,44 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
             sigH = maxH;
             sigW = maxH * imageRatio;
           }
-          // Centrar perfectamente a signatureX + 32 y ubicar a 3mm sobre el sello
-          targetDoc.addImage(sigData.data, 'PNG', signatureX + 32 - (sigW / 2), signatureY - sigH - 3, sigW, sigH, undefined, 'FAST');
+          // Centrar perfectamente a sealCenterX y ubicar sobre la línea del sello
+          targetDoc.addImage(sigData.data, 'PNG', sealCenterX - (sigW / 2), signatureY - sigH - 2, sigW, sigH, undefined, 'FAST');
         }
       } catch (e) {}
     }
-    targetDoc.setTextColor(0);
-    targetDoc.setFont("helvetica", "bold");
-    targetDoc.setFontSize(10);
-    targetDoc.text((profile.nombre || profile.n || '').toUpperCase(), signatureX + 32, signatureY + 6, { align: 'center' });
-    targetDoc.setFontSize(8);
-    targetDoc.text(profile.especialidad || profile.esp || '', signatureX + 32, signatureY + 10, { align: 'center' });
+
+    // Línea separadora estilo sello
+    targetDoc.setDrawColor(0, 0, 0);
+    targetDoc.setLineWidth(0.3);
+    targetDoc.line(sealCenterX - 25.7, signatureY, sealCenterX + 25.7, signatureY);
+
+    const cleanName = formatDoctorDisplayName(profile.nombre || profile.n || 'PROFESIONAL');
+    const displayEspecialidad = (profile.especialidad || profile.esp || 'Otorrinolaringología') === 'ORL' 
+      ? 'OTORRINOLARINGOLOGÍA' 
+      : (profile.especialidad || profile.esp || 'OTORRINOLARINGOLOGÍA').toUpperCase();
+
     const mp = profile.mp || profile.m || '';
     const me = profile.me || '';
     let registrationText = "";
-    if (mp && me) registrationText = `MP: ${mp} - ME: ${me}`;
+    if (mp && me) registrationText = `MP: ${mp} | ME: ${me}`;
     else if (mp) registrationText = `MP: ${mp}`;
     else if (me) registrationText = `ME: ${me}`;
-    
-    if (registrationText) targetDoc.text(registrationText, signatureX + 32, signatureY + 14, { align: 'center' });
+
+    const footerLines = [
+      cleanName.toUpperCase(),
+      displayEspecialidad,
+      registrationText
+    ].filter(line => line !== '');
+
+    let textY = signatureY + 3.11;
+    targetDoc.setTextColor(0, 0, 0);
+    targetDoc.setFont("helvetica", "bold");
+    targetDoc.setFontSize(6.31);
+
+    footerLines.forEach((text) => {
+      targetDoc.text(text, sealCenterX, textY, { align: 'center' });
+      textY += 2.71;
+    });
 
     // Footer line — ALWAYS shown at the very bottom
     targetDoc.setDrawColor(...coatBlue);
@@ -354,7 +376,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     
     doc.setFont("helvetica", "bold");
     doc.setFontSize(10);
-    doc.setTextColor(0, 102, 128);
+    doc.setTextColor(0, 0, 0);
     doc.text("Se solicita:", 20, currentY);
     
     let y = currentY + 6; // Un poco más compacto arriba
@@ -386,14 +408,14 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       }
       
       const boxSize = Math.max(yIncrement * 0.6, 2.5);
-      doc.setDrawColor(160);
-      doc.setLineWidth(0.1);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.15);
       doc.rect(25, y - (boxSize * 0.8), boxSize, boxSize);
       
       if (isSelected) {
-        doc.setFillColor(0, 102, 128);
+        doc.setFillColor(0, 0, 0);
         doc.rect(25, y - (boxSize * 0.8), boxSize, boxSize, 'F');
-        doc.setDrawColor(255);
+        doc.setDrawColor(255, 255, 255);
         doc.setLineWidth(0.25);
         doc.line(25 + (boxSize * 0.2), y - (boxSize * 0.4), 25 + (boxSize * 0.45), y - (boxSize * 0.15));
         doc.line(25 + (boxSize * 0.45), y - (boxSize * 0.15), 25 + (boxSize * 0.8), y - (boxSize * 0.6));
@@ -401,29 +423,29 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       
       doc.setFont("helvetica", "normal");
       doc.setFontSize(dynamicFontSize);
-      doc.setTextColor(60);
+      doc.setTextColor(0, 0, 0);
       doc.text(p.n, 32, y);
       
       if (p.c) {
         doc.setFontSize(dynamicCodeSize);
-        doc.setTextColor(150);
+        doc.setTextColor(0, 0, 0);
         doc.text(p.c, 90, y);
       }
       
       if (isSelected && (orderData.quantities?.[p.n] || 1) > 1) {
         doc.setFont("helvetica", "bold");
         doc.setFontSize(dynamicFontSize);
-        doc.setTextColor(0, 102, 128);
+        doc.setTextColor(0, 0, 0);
         doc.text(`x${orderData.quantities[p.n]}`, 110, y);
       }
       
-      doc.setDrawColor(220);
+      doc.setDrawColor(0, 0, 0);
       doc.setLineWidth(0.05);
       doc.line(120, y + 0.5, pageWidth - 15, y + 0.5);
       
       if (isSelected && orderData.indications?.[p.n]) {
         doc.setFontSize(dynamicFontSize * 0.95);
-        doc.setTextColor(30);
+        doc.setTextColor(0, 0, 0);
         doc.text(orderData.indications[p.n], 121, y);
       }
       y += yIncrement;
@@ -438,24 +460,25 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       }
       
       const boxSize = Math.max(yIncrement * 0.6, 2.5);
-      doc.setFillColor(0, 102, 128);
+      doc.setFillColor(0, 0, 0);
       doc.rect(25, y - (boxSize * 0.8), boxSize, boxSize, 'F');
-      doc.setDrawColor(255);
+      doc.setDrawColor(255, 255, 255);
       doc.setLineWidth(0.25);
       doc.line(25 + (boxSize * 0.2), y - (boxSize * 0.4), 25 + (boxSize * 0.45), y - (boxSize * 0.15));
       doc.line(25 + (boxSize * 0.45), y - (boxSize * 0.15), 25 + (boxSize * 0.8), y - (boxSize * 0.6));
       
       doc.setFont("helvetica", "normal");
       doc.setFontSize(dynamicFontSize);
-      doc.setTextColor(60);
+      doc.setTextColor(0, 0, 0);
       doc.text(pName.toUpperCase(), 32, y);
       
-      doc.setDrawColor(220);
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.05);
       doc.line(120, y + 0.5, pageWidth - 15, y + 0.5);
       
       if (orderData.indications?.[pName]) {
         doc.setFontSize(dynamicFontSize * 0.95);
-        doc.setTextColor(30);
+        doc.setTextColor(0, 0, 0);
         doc.text(orderData.indications[pName], 121, y);
       }
       y += yIncrement;

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ClinicalEditor from '../components/ClinicalEditor';
+import { formatDoctorDisplayName } from '../utils/doctorName';
 import { 
   FileText,
   FilePlus, 
@@ -968,11 +969,13 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         currentY = 40; // Empezamos en un lugar visible en la nueva hoja
     }
 
+    const signatureX = 160;
+
     if (prof.signatureBase64) {
       try {
         let imageData = prof.signatureBase64;
         
-        // Procesar imagen (sea URL o Base64 antigua) para asegurar que esté redimensionada y optimizada
+        // Procesar imagen (sea URL o Base64 antigua) para asegurar que esté recortada y optimizada
         try {
           const sigData = await new Promise((resolve, reject) => {
             const img = new Image();
@@ -981,8 +984,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               const croppedCanvas = cropSignatureCanvas(img);
               const canvas = document.createElement('canvas');
               const ctx = canvas.getContext('2d');
-              // Redimensionar a un tamaño profesional razonable (max 600px de ancho)
-              const maxWidth = 600;
+              const maxWidth = 500;
               const scale = Math.min(1, maxWidth / croppedCanvas.width);
               canvas.width = croppedCanvas.width * scale;
               canvas.height = croppedCanvas.height * scale;
@@ -996,9 +998,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             img.src = imageData;
           });
 
-          // Calcular dimensiones proporcionales
-          const maxW = 55;
-          const maxH = 22;
+          // Dimensiones compactas (estilo Cirugías)
+          const maxW = 51.41;
+          const maxH = 19.28;
           const imageRatio = sigData.ratio || 2.5;
           let sigW = maxW;
           let sigH = maxH;
@@ -1011,50 +1013,65 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           }
 
           // Centrado perfecto sobre X = 160
-          doc.addImage(sigData.data, 'PNG', 160 - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
-          currentY += sigH + 3;
+          doc.addImage(sigData.data, 'PNG', signatureX - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
+          currentY += sigH + 2;
         } catch (err) {
           console.error("Error optimizing signature image, trying direct addImage:", err);
-          // Si falla, intentamos agregarla directamente con un tamaño estándar y centrado
           try {
-            const sigW = 48;
-            const sigH = 18;
-            doc.addImage(imageData, 'PNG', 160 - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
-            currentY += sigH + 3;
+            const sigW = 47.12;
+            const sigH = 17.14;
+            doc.addImage(imageData, 'PNG', signatureX - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
+            currentY += sigH + 2;
           } catch (directErr) {
             console.error("Failed to add signature image directly:", directErr);
-            currentY += 5; // Fallback sin firma
+            currentY += 4;
           }
         }
       } catch (e) {
         console.error("Error signature:", e);
-        currentY += 5;
+        currentY += 4;
       }
     } else {
-        currentY += 5;
+      currentY += 4;
     }
     
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8);
-    
+    // Línea separadora estilo sello
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(signatureX - 25.7, currentY, signatureX + 25.7, currentY);
+    currentY += 3.11;
+
     const isStaff = prof.role === 'admin' || prof.role === 'secre' || prof.role === 'secretaria';
-    const profName = (() => {
-      const prefix = (isStaff ? '' : (prof.prefix ? prof.prefix + ' ' : ''));
-      const rawName = prof.nombre || prof.n || (isStaff ? 'Administración' : 'Profesional');
-      const cleanName = (prof.prefix && !isStaff) ? rawName.replace(/(DR|DRA|LIC|PROF|BIOQ|FON)\s*\.?\s*/gi, '').replace(/^[.\s,]+/, '').trim() : rawName;
-      return prefix + cleanName;
-    })();
+    const profName = isStaff 
+      ? (prof.nombre || prof.n || 'Administración') 
+      : formatDoctorDisplayName(prof.nombre || prof.n || 'Profesional');
+      
+    const displayEspecialidad = isStaff 
+      ? '' 
+      : ((prof.especialidad || prof.esp || 'Otorrinolaringología') === 'ORL' 
+          ? 'OTORRINOLARINGOLOGÍA' 
+          : (prof.especialidad || prof.esp || 'Otorrinolaringología').toUpperCase());
+
+    const mp = prof.mp || prof.m || '';
+    const me = prof.me || '';
+    let registrationText = "";
+    if (mp && me) registrationText = `MP: ${mp} | ME: ${me}`;
+    else if (mp) registrationText = `MP: ${mp}`;
+    else if (me) registrationText = `ME: ${me}`;
+
     const footerLines = [
-      profName,
-      isStaff ? '' : (prof.especialidad || prof.esp || 'Especialista'),
-      isStaff ? '' : `MP: ${prof.mp || prof.m || '-'}${prof.me && String(prof.me).trim() !== "" ? ` | ME: ${prof.me}` : ''}`
+      profName.toUpperCase(),
+      displayEspecialidad,
+      isStaff ? '' : registrationText
     ].filter(line => line !== '');
 
-    footerLines.forEach((text, i) => {
-      // Usamos bold para simular el efecto de sello "Arial Black"
-      doc.setFont("helvetica", "bold");
-      doc.text(text, 160, currentY, { align: 'center' });
-      currentY += (i === 0 ? 3.5 : 3);
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(6.31);
+
+    footerLines.forEach((text) => {
+      doc.text(text, signatureX, currentY, { align: 'center' });
+      currentY += 2.71;
     });
 
     // 10. Footer Institucional (Bottom of page) — ALWAYS shown
