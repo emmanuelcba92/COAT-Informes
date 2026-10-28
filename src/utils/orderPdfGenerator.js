@@ -1,4 +1,5 @@
 import jsPDF from 'jspdf';
+import { drawWrappedCenteredText } from './pdfTextLayout';
 import { formatDoctorDisplayName } from './doctorName';
 
 const cropSignatureCanvas = (img) => {
@@ -149,11 +150,12 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     targetDoc.setFontSize(12);
     targetDoc.setFont("helvetica", "bold");
     targetDoc.setTextColor(0, 0, 0);
-    targetDoc.text(`Paciente: ${orderData.name}`, centerX, 49, { align: 'center' });
+    const patientLastY = drawWrappedCenteredText(targetDoc, `Paciente: ${orderData.name}`, 49, 5);
 
     targetDoc.setFontSize(10);
     targetDoc.setFont("helvetica", "normal");
-    targetDoc.text(`Obra Social: ${orderData.insurance} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${orderData.diagnosis}` : ''}`, centerX, 55, { align: 'center' });
+    const infoLastY = drawWrappedCenteredText(targetDoc, `Obra Social: ${orderData.insurance} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${orderData.diagnosis}` : ''}`, patientLastY + 6, 5, 180, '|');
+    return infoLastY + 7;
   };
 
   const drawFooter = async (targetDoc, currentY = null) => {
@@ -279,8 +281,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     if (selectedLabs.length > 0) {
       if (!firstPage) doc.addPage();
       firstPage = false;
-      await drawHeader(doc, "");
-      let curY = 62;
+      let curY = await drawHeader(doc, "");
       curY = drawObservations(doc, curY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -306,8 +307,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     if (selectedCardio.length > 0) {
       if (!firstPage) doc.addPage();
       firstPage = false;
-      await drawHeader(doc, "");
-      let curY = 62;
+      let curY = await drawHeader(doc, "");
       curY = drawObservations(doc, curY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -349,8 +349,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     if (selectedRX.length > 0) {
       if (!firstPage) doc.addPage();
       firstPage = false;
-      await drawHeader(doc, "");
-      let curY = 62;
+      let curY = await drawHeader(doc, "");
       curY = drawObservations(doc, curY);
       doc.setFont("helvetica", "bold");
       doc.setFontSize(12);
@@ -370,8 +369,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       await drawFooter(doc, curY + 15 + (selectedRX.length * 10));
     }
   } else if (orderData.orderType === 'coat') {
-    await drawHeader(doc, "");
-    let currentY = 62;
+    let currentY = await drawHeader(doc, "");
     currentY = drawObservations(doc, currentY);
     
     doc.setFont("helvetica", "bold");
@@ -403,8 +401,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       if (y > pageHeight - 35) { 
         await drawFooter(doc, y);
         doc.addPage();
-        await drawHeader(doc, "");
-        y = 65;
+        y = (await drawHeader(doc, "")) + 3;
       }
       
       const boxSize = Math.max(yIncrement * 0.6, 2.5);
@@ -455,8 +452,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       if (y > pageHeight - 35) {
         await drawFooter(doc, y);
         doc.addPage();
-        await drawHeader(doc, "");
-        y = 65;
+        y = (await drawHeader(doc, "")) + 3;
       }
       
       const boxSize = Math.max(yIncrement * 0.6, 2.5);
@@ -485,8 +481,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     }
     await drawFooter(doc, y);
   } else {
-    await drawHeader(doc, "");
-    let currentY = 62;
+    let currentY = await drawHeader(doc, "");
     currentY = drawObservations(doc, currentY);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11);
@@ -502,8 +497,7 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
       if (y + itemHeight > pageHeight - footerMargin) {
         await drawFooter(doc, y);
         doc.addPage();
-        await drawHeader(doc, "");
-        y = 65;
+        y = (await drawHeader(doc, "")) + 3;
       }
       doc.setFontSize(10);
       doc.setTextColor(50);

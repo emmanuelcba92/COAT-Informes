@@ -47,7 +47,18 @@ import { db, auth } from '../services/firebase';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
 import { extractPatientsFromImage } from '../utils/aiService';
+import { EXTERNAL_REPORT_ACCEPT, validateExternalReportFile, prepareExternalReportFile } from '../utils/externalReportFile';
 
+const UPLOAD_FIELDS = [
+  ['patientName', 'reportRequiredPatient', 'Paciente', true],
+  ['date', 'reportRequiredDate', 'Fecha', true],
+  ['socialWork', 'reportRequiredSocialWork', 'Obra Social', true],
+  ['affiliateNumber', 'reportRequiredAffiliate', 'Nro. Afiliado', false],
+  ['patientDni', 'reportRequiredDni', 'DNI', false],
+  ['requester', 'reportRequiredRequester', 'Solicitante', false],
+  ['reason', 'reportRequiredReason', 'Motivo / Descripción', false],
+  ['patientEmail', 'reportRequiredEmail', 'Email del Paciente', false],
+];
 
 
 const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaProp, isSuperSecretaria = false, isDarkMode }) => {
@@ -102,6 +113,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
   // Upload State
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadFileError, setUploadFileError] = useState('');
   const [uploadData, setUploadData] = useState({
     file: null,
     patientName: '',
@@ -115,6 +127,8 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     date: new Date().toLocaleDateString('en-CA')
   });
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const requiredUpload = Object.fromEntries(UPLOAD_FIELDS.map(([field, setting, , defaultRequired]) =>
+    [field, defaultRequired ? config[setting] !== false : config[setting] === true]));
   const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
   const [emailMissingWarning, setEmailMissingWarning] = useState(false);
   const [isPasting, setIsPasting] = useState(false);
@@ -154,7 +168,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
   const savePatientToHistory = async () => {
     const cleanDni = uploadData.patientDni.toString().replace(/\D/g, '');
-    if (!cleanDni || cleanDni.length < 7) return;
+    if (!cleanDni || cleanDni.length < 7 || !uploadData.patientName.trim()) return;
     try {
       const patientRef = doc(db, 'patients', cleanDni);
       const patientName = uploadData.patientName.trim().toUpperCase();
@@ -418,17 +432,34 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
   const handleUpload = async (e) => {
     e.preventDefault();
-    if (!uploadData.file || !uploadData.patientName || !uploadData.patientDni || !uploadData.profId) {
-      showToast('Por favor complete los campos obligatorios: Paciente, DNI y Archivo.', 'error');
+    if (isUploading) return;
+    setUploadFileError('');
+    if (!uploadData.file || !uploadData.profId) {
+      setUploadFileError('Seleccione el archivo y el profesional asociado.');
+      return;
+    }
+    const missingField = UPLOAD_FIELDS.find(([field]) => requiredUpload[field] && !uploadData[field].trim());
+    if (missingField) {
+      setUploadFileError(`El campo ${missingField[2]} es obligatorio.`);
       return;
     }
 
     if (uploadData.patientEmail && (!uploadData.patientEmail.includes('@') || !uploadData.patientEmail.includes('.'))) {
-      showToast('Por favor ingrese un email válido o deje el campo en blanco.', 'error');
+      setUploadFileError('Por favor ingrese un email válido o deje el campo en blanco si es opcional.');
       return;
     }
 
     setIsUploading(true);
+    setUploadFileError('');
+    let fileToUpload;
+    try {
+      fileToUpload = await prepareExternalReportFile(uploadData.file);
+    } catch (err) {
+      setUploadFileError(err.message);
+      showToast(err.message, 'error');
+      setIsUploading(false);
+      return;
+    }
     try {
       await savePatientToHistory();
       
@@ -437,7 +468,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
       
       try {
         // Limpiar nombre de archivo (quitar eñes, acentos, espacios y caracteres raros)
-        const cleanFileName = uploadData.file.name
+        const cleanFileName = fileToUpload.name
           .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // Quitar acentos
           .replace(/ñ/g, "n").replace(/Ñ/g, "N")            // Quitar eñes
           .replace(/[^a-zA-Z0-9._-]/g, "_");               // Todo lo demás a guión bajo
@@ -447,7 +478,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         
         const { data, error: uploadError } = await supabase.storage
           .from('informescoat')
-          .upload(filePath, uploadData.file);
+          .upload(filePath, fileToUpload);
 
         if (uploadError) throw uploadError;
 
@@ -499,7 +530,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
           // Convert file to base64 for Apps Script
           const base64data = await new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.readAsDataURL(uploadData.file);
+            reader.readAsDataURL(fileToUpload);
             reader.onload = () => resolve(reader.result.split(',')[1]);
             reader.onerror = error => reject(error);
           });
@@ -873,7 +904,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   className="btn-primary px-6 py-3 flex items-center gap-2 shadow-xl shadow-blue-500/20 active:scale-95 transition-all"
               >
                   <Upload size={20} />
-                  <span>Subir PDF</span>
+                  <span>Subir archivo</span>
               </button>
             )}
 
@@ -1180,7 +1211,7 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                     <FileUp size={24} />
                   </div>
                   <div>
-                    <h2 className="text-xl font-black">Subir Informe PDF</h2>
+                    <h2 className="text-xl font-black">Subir archivo de informe</h2>
                     <p className="text-xs text-gray-400 font-medium">Asociar informe externo a profesional</p>
                   </div>
                 </div>
@@ -1195,9 +1226,9 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
               <form onSubmit={handleUpload} className="p-8 space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Paciente *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Paciente {requiredUpload.patientName ? '*' : '(Opc)'}</label>
                     <input 
-                      required
+                      required={requiredUpload.patientName}
                       type="text" 
                       placeholder="Nombre Completo"
                       className="input-field"
@@ -1207,13 +1238,13 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   </div>
                   <div className="space-y-1">
                     <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1 flex justify-between items-center w-full">
-                      <span>DNI *</span>
+                      <span>DNI {requiredUpload.patientDni ? '*' : '(Opc)'}</span>
                       <span className="text-[8px] text-blue-500 font-bold normal-case bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">
                         Pegar captura (CTRL+V)
                       </span>
                     </label>
                     <input 
-                      required
+                      required={requiredUpload.patientDni}
                       type="text" 
                       inputMode="numeric"
                       placeholder="Solo números"
@@ -1227,31 +1258,34 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Obra Social (Opc)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Obra Social {requiredUpload.socialWork ? '*' : '(Opc)'}</label>
                       <input 
                         type="text" 
                         placeholder=""
                         className="input-field"
                         value={uploadData.socialWork}
+                        required={requiredUpload.socialWork}
                         onChange={e => setUploadData({...uploadData, socialWork: e.target.value})}
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Nro. Afiliado (Opc)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Nro. Afiliado {requiredUpload.affiliateNumber ? '*' : '(Opc)'}</label>
                       <input 
                         type="text" 
                         placeholder=""
                         className="input-field"
                         value={uploadData.affiliateNumber}
+                        required={requiredUpload.affiliateNumber}
                         onChange={e => setUploadData({...uploadData, affiliateNumber: e.target.value})}
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Fecha de informe</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Fecha de informe {requiredUpload.date ? '*' : '(Opc)'}</label>
                       <input 
                         type="date" 
                         className="input-field"
                         value={uploadData.date}
+                        required={requiredUpload.date}
                         onChange={e => setUploadData({...uploadData, date: e.target.value})}
                       />
                     </div>
@@ -1259,22 +1293,24 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Solicitante (Opc)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Solicitante {requiredUpload.requester ? '*' : '(Opc)'}</label>
                       <input 
                         type="text" 
                         placeholder="Médico..."
                         className="input-field"
                         value={uploadData.requester}
+                        required={requiredUpload.requester}
                         onChange={e => setUploadData({...uploadData, requester: e.target.value})}
                       />
                     </div>
                     <div className="space-y-1">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Email Paciente (Opc)</label>
+                      <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Email Paciente {requiredUpload.patientEmail ? '*' : '(Opc)'}</label>
                       <input 
                         type="email" 
                         placeholder="Para envío por mail"
                         className={`input-field ${uploadData.patientEmail && !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(uploadData.patientEmail)) ? 'input-error' : ''}`}
                         value={uploadData.patientEmail}
+                        required={requiredUpload.patientEmail}
                         onChange={e => setUploadData({...uploadData, patientEmail: e.target.value})}
                       />
                       {emailMissingWarning && (
@@ -1286,9 +1322,9 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Motivo / Descripción *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Motivo / Descripción {requiredUpload.reason ? '*' : '(Opc)'}</label>
                     <input 
-                      required
+                      required={requiredUpload.reason}
                       type="text" 
                       placeholder=""
                       className="input-field"
@@ -1313,15 +1349,29 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                 </div>
 
                 <div className="space-y-1">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Archivo PDF *</label>
+                    <label className="text-[10px] font-black uppercase tracking-widest text-gray-400 ml-1">Archivo PDF, JPG o JPEG *</label>
                     <div className="relative group">
                         <input 
                             required
                             type="file" 
-                            accept=".pdf"
+                            accept={EXTERNAL_REPORT_ACCEPT}
+                            disabled={isUploading}
                             className="hidden" 
                             id="pdf-upload"
-                            onChange={e => setUploadData({...uploadData, file: e.target.files[0]})}
+                            onChange={e => {
+                              const file = e.target.files[0];
+                              if (!file) return;
+                              try {
+                                validateExternalReportFile(file);
+                                setUploadFileError('');
+                                setUploadData(prev => ({...prev, file}));
+                              } catch (err) {
+                                setUploadFileError(err.message);
+                                e.target.value = '';
+                                setUploadData(prev => ({...prev, file: null}));
+                                showToast(err.message, 'error');
+                              }
+                            }}
                         />
                         <label 
                             htmlFor="pdf-upload"
@@ -1331,9 +1381,10 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                             <span className="text-sm font-bold text-[var(--text-main)] opacity-70 group-hover:opacity-100 group-hover:text-blue-500">
                                 {uploadData.file ? uploadData.file.name : 'Click para seleccionar archivo'}
                             </span>
-                            <span className="text-[10px] text-gray-500 mt-1">Solo se permiten archivos .pdf</span>
+                            <span className="text-[10px] text-gray-500 mt-1">PDF, JPG o JPEG. Las imágenes se convierten automáticamente a PDF al registrar.</span>
                         </label>
                     </div>
+                    {uploadFileError && <p role="alert" className="text-sm text-red-600 font-medium mt-2">{uploadFileError}</p>}
                 </div>
 
                 <div className="pt-4 flex gap-3">

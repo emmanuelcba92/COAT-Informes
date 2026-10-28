@@ -25,6 +25,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, addDoc } from 'firebase/firestore';
 import jsPDF from 'jspdf';
+import { drawWrappedCenteredText } from '../utils/pdfTextLayout';
 
 const cropSignatureCanvas = (img) => {
   try {
@@ -490,16 +491,16 @@ const OrdersPage = ({ userProfile: propProfile, isDarkMode }) => {
       const patientName = (patientData.name || '').toUpperCase();
       doc.setFont("helvetica", "bold");
       doc.setTextColor(30, 30, 30);
-      doc.text(`PACIENTE: ${patientName}`, centerX, 48, { align: 'center' });
+      const patientLastY = drawWrappedCenteredText(doc, `PACIENTE: ${patientName}`, 48, 4.5);
 
       doc.setFontSize(8.5);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(60, 60, 60);
       
       const infoLine = `OBRA SOCIAL: ${patientData.insurance || '-'} | NRO. AFILIADO: ${patientData.affiliateNumber || '-'}${patientData.diagnosis ? ` | DIAG: ${patientData.diagnosis}` : ''}`;
-      doc.text(infoLine, centerX, 53, { align: 'center' });
+      const infoLastY = drawWrappedCenteredText(doc, infoLine, patientLastY + 5, 4, 180, '|');
 
-      let currentY = 58;
+      let currentY = infoLastY + 5;
       if (patientData.observations) {
         doc.setFontSize(8.5);
         doc.setFont("helvetica", "italic");

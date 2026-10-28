@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { drawWrappedCenteredText } from '../utils/pdfTextLayout';
 import ClinicalEditor from '../components/ClinicalEditor';
 import { formatDoctorDisplayName } from '../utils/doctorName';
 import { 
@@ -751,7 +752,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     // Nombre del Paciente (CENTRADOS Y COMPACTOS)
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(10);
-    doc.text(`PACIENTE: ${reportData.patient}`, 105, currentY, { align: 'center' });
+    currentY = drawWrappedCenteredText(doc, `PACIENTE: ${reportData.patient}`, currentY, 4.5);
     
     // Datos secundarios (Obra Social, DNI, Fecha)
     currentY += 5.5;
@@ -782,7 +783,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester}`);
     if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason}`);
 
-    doc.text(infoParts.join('  |  '), 105, currentY, { align: 'center' });
+    currentY = drawWrappedCenteredText(doc, infoParts.join('  |  '), currentY, 4, 180, '|');
     
     currentY += 4.5;
     doc.line(15, currentY, 195, currentY); // Línea inferior (Bien cerca de los datos)
