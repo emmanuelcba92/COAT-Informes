@@ -821,157 +821,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       nodes = Array.from(tempDiv.children);
     }
 
-    for (const node of nodes) {
-      if (node.tagName.toLowerCase() === 'table') {
-        // Extraer datos de la tabla (headers y rows)
-        const headers = [];
-        const rows = [];
-        
-        const thElements = node.querySelectorAll('thead th, tr:first-child th');
-        if (thElements.length > 0) {
-          headers.push(Array.from(thElements).map(th => th.textContent.trim()));
-        }
-
-        const trElements = node.querySelectorAll('tr');
-        trElements.forEach((tr, index) => {
-          const ths = tr.querySelectorAll('th');
-          const tds = tr.querySelectorAll('td');
-          if (ths.length > 0 && tds.length === 0 && index === 0 && headers.length > 0) {
-            return;
-          }
-          const rowCells = Array.from(tr.querySelectorAll('td, th')).map(cell => cell.textContent.trim());
-          if (rowCells.some(c => c !== '')) {
-            rows.push(rowCells);
-          }
-        });
-
-        // Control de espacio antes de la tabla
-        if (currentY > pageHeight - 45) {
-          doc.addPage();
-          currentY = 25;
-        }
-
-        let headConfig = headers.length > 0 ? headers : undefined;
-        let bodyConfig = rows;
-
-        autoTable(doc, {
-          head: headConfig,
-          body: bodyConfig,
-          startY: currentY,
-          margin: { left: 10, right: 10 },
-          theme: 'plain',
-          styles: {
-            font: 'helvetica',
-            fontSize: 9,
-            textColor: [15, 23, 42],
-            lineColor: [0, 0, 0],
-            lineWidth: 0.25,
-            cellPadding: 3,
-            valign: 'middle',
-            overflow: 'linebreak'
-          },
-          headStyles: {
-            fontStyle: 'bold',
-            fillColor: [240, 243, 246],
-            textColor: [0, 0, 0],
-            lineColor: [0, 0, 0],
-            lineWidth: 0.3
-          },
-          alternateRowStyles: {
-            fillColor: [255, 255, 255]
-          }
-        });
-
-        if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
-          currentY = doc.lastAutoTable.finalY + 8;
-        } else {
-          currentY += 25;
-        }
-      } else {
-        // Párrafo, encabezado o lista
-        const tag = node.tagName.toLowerCase();
-        const isHeading = ['h1', 'h2', 'h3'].includes(tag);
-        const nodeText = cleanHtmlForPDF(node.outerHTML);
-
-        // Si el párrafo está vacío (salto de línea con Enter), respetamos el espacio vertical
-        if (!nodeText) {
-          currentY += 4.5;
-          continue;
-        }
-
-        let fontSize = 10.5;
-        let isBold = isHeading || !!node.querySelector('strong, b') || node.tagName.toLowerCase() === 'strong';
-        let lineHeight = 5.0;
-
-        // Detectar tamaño de letra personalizado (ej: 8pt, 14pt)
-        const sizeMatch = node.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
-        if (sizeMatch) {
-          fontSize = parseFloat(sizeMatch[1]);
-          lineHeight = Math.max(3.8, fontSize * 0.45 + 0.5);
-        } else if (isHeading) {
-          fontSize = tag === 'h1' ? 13 : (tag === 'h2' ? 11.5 : 10.5);
-          lineHeight = 5.5;
-          currentY += 2;
-        }
-
-        // Detectar alineación de texto (centro, derecha, justificado o izquierda)
-        let textAlign = 'left';
-        const nodeStyle = (node.getAttribute && node.getAttribute('style')) || '';
-        if (node.style?.textAlign) {
-          textAlign = node.style.textAlign;
-        } else if (nodeStyle.includes('text-align: center') || node.classList?.contains('has-text-align-center') || node.querySelector?.('[style*="text-align: center"], .has-text-align-center')) {
-          textAlign = 'center';
-        } else if (nodeStyle.includes('text-align: right') || node.classList?.contains('has-text-align-right') || node.querySelector?.('[style*="text-align: right"], .has-text-align-right')) {
-          textAlign = 'right';
-        } else if (nodeStyle.includes('text-align: justify') || node.classList?.contains('has-text-align-justify') || node.querySelector?.('[style*="text-align: justify"], .has-text-align-justify')) {
-          textAlign = 'justify';
-        }
-
-        doc.setFont('helvetica', isBold ? 'bold' : 'normal');
-        doc.setFontSize(fontSize);
-        
-        const lines = doc.splitTextToSize(nodeText, 185);
-        lines.forEach(line => {
-          if (currentY > pageHeight - 25) {
-            doc.addPage();
-            currentY = 25;
-          }
-          if (textAlign === 'center') {
-            doc.text(line, pageWidth / 2, currentY, { align: 'center' });
-          } else if (textAlign === 'right') {
-            doc.text(line, pageWidth - 10, currentY, { align: 'right' });
-          } else if (textAlign === 'justify') {
-            doc.text(line, 10, currentY, { align: 'justify', maxWidth: 185 });
-          } else {
-            doc.text(line, 10, currentY);
-          }
-          currentY += lineHeight;
-        });
-
-        // Espacio entre párrafos
-        currentY += isHeading ? 2.5 : 2.0;
-      }
-    }
-    
-    // 5. Signature Area - ADAPTATIVA
-    // Objetivo: Que no quede abajo del todo si el informe es corto (petición de obras sociales)
-    const middlePoint = pageHeight / 2;
-    
-    // Si el texto terminó muy arriba, forzamos la firma al menos a la mitad de la hoja
-    if (currentY < middlePoint - 20) {
-      currentY = middlePoint;
-    } else {
-      currentY += 10; // Un poco de aire después del texto
-    }
-    
-    // Control de seguridad: Si la firma queda muy cerca del borde inferior, saltamos de hoja
-    if (currentY > pageHeight - 65) {
-        doc.addPage();
-        currentY = 40; // Empezamos en un lugar visible en la nueva hoja
-    }
-
-    const signatureX = 160;
-
+    // Measure using the same renderer and metrics, before drawing the real body.
+    // The complete stamp (image, rule and professional data) must fit above the footer.
+    let signatureImage = null;
     if (prof.signatureBase64) {
       try {
         let imageData = prof.signatureBase64;
@@ -1013,35 +865,23 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             sigW = maxH * imageRatio;
           }
 
-          // Centrado perfecto sobre X = 160
-          doc.addImage(sigData.data, 'PNG', signatureX - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
-          currentY += sigH + 2;
+          signatureImage = { data: sigData.data, width: sigW, height: sigH };
         } catch (err) {
           console.error("Error optimizing signature image, trying direct addImage:", err);
           try {
             const sigW = 47.12;
             const sigH = 17.14;
-            doc.addImage(imageData, 'PNG', signatureX - (sigW / 2), currentY, sigW, sigH, undefined, 'FAST');
-            currentY += sigH + 2;
+            doc.getImageProperties(imageData);
+            signatureImage = { data: imageData, width: sigW, height: sigH };
           } catch (directErr) {
             console.error("Failed to add signature image directly:", directErr);
-            currentY += 4;
           }
         }
       } catch (e) {
         console.error("Error signature:", e);
-        currentY += 4;
       }
-    } else {
-      currentY += 4;
     }
     
-    // Línea separadora estilo sello
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    doc.line(signatureX - 25.7, currentY, signatureX + 25.7, currentY);
-    currentY += 3.11;
-
     const isStaff = prof.role === 'admin' || prof.role === 'secre' || prof.role === 'secretaria';
     const profName = isStaff 
       ? (prof.nombre || prof.n || 'Administración') 
@@ -1066,6 +906,229 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       isStaff ? '' : registrationText
     ].filter(line => line !== '');
 
+    const signatureHeight = (signatureImage ? signatureImage.height + 2 : 4) + 3.11
+      + footerLines.length * 2.71;
+    const signatureBottom = pageHeight - 23; // 3 mm clear of the institutional rule.
+    const bodyStartY = currentY;
+    // Trailing empty editor paragraphs are spacing, not a closing clinical block.
+    while (nodes.length && !cleanHtmlForPDF(nodes[nodes.length - 1].outerHTML)
+      && nodes[nodes.length - 1].tagName.toLowerCase() !== 'table') nodes.pop();
+    let closingStart = Math.max(0, nodes.length - 1);
+    while (closingStart > 0 && (!cleanHtmlForPDF(nodes[closingStart - 1].outerHTML)
+      || /^H[1-3]$/.test(nodes[closingStart - 1].tagName))) closingStart--;
+
+    const closingAdvance = Math.max(8, ...nodes.slice(closingStart).map(node => {
+      const size = node.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
+      const heading = /^H[1-3]$/.test(node.tagName);
+      return size ? Math.max(3.8, parseFloat(size[1]) * 0.45 + 0.5) + (heading ? 2.5 : 2)
+        : 8;
+    }));
+    const renderContent = (doc, keepClosingBlock = false) => {
+      let currentY = bodyStartY;
+      for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++) {
+        const node = nodes[nodeIndex];
+        const reserve = keepClosingBlock && nodeIndex >= closingStart ? signatureHeight + 4 + closingAdvance : 0;
+        const contentBottom = pageHeight - 25 - reserve;
+        if (node.tagName.toLowerCase() === 'table') {
+          // Extraer datos de la tabla (headers y rows)
+          const headers = [];
+          const rows = [];
+
+          const thElements = node.querySelectorAll('thead th, tr:first-child th');
+          if (thElements.length > 0) {
+            headers.push(Array.from(thElements).map(th => th.textContent.trim()));
+          }
+
+          const trElements = node.querySelectorAll('tr');
+          trElements.forEach((tr, index) => {
+            const ths = tr.querySelectorAll('th');
+            const tds = tr.querySelectorAll('td');
+            if (ths.length > 0 && tds.length === 0 && index === 0 && headers.length > 0) {
+              return;
+            }
+            const rowCells = Array.from(tr.querySelectorAll('td, th')).map(cell => cell.textContent.trim());
+            if (rowCells.some(c => c !== '')) {
+              rows.push(rowCells);
+            }
+          });
+
+          // Control de espacio antes de la tabla
+          if (currentY > contentBottom - 20) {
+            doc.addPage();
+            currentY = 25;
+          }
+
+          let headConfig = headers.length > 0 ? headers : undefined;
+          let bodyConfig = rows;
+
+          autoTable(doc, {
+            head: headConfig,
+            body: bodyConfig,
+            startY: currentY,
+            margin: { left: 10, right: 10, top: 25, bottom: 25 + reserve },
+            pageBreak: 'auto',
+            rowPageBreak: 'avoid',
+            theme: 'plain',
+            styles: {
+              font: 'helvetica',
+              fontSize: 9,
+              textColor: [15, 23, 42],
+              lineColor: [0, 0, 0],
+              lineWidth: 0.25,
+              cellPadding: 3,
+              valign: 'middle',
+              overflow: 'linebreak'
+            },
+            headStyles: {
+              fontStyle: 'bold',
+              fillColor: [240, 243, 246],
+              textColor: [0, 0, 0],
+              lineColor: [0, 0, 0],
+              lineWidth: 0.3
+            },
+            alternateRowStyles: {
+              fillColor: [255, 255, 255]
+            }
+          });
+
+          if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
+            currentY = doc.lastAutoTable.finalY + 8;
+          } else {
+            currentY += 25;
+          }
+        } else {
+          // Párrafo, encabezado o lista
+          const tag = node.tagName.toLowerCase();
+          const isHeading = ['h1', 'h2', 'h3'].includes(tag);
+          const nodeText = cleanHtmlForPDF(node.outerHTML);
+
+          // Si el párrafo está vacío (salto de línea con Enter), respetamos el espacio vertical
+          if (!nodeText) {
+            currentY += 4.5;
+            continue;
+          }
+
+          let fontSize = 10.5;
+          let isBold = isHeading || !!node.querySelector('strong, b') || node.tagName.toLowerCase() === 'strong';
+          let lineHeight = 5.0;
+
+          // Detectar tamaño de letra personalizado (ej: 8pt, 14pt)
+          const sizeMatch = node.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
+          if (sizeMatch) {
+            fontSize = parseFloat(sizeMatch[1]);
+            lineHeight = Math.max(3.8, fontSize * 0.45 + 0.5);
+          } else if (isHeading) {
+            fontSize = tag === 'h1' ? 13 : (tag === 'h2' ? 11.5 : 10.5);
+            lineHeight = 5.5;
+            currentY += 2;
+          }
+
+          // Detectar alineación de texto (centro, derecha, justificado o izquierda)
+          let textAlign = 'left';
+          const nodeStyle = (node.getAttribute && node.getAttribute('style')) || '';
+          if (node.style?.textAlign) {
+            textAlign = node.style.textAlign;
+          } else if (nodeStyle.includes('text-align: center') || node.classList?.contains('has-text-align-center') || node.querySelector?.('[style*="text-align: center"], .has-text-align-center')) {
+            textAlign = 'center';
+          } else if (nodeStyle.includes('text-align: right') || node.classList?.contains('has-text-align-right') || node.querySelector?.('[style*="text-align: right"], .has-text-align-right')) {
+            textAlign = 'right';
+          } else if (nodeStyle.includes('text-align: justify') || node.classList?.contains('has-text-align-justify') || node.querySelector?.('[style*="text-align: justify"], .has-text-align-justify')) {
+            textAlign = 'justify';
+          }
+
+          doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+          doc.setFontSize(fontSize);
+
+          const lines = doc.splitTextToSize(nodeText, 185);
+          // Keep ordinary paragraphs intact; headings travel with the next block.
+          let requiredHeight = Math.max(0, lines.length - 1) * lineHeight;
+          if (isHeading && nodes[nodeIndex + 1]) {
+            const next = nodes[nodeIndex + 1];
+            const nextText = cleanHtmlForPDF(next.outerHTML);
+            const nextSize = next.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
+            doc.setFontSize(nextSize ? parseFloat(nextSize[1]) : 10.5);
+            doc.setFont('helvetica', next.querySelector('strong, b') ? 'bold' : 'normal');
+            const nextHeight = nextSize ? Math.max(3.8, parseFloat(nextSize[1]) * 0.45 + 0.5) : 5;
+            let followingHeight = Math.max(1, doc.splitTextToSize(nextText, 185).length) * nextHeight;
+            if (next.tagName.toLowerCase() === 'table') {
+              // Use the real header + first row height, including wrapped cells.
+              const tableProbe = new jsPDF();
+              const tableHead = Array.from(next.querySelectorAll('thead th, tr:first-child th')).map(cell => cell.textContent.trim());
+              const firstRow = Array.from(next.querySelectorAll('tr')).find(row =>
+                row.querySelector('td') && row.textContent.trim());
+              autoTable(tableProbe, {
+                head: tableHead.length ? [tableHead] : undefined,
+                body: firstRow ? [Array.from(firstRow.querySelectorAll('td, th')).map(cell => cell.textContent.trim())] : [],
+                startY: 25, margin: { left: 10, right: 10, top: 25, bottom: 25 + reserve },
+                theme: 'plain', styles: { font: 'helvetica', fontSize: 9, cellPadding: 3, lineWidth: 0.25 },
+                headStyles: { fontStyle: 'bold', lineWidth: 0.3 }
+              });
+              followingHeight = tableProbe.lastAutoTable.finalY - 25;
+            } else if (followingHeight > contentBottom - 25 - requiredHeight - lineHeight - 2.5) {
+              followingHeight = Math.min(2 * nextHeight, followingHeight);
+            }
+            requiredHeight += lineHeight + 2.5 + followingHeight;
+            doc.setFontSize(fontSize);
+            doc.setFont('helvetica', isBold ? 'bold' : 'normal');
+          }
+          if (currentY + requiredHeight > contentBottom && requiredHeight <= contentBottom - 25 && currentY > 25) {
+            doc.addPage();
+            currentY = 25;
+          }
+          lines.forEach((line, lineIndex) => {
+            // For paragraphs taller than a page, leave at least two lines together at each cut.
+            const linesLeft = lines.length - lineIndex;
+            if (currentY > contentBottom ||
+                (lines.length > 1 && linesLeft > 1 && currentY + lineHeight > contentBottom) ||
+                (linesLeft === 3 && currentY + 2 * lineHeight > contentBottom)) {
+              doc.addPage();
+              currentY = 25;
+            }
+            if (textAlign === 'center') {
+              doc.text(line, pageWidth / 2, currentY, { align: 'center' });
+            } else if (textAlign === 'right') {
+              doc.text(line, pageWidth - 10, currentY, { align: 'right' });
+            } else if (textAlign === 'justify') {
+              doc.text(line, 10, currentY, { align: 'justify', maxWidth: 185 });
+            } else {
+              doc.text(line, 10, currentY);
+            }
+            currentY += lineHeight;
+          });
+
+          // Espacio entre párrafos
+          currentY += isHeading ? 2.5 : 2.0;
+        }
+      }
+
+      return currentY;
+    };
+    const measurement = new jsPDF({ compress: true });
+    const measuredY = renderContent(measurement);
+    const signatureTop = (y, gap, pages) => pages === 1 && y < pageHeight / 2 - 20 ? pageHeight / 2 : y + gap;
+    // Recover at most 6 mm from the signature gap; never shrink type, images or line leading.
+    const needsClosingBlock = signatureTop(measuredY, 4, measurement.getNumberOfPages()) + signatureHeight > signatureBottom;
+    currentY = renderContent(doc, needsClosingBlock);
+    const signatureGap = signatureTop(currentY, 10, doc.getNumberOfPages()) + signatureHeight <= signatureBottom ? 10 : 4;
+    currentY = signatureTop(currentY, signatureGap, doc.getNumberOfPages());
+
+    // 5. Signature Area: image and professional data stay on the same page.
+    const signatureX = 160;
+
+    if (signatureImage) {
+      doc.addImage(signatureImage.data, 'PNG', signatureX - signatureImage.width / 2, currentY,
+        signatureImage.width, signatureImage.height, undefined, 'FAST');
+      currentY += signatureImage.height + 2;
+    } else {
+      currentY += 4;
+    }
+
+    // Línea separadora estilo sello
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.3);
+    doc.line(signatureX - 25.7, currentY, signatureX + 25.7, currentY);
+    currentY += 3.11;
+
     doc.setTextColor(0, 0, 0);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(6.31);
@@ -1077,14 +1140,19 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
 
     // 10. Footer Institucional (Bottom of page) — ALWAYS shown
     const footerY = pageHeight - 15;
-    doc.setDrawColor(30, 58, 138);
-    doc.setLineWidth(0.5);
-    doc.line(10, footerY - 5, 200, footerY - 5);
-    doc.setFontSize(7);
-    doc.setTextColor(100, 100, 100);
-    doc.setFont('helvetica', 'normal');
-    doc.text("Urquiza 401 - Alberdi • Córdoba • Tel: (0351) 423-0530 / 423-9428 • WhatsApp: 3543579794", 105, footerY, { align: 'center' });
-    doc.text("Email: info@coat.com.ar • Web: www.coat.com.ar", 105, footerY + 3.5, { align: 'center' });
+    const lastPage = doc.getNumberOfPages();
+    for (let page = 1; page <= lastPage; page++) {
+      doc.setPage(page);
+      doc.setDrawColor(30, 58, 138);
+      doc.setLineWidth(0.5);
+      doc.line(10, footerY - 5, 200, footerY - 5);
+      doc.setFontSize(7);
+      doc.setTextColor(100, 100, 100);
+      doc.setFont('helvetica', 'normal');
+      doc.text("Urquiza 401 - Alberdi • Córdoba • Tel: (0351) 423-0530 / 423-9428 • WhatsApp: 3543579794", 105, footerY, { align: 'center' });
+      doc.text("Email: info@coat.com.ar • Web: www.coat.com.ar", 105, footerY + 3.5, { align: 'center' });
+    }
+    doc.setPage(lastPage);
 
     if (mode === 'print') {
       const pdfUrl = doc.output('bloburl');
