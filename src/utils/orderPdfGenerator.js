@@ -266,7 +266,40 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
     }
   };
 
-  if (orderData.orderType === 'preop') {
+  if (orderData.orderType === 'rp') {
+    // Reserve the entire existing signature/seal block on every page.
+    // The last content lines therefore always share a page with the signature.
+    const startPage = async () => {
+      let y = await drawHeader(doc, '');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(12);
+      doc.setTextColor(0);
+      doc.text('Rp./', 20, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(11);
+      return y + 7;
+    };
+    let y = await startPage();
+    const bottom = pageHeight - 78;
+    const lineHeight = 5.5;
+    // Ignore only trailing blank lines for layout; keep the stored text unchanged.
+    const sourceLines = (orderData.prescriptionText || '').split(/\r\n|\r|\n/);
+    while (sourceLines.length && !sourceLines[sourceLines.length - 1].trim()) {
+      sourceLines.pop();
+    }
+    // Preserve intentional internal line breaks and blank paragraphs.
+    const lines = sourceLines.flatMap(line => line === '' ? [''] : doc.splitTextToSize(line, pageWidth - 40));
+    for (const line of lines) {
+      if (y > bottom) {
+        await drawFooter(doc, y);
+        doc.addPage();
+        y = await startPage();
+      }
+      doc.text(line, 20, y);
+      y += lineHeight;
+    }
+    await drawFooter(doc, y);
+  } else if (orderData.orderType === 'preop') {
     const labItems = ["Citológico completo", "Glucemia", "Uremia", "Creatinina", "Recuento de plaquetas", "APP", "KPTT"];
     const cardioItems = ["E.C.G.", "Valoración Cardiovascular", "Informe de riesgo quirúrgico (ASA)"];
     const rxItems = ["RX Tórax (Frente)"];

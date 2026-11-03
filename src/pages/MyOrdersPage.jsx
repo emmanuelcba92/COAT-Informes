@@ -273,7 +273,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
         </div>
       `;
 
-      const displayTitle = order.practices?.join(', ') || 'Pedido Médico';
+      const displayTitle = order.orderType === 'rp' ? 'Rp.' : order.practices?.join(', ') || 'Pedido Médico';
 
       const emailBody = `
         <div style="font-family: sans-serif; line-height: 1.6; color: #333; max-width: 600px;">
@@ -475,6 +475,7 @@ const MyOrdersPage = ({ userProfile, isAdmin, isSecretaria = false, isSuperSecre
                     </td>
                     <td className="px-8 py-6">
                       <div className="flex flex-wrap gap-1">
+                        {order.orderType === 'rp' && <span className="text-xs font-bold text-blue-600">Rp.</span>}
                         {order.practices?.slice(0, 2).map((p, i) => (
                           <span key={i} className="text-[9px] font-bold bg-[var(--bg-secondary)] border border-main px-2 py-1 rounded-full text-[var(--text-main)]">{p}</span>
                         ))}

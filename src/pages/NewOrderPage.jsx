@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 
 import { 
   Printer, 
@@ -46,13 +46,14 @@ const ICON_MAP = {
 };
 
 const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecretaria = false, isDirectora = false, isDarkMode }) => {
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const editId = searchParams.get('edit');
 
   const [orderTypes, setOrderTypes] = useState([]);
   const [practicesByType, setPracticesByType] = useState({});
   const [isLoadingSettings, setIsLoadingSettings] = useState(true);
-  const [selectedType, setSelectedType] = useState('coat');
+  const [selectedType, setSelectedType] = useState('rp');
   const [patientEmailRequired, setPatientEmailRequired] = useState(false);
   const [requiredFields, setRequiredFields] = useState({
     requiredDni: true,
@@ -80,6 +81,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     skipEmail: false
   });
 
+  const [prescriptionText, setPrescriptionText] = useState('');
   const [selectedPractices, setSelectedPractices] = useState([]);
   const [quantities, setQuantities] = useState({});
   const [indications, setIndications] = useState({});
@@ -211,6 +213,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
 
   const handleNewOrder = () => {
     setCurrentOrderId(null);
+    setPrescriptionText('');
     setPatientData({
       name: '',
       dni: '',
@@ -230,7 +233,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     setSearchQuery('');
     setPreviewUrl(null);
     // Limpiar URL si estamos editando
-    if (location.search.includes('edit=')) {
+    if (editId) {
       navigate('/orders/new', { replace: true });
     }
     showToast('Formulario de pedido reiniciado');
@@ -287,11 +290,12 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
       const orderData = {
         ...patientData,
         orderType: selectedType,
-        practices: selectedPractices,
-        quantities,
-        indications,
-        customPractices,
-        allPracticesInCategory: practicesByType[selectedType] || [],
+        ...(selectedType === 'rp' ? { prescriptionText, observations: '' } : {}),
+        practices: selectedType === 'rp' ? [] : selectedPractices,
+        quantities: selectedType === 'rp' ? {} : quantities,
+        indications: selectedType === 'rp' ? {} : indications,
+        customPractices: selectedType === 'rp' ? [] : customPractices,
+        allPracticesInCategory: selectedType === 'rp' ? [] : practicesByType[selectedType] || [],
         profesionalId: currentProfId,
         profesionalName: currentProfName,
         delegatedBy: selectedDelegate ? (profile?.nombre || profile?.n || auth.currentUser?.email) : null,
@@ -376,9 +380,6 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
             requiredAffiliateNumber: data.requiredAffiliateNumber !== false,
             requiredDiagnosis:       data.requiredDiagnosis       !== false,
           });
-          if (data.categories?.length > 0) {
-            setSelectedType(data.categories[0].id);
-          }
         }
       } catch (err) {
         console.error("Error fetching order settings:", err);
@@ -412,7 +413,13 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
             observations: data.observations || ''
           });
           
-          if (data.orderType) setSelectedType(data.orderType);
+          setSelectedType(data.orderType || 'coat');
+          if (data.orderType === 'rp' && canDelegate && data.profesionalId !== auth.currentUser?.uid) {
+            const author = await getDoc(doc(db, 'users', data.profesionalId));
+            if (!author.exists()) throw new Error('Profesional responsable no disponible');
+            setSelectedDelegate({ ...author.data(), id: author.id });
+          }
+          setPrescriptionText(data.prescriptionText || '');
           setSelectedPractices(data.practices || []);
           setQuantities(data.quantities || {});
           setIndications(data.indications || {});
@@ -445,7 +452,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
     if (requiredFields.requiredDiagnosis       && !diagnosis.trim())       return false;
     // Permitimos que el formulario sea válido sin email para que se pueda enviar al menos a administración
     if (!isEmailValid(patientEmail))                                       return false;
-    if (selectedPractices.length === 0)                                    return false;
+    if (selectedType === 'rp' ? !prescriptionText.trim() : selectedPractices.length === 0)                                    return false;
     return true;
   };
 
@@ -474,11 +481,12 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
       const orderData = { 
         ...patientData, 
         orderType: selectedType,
-        practices: selectedPractices, 
-        quantities, 
-        indications, 
-        customPractices,
-        allPracticesInCategory: practicesByType[selectedType] || []
+        ...(selectedType === 'rp' ? { prescriptionText, observations: '' } : {}),
+        practices: selectedType === 'rp' ? [] : selectedPractices,
+        quantities: selectedType === 'rp' ? {} : quantities,
+        indications: selectedType === 'rp' ? {} : indications,
+        customPractices: selectedType === 'rp' ? [] : customPractices,
+        allPracticesInCategory: selectedType === 'rp' ? [] : practicesByType[selectedType] || []
       };
       let currentProfile = profile || propProfile || {};
       if (selectedDelegate) {
@@ -861,7 +869,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
                   )}
                 </div>
               ))}
-              <div className="space-y-1.5 pt-2">
+              {selectedType !== 'rp' && <div className="space-y-1.5 pt-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Observaciones</label>
                 <div className="relative">
                   <Clipboard className="absolute left-3 top-3.5 text-slate-400" size={16} />
@@ -876,6 +884,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
                 </div>
               </div>
 
+              }
               {/* PRIVACY CHECKBOX */}
               <div className="pt-4">
                 <button
@@ -911,12 +920,15 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
         <div className="lg:col-span-2 space-y-6">
           <div className="bg-[var(--bg-card)] border border-main rounded-3xl p-4 shadow-sm">
             <div className="flex bg-[var(--bg-card)] p-1 rounded-2xl border border-main mb-6 overflow-x-auto no-scrollbar">
-              {orderTypes.map((type) => {
+              {[{ id: 'rp', label: 'Rp.', icon: 'Clipboard' }, ...orderTypes.filter(type => type.id !== 'rp')].map((type) => {
                 const Icon = ICON_MAP[type.icon] || ClipboardList;
                 return (
                   <button
                     key={type.id}
                     onClick={() => { 
+                      if (type.id === selectedType) return;
+                      setCurrentOrderId(null);
+                      setPreviewUrl(null);
                       setSelectedType(type.id); 
                       setSelectedPractices([]); 
                     }}
@@ -933,6 +945,16 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
               })}
             </div>
           </div>
+          {selectedType === 'rp' ? (
+            <div className="bg-[var(--bg-card)] border border-main rounded-3xl p-6 space-y-4">
+              <label htmlFor="prescription-text" className="block text-lg font-bold">Rp./</label>
+              <p className="text-sm text-slate-500">Escriba la receta o las indicaciones médicas. Se conservarán los saltos de línea.</p>
+              <textarea id="prescription-text" value={prescriptionText} rows={14}
+                onChange={e => { setPrescriptionText(e.target.value); setPreviewUrl(null); }}
+                className="w-full p-4 bg-[var(--bg-secondary)] border border-main rounded-2xl text-sm text-[var(--text-main)] resize-y"
+              />
+            </div>
+          ) : (
           <div className="bg-[var(--bg-card)] border border-main rounded-3xl shadow-sm overflow-hidden">
             <div className="p-6 border-b border-main bg-[var(--bg-secondary)]/50 flex items-center justify-between">
               <h3 className="text-lg font-bold flex items-center gap-2 text-[var(--text-main)]"><CheckSquare className="text-blue-500" size={20} /> Selección de Prácticas</h3>
@@ -1133,6 +1155,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
               </div>
             )}
           </div>
+          )}
         </div>
       </div>
       {/* Loading Overlay */}
