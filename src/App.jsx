@@ -1,8 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import { 
   FileText, User, Users, Settings, Activity, Sun, Moon, LogOut, 
-  ChevronRight, Menu, ClipboardList, Layout, FilePlus, History, BookTemplate
+  ChevronRight, Menu, ClipboardList, Layout, FilePlus, History, BookTemplate, Ear
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -47,6 +47,7 @@ const PageLoader = () => (
 );
 
 function App() {
+  const audiologyDialogRef = useRef(null);
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isSecretaria, setIsSecretaria] = useState(false);
@@ -200,6 +201,7 @@ function App() {
   const navItems = [
     { id: 'reports', label: 'Informes', icon: <Layout size={24} />, path: '/reports', show: true },
     { id: 'orders', label: 'Pedidos', icon: <ClipboardList size={24} />, path: '/orders', show: canSeeOrders },
+    { id: 'audiology', label: 'Audiología', icon: <Ear size={24} />, action: () => audiologyDialogRef.current.showModal(), show: true },
     { id: 'patients', label: 'Pacientes', icon: <Users size={24} />, path: '/patients', show: true },
     { id: 'metrics', label: 'Métricas', icon: <Activity size={24} />, path: '/metrics', show: isAdmin || isDirectora || isSuperSecretariaFinal },
     { id: 'profile', label: 'Mi Perfil', icon: <User size={24} />, path: '/profile', show: true },
@@ -243,21 +245,26 @@ function App() {
         </div>
         
         <nav className="flex-1 flex flex-col gap-4 w-full">
-          {navItems.map((item) => (
-            <div
-              key={item.id}
-              onClick={() => navigate(item.path)}
-              className={`nav-rail-item ${location.pathname.startsWith(item.path) ? 'active' : ''}`}
-              title={item.label}
-            >
-              <div className={`p-2 rounded-full transition-all duration-300 ${location.pathname.startsWith(item.path) ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'}`}>
-                {item.icon}
-              </div>
-              <span className={`text-[10px] font-black uppercase tracking-tighter text-center transition-colors duration-300 ${location.pathname.startsWith(item.path) ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
-                {item.label}
-              </span>
-            </div>
-          ))}
+          {navItems.map((item) => {
+            const NavItem = item.action ? 'button' : 'div';
+            const isActive = !!item.path && location.pathname.startsWith(item.path);
+            return (
+              <NavItem
+                key={item.id}
+                type={item.action ? 'button' : undefined}
+                onClick={item.action || (() => navigate(item.path))}
+                className={`nav-rail-item ${isActive ? 'active' : ''}`}
+                title={item.label}
+              >
+                <div className={`p-2 rounded-full transition-all duration-300 ${isActive ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20' : 'text-slate-400 dark:text-slate-500 group-hover:text-blue-500'}`}>
+                  {item.icon}
+                </div>
+                <span className={`text-[10px] font-black uppercase tracking-tighter text-center transition-colors duration-300 ${isActive ? 'text-blue-600' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {item.label}
+                </span>
+              </NavItem>
+            );
+          })}
         </nav>
 
         <div className="flex flex-col gap-4 mt-auto w-full items-center pb-4">
@@ -375,6 +382,38 @@ function App() {
           </AnimatePresence>
         </React.Suspense>
       </main>
+      <dialog
+        ref={audiologyDialogRef}
+        aria-labelledby="audiology-title"
+        aria-describedby="audiology-notice"
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-[2.5rem] bg-[var(--bg-card)] p-8 text-[var(--text-main)] shadow-2xl border border-main backdrop:bg-black/60 backdrop:backdrop-blur-md"
+      >
+        <div className="flex items-center gap-3 mb-6">
+          <Ear size={24} className="text-blue-600" />
+          <h2 id="audiology-title" className="text-xl font-black">Audiología</h2>
+        </div>
+        <p id="audiology-notice" className="text-sm leading-relaxed text-[var(--text-sub)]">
+          El módulo de Audiología se encuentra en desarrollo y está disponible exclusivamente para pruebas. Los documentos generados no deben utilizarse como informes clínicos oficiales hasta su validación.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-3 mt-8">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => audiologyDialogRef.current.close()}
+            className="flex-1 py-3 px-4 bg-slate-100 text-slate-900 hover:bg-slate-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 rounded-xl transition-colors font-bold text-sm"
+          >
+            Cancelar
+          </button>
+          <a
+            href="https://coatdemos.pages.dev/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary flex-1 py-3 px-4 text-center text-sm"
+          >
+            Abrir demostración
+          </a>
+        </div>
+      </dialog>
     </div>
   );
 }
