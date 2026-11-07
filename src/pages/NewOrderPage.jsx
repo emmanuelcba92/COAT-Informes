@@ -32,6 +32,7 @@ import { db, auth } from '../services/firebase';
 import { doc, getDoc, setDoc, collection, addDoc, updateDoc, serverTimestamp, arrayUnion, getDocs } from 'firebase/firestore';
 import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { generateOrderPDF } from '../utils/orderPdfGenerator';
+import { isParticularInsurance } from '../utils/patientInsurance';
 import { extractPatientsFromImage } from '../utils/aiService';
 import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
 
@@ -168,10 +169,12 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
         dni: cleanDni,
         insurance: insuranceName,
         obraSocial: insuranceName,
-        affiliateNumber: (patientData.affiliateNumber || '').trim().toUpperCase(),
         professionalIds: arrayUnion(profile?.id || profile?.uid || auth.currentUser.uid),
         lastUpdated: new Date().toISOString()
       };
+      if (!isParticularInsurance(insuranceName)) {
+        payload.affiliateNumber = (patientData.affiliateNumber || '').trim().toUpperCase();
+      }
       // Only update email if user has entered one — never overwrite with empty
       if (patientData.patientEmail && patientData.patientEmail.trim()) {
         payload.email = patientData.patientEmail.trim();
@@ -443,12 +446,15 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
 
   const isEmailValid = (email) => !email || !email.trim() || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
+  const particularInsurance = isParticularInsurance(patientData.insurance);
+  const affiliateRequired = !particularInsurance && requiredFields.requiredAffiliateNumber;
+
   const isFormValid = () => {
     const { name, insurance, diagnosis, patientEmail, dni, affiliateNumber } = patientData;
     if (requiredFields.requiredDni             && !dni.trim())             return false;
     if (requiredFields.requiredName            && !name.trim())            return false;
     if (requiredFields.requiredInsurance       && !insurance.trim())       return false;
-    if (requiredFields.requiredAffiliateNumber && !affiliateNumber.trim()) return false;
+    if (affiliateRequired && !affiliateNumber.trim()) return false;
     if (requiredFields.requiredDiagnosis       && !diagnosis.trim())       return false;
     // Permitimos que el formulario sea válido sin email para que se pueda enviar al menos a administración
     if (!isEmailValid(patientEmail))                                       return false;
@@ -806,7 +812,7 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
                 { label: 'DNI / Pasaporte',    icon: Hash,        key: 'dni',             ph: 'Solo números - buscar paciente', required: requiredFields.requiredDni },
                 { label: 'Nombre Completo',    icon: User,        key: 'name',            ph: '',                               required: requiredFields.requiredName },
                 { label: 'Obra Social',        icon: CreditCard,  key: 'insurance',       ph: '',                               required: requiredFields.requiredInsurance },
-                { label: 'Nro. Afiliado',      icon: Hash,        key: 'affiliateNumber', ph: 'Solo números',                   required: requiredFields.requiredAffiliateNumber },
+                { label: 'Nro. Afiliado',      icon: Hash,        key: 'affiliateNumber', ph: 'Solo números',                   required: affiliateRequired, disabled: particularInsurance },
                 { label: 'Diagnóstico',        icon: Stethoscope, key: 'diagnosis',       ph: '',                               required: requiredFields.requiredDiagnosis },
                 { label: 'Email del Paciente', icon: Mail,        key: 'patientEmail',    ph: patientEmailRequired ? '' : 'Opcional', required: patientEmailRequired }
               ].map(f => (
@@ -816,9 +822,10 @@ const NewOrderPage = ({ userProfile: propProfile, isAdmin = false, isSuperSecret
                     <f.icon className="absolute left-3 top-3.5 text-slate-400" size={16} />
                     <input 
                       type="text" 
-                      className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-secondary)] border border-main rounded-2xl text-xs focus:border-blue-500 outline-none transition-all text-[var(--text-main)]" 
+                      className="w-full pl-10 pr-4 py-2.5 bg-[var(--bg-secondary)] border border-main rounded-2xl text-xs focus:border-blue-500 outline-none transition-all text-[var(--text-main)] disabled:opacity-50"
                       placeholder={f.ph} 
-                      value={patientData[f.key]} 
+                      disabled={f.disabled}
+                      value={f.disabled ? '' : patientData[f.key]}
                       onPaste={f.key === 'dni' ? handlePaste : undefined}
                       onChange={e => {
                         let val = e.target.value;

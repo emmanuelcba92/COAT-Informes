@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../services/firebase';
+import { isParticularInsurance } from '../utils/patientInsurance';
 import { 
   collection, 
   onSnapshot, 
@@ -285,13 +286,15 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
             nombre: p.nombre?.toUpperCase() || '',
             insurance: p.obraSocial?.toUpperCase() || '',
             obraSocial: p.obraSocial?.toUpperCase() || '',
-            affiliateNumber: (p.affiliateNumber || p.nroAfiliado || '').toString().trim(),
-            nroAfiliado: (p.affiliateNumber || p.nroAfiliado || '').toString().trim(),
             email: p.email?.toLowerCase() || null,
             telefono: p.telefono || '',
             updatedAt: serverTimestamp(),
             lastImportedBy: currentUser.uid
           };
+          if (!isParticularInsurance(p.obraSocial)) {
+            patientData.affiliateNumber = (p.affiliateNumber || p.nroAfiliado || '').toString().trim();
+            patientData.nroAfiliado = patientData.affiliateNumber;
+          }
 
           batch.set(patientRef, {
             ...patientData,
@@ -788,7 +791,8 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                               </td>
                               <td className="px-4 py-3">
                                 <input 
-                                  value={r.affiliateNumber || r.nroAfiliado || ''} 
+                                  disabled={isParticularInsurance(r.obraSocial)}
+                                  value={isParticularInsurance(r.obraSocial) ? '' : r.affiliateNumber || r.nroAfiliado || ''}
                                   placeholder="Sin nro"
                                   onChange={(e) => {
                                     const next = [...importResults];
@@ -796,7 +800,7 @@ export default function PatientsPage({ isAdmin = false, isSecretaria = false, is
                                     next[idx].nroAfiliado = e.target.value;
                                     setImportResults(next);
                                   }}
-                                  className="w-full bg-transparent text-xs text-slate-500 focus:outline-none"
+                                  className="w-full bg-transparent text-xs text-slate-500 focus:outline-none disabled:opacity-50"
                                 />
                               </td>
                               <td className="px-4 py-3">

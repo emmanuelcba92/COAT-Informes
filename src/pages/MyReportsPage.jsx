@@ -48,6 +48,7 @@ import { logAction, AUDIT_ACTIONS } from '../services/auditService';
 import { deduplicateProfessionals, normalizeName, formatDisplayName } from '../utils/userNormalization';
 import { extractPatientsFromImage } from '../utils/aiService';
 import { EXTERNAL_REPORT_ACCEPT, validateExternalReportFile, prepareExternalReportFile } from '../utils/externalReportFile';
+import { isParticularInsurance } from '../utils/patientInsurance';
 
 const UPLOAD_FIELDS = [
   ['patientName', 'reportRequiredPatient', 'Paciente', true],
@@ -127,8 +128,10 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
     date: new Date().toLocaleDateString('en-CA')
   });
   const [config, setConfig] = useState({ adminEmail: '', appsScriptUrl: '', token: '' });
+  const particularInsurance = isParticularInsurance(uploadData.socialWork);
   const requiredUpload = Object.fromEntries(UPLOAD_FIELDS.map(([field, setting, , defaultRequired]) =>
-    [field, defaultRequired ? config[setting] !== false : config[setting] === true]));
+    [field, !(field === 'affiliateNumber' && particularInsurance) &&
+      (defaultRequired ? config[setting] !== false : config[setting] === true)]));
   const [emailAutoFilledToast, setEmailAutoFilledToast] = useState(false);
   const [emailMissingWarning, setEmailMissingWarning] = useState(false);
   const [isPasting, setIsPasting] = useState(false);
@@ -180,11 +183,13 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
         dni: cleanDni,
         insurance: insuranceName,
         obraSocial: insuranceName,
-        affiliateNumber: uploadData.affiliateNumber || '',
-        nroAfiliado: uploadData.affiliateNumber || '',
         professionalIds: arrayUnion(uploadData.profId || user.uid),
         lastUpdated: new Date().toISOString()
       };
+      if (!particularInsurance) {
+        payload.affiliateNumber = uploadData.affiliateNumber || '';
+        payload.nroAfiliado = payload.affiliateNumber;
+      }
       
       if (uploadData.patientEmail && uploadData.patientEmail.trim()) {
         payload.email = uploadData.patientEmail.trim();
@@ -1273,8 +1278,9 @@ const MyReportsPage = ({ user, userProfile, isAdmin, isSecretaria: isSecretariaP
                       <input 
                         type="text" 
                         placeholder=""
-                        className="input-field"
-                        value={uploadData.affiliateNumber}
+                        className="input-field disabled:opacity-50"
+                        disabled={particularInsurance}
+                        value={particularInsurance ? '' : uploadData.affiliateNumber}
                         required={requiredUpload.affiliateNumber}
                         onChange={e => setUploadData({...uploadData, affiliateNumber: e.target.value})}
                       />

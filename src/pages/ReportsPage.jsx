@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { drawWrappedCenteredText } from '../utils/pdfTextLayout';
+import { isParticularInsurance } from '../utils/patientInsurance';
 import ClinicalEditor from '../components/ClinicalEditor';
 import { formatDoctorDisplayName } from '../utils/doctorName';
 import { 
@@ -173,11 +174,13 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         dni: cleanDni,
         insurance: insuranceName,
         obraSocial: insuranceName,
-        affiliateNumber: reportData.affiliateNumber || '',
-        nroAfiliado: reportData.affiliateNumber || '',
         professionalIds: arrayUnion(professional?.id || professional?.uid || auth.currentUser.uid),
         lastUpdated: new Date().toISOString()
       };
+      if (!isParticularInsurance(insuranceName)) {
+        payload.affiliateNumber = reportData.affiliateNumber || '';
+        payload.nroAfiliado = payload.affiliateNumber;
+      }
       // Only update email if user has entered one — never overwrite with empty
       if (reportData.patientEmail.trim()) {
         payload.email = reportData.patientEmail.trim();
@@ -651,6 +654,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     }
   };
 
+  const particularInsurance = isParticularInsurance(reportData.socialWork);
+  const affiliateRequired = !particularInsurance && reportRequiredFields.reportRequiredAffiliate;
+
   const generatePDF = async (mode = 'print') => {
     try {
       const r = reportRequiredFields;
@@ -660,7 +666,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
         if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
         if (r.reportRequiredSocialWork && !reportData.socialWork.trim()) { showToast('El campo Obra Social es obligatorio.', 'error'); return null; }
-        if (r.reportRequiredAffiliate  && !reportData.affiliateNumber.trim()) { showToast('El campo Nro. Afiliado es obligatorio.', 'error'); return null; }
+        if (affiliateRequired && !reportData.affiliateNumber.trim()) { showToast('El campo Nro. Afiliado es obligatorio.', 'error'); return null; }
         if (r.reportRequiredDni        && !reportData.dni.trim())        { showToast('El campo DNI es obligatorio.', 'error');         return null; }
         if (r.reportRequiredRequester  && !reportData.requester.trim())  { showToast('El campo Solicitante es obligatorio.', 'error'); return null; }
         if (r.reportRequiredReason     && !reportData.reason.trim())     { showToast('El campo Motivo es obligatorio.', 'error');      return null; }
@@ -760,7 +766,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     doc.setFontSize(8.5);
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
-    if (reportData.affiliateNumber) infoParts.push(`Nro. Afiliado ${reportData.affiliateNumber}`);
+    if (!isParticularInsurance(reportData.socialWork) && reportData.affiliateNumber) {
+      infoParts.push(`Nro. Afiliado ${reportData.affiliateNumber}`);
+    }
     if (reportData.dni) infoParts.push(`DNI: ${reportData.dni}`);
     let dateObj = new Date();
     if (reportData.date) {
@@ -1828,13 +1836,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             </div>
             <div className="space-y-1">
               <label className="text-xs font-bold uppercase opacity-60">
-                Nro. Afiliado {reportRequiredFields.reportRequiredAffiliate ? '*' : '(Opc)'}
+                Nro. Afiliado {affiliateRequired ? '*' : '(Opc)'}
               </label>
               <input
                 type="text"
-                className="input-field"
+                className="input-field disabled:opacity-50"
                 placeholder=""
-                value={reportData.affiliateNumber}
+                disabled={particularInsurance}
+                value={particularInsurance ? '' : reportData.affiliateNumber}
                 onChange={e => {
                   const val = e.target.value;
                   setReportData(prev => ({ ...prev, affiliateNumber: val }));

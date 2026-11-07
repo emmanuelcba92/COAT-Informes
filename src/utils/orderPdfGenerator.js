@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf';
 import { drawWrappedCenteredText } from './pdfTextLayout';
 import { formatDoctorDisplayName } from './doctorName';
+import { isParticularInsurance } from './patientInsurance';
 
 const cropSignatureCanvas = (img) => {
   try {
@@ -154,7 +155,10 @@ export const generateOrderPDF = async (orderData, profile, mode = 'save') => {
 
     targetDoc.setFontSize(10);
     targetDoc.setFont("helvetica", "normal");
-    const infoLastY = drawWrappedCenteredText(targetDoc, `Obra Social: ${orderData.insurance} | Nro. Afiliado: ${orderData.affiliateNumber || '-'}${orderData.diagnosis ? ` | Diag: ${orderData.diagnosis}` : ''}`, patientLastY + 6, 5, 180, '|');
+    const patientIdentifier = isParticularInsurance(orderData.insurance)
+      ? `DNI: ${orderData.dni || '-'}`
+      : `Nro. Afiliado: ${orderData.affiliateNumber || '-'}`;
+    const infoLastY = drawWrappedCenteredText(targetDoc, `Obra Social: ${orderData.insurance} | ${patientIdentifier}${orderData.diagnosis ? ` | Diag: ${orderData.diagnosis}` : ''}`, patientLastY + 6, 5, 180, '|');
     return infoLastY + 7;
   };
 
