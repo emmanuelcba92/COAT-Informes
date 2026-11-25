@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { jsPDF } from 'jspdf';
-import autoTable from 'jspdf-autotable';
+import autoTable, { __createTable, __drawTable } from 'jspdf-autotable';
 import { drawWrappedCenteredText } from '../utils/pdfTextLayout';
 import { isParticularInsurance } from '../utils/patientInsurance';
 import ClinicalEditor from '../components/ClinicalEditor';
+import { REPORT_PAGE_BREAK, isReportImageSource } from '../utils/reportContent';
+import { downloadReportPage } from '../utils/reportPageJpg';
 import { formatDoctorDisplayName } from '../utils/doctorName';
 import { 
   FileText,
@@ -199,6 +201,11 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const [professional, setProfessional] = useState(initialProfile || null);
   const [dbPractices, setDbPractices] = useState([]);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [previewPageCount, setPreviewPageCount] = useState(0);
+  const [jpgPage, setJpgPage] = useState(1);
+  const [pageOptions, setPageOptions] = useState({});
+  const [isExportingJpg, setIsExportingJpg] = useState(false);
+  const [jpgError, setJpgError] = useState('');
   const [reportRequiredFields, setReportRequiredFields] = useState({
     reportRequiredPatient:    true,
     reportRequiredDate:       true,
@@ -220,6 +227,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const previewFlag = new URLSearchParams(location.search).get('preview');
   const isPreview = previewFlag === 'true';
   const [isEditing, setIsEditing] = useState(false);
+  const [loadedReportId, setLoadedReportId] = useState(null);
   const [localReportId, setLocalReportId] = useState(editId || null);
   const [loadingStatus, setLoadingStatus] = useState('');
   const isSavingRef = React.useRef(false);
@@ -298,9 +306,11 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   };
 
   const handleNewReport = () => {
+    setPreviewUrl(null);
     setLocalReportId(null);
     setIsEditing(false);
     setContent('');
+    setPageOptions({});
     setPreviewUrl(null);
     setReportData({
       patient: '',
@@ -344,6 +354,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         practicaNombre: selectedPractice || '',
         tipoReporte: (reportData.customTitle || selectedPractice || 'Informe'),
         contenidoTexto: content,
+        opcionesPaginas: pageOptions,
         fecha: reportData.date,
         pdfUrl: pdfUrl,
         sentToAdmin: reportData.sentToAdmin || false,
@@ -563,6 +574,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             });
             setSelectedPractice(data.practicaNombre || '');
             setContent(data.contenidoTexto || '');
+            setPageOptions(data.opcionesPaginas || {});
 
             // Si el informe fue hecho por otro profesional, cargamos sus datos para la firma/membrete
             if (data.profesionalId) {
@@ -586,11 +598,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               }
             }
 
-            // Si viene con flag de preview o print, generamos el preview
-            if (previewFlag === 'true' || printFlag === 'true') {
-              // Necesitamos esperar a que el estado se asiente y profesional esté cargado
-              // El useEffect de profesional se encargará de esto o lo hacemos aquí con un delay si ya está
-            }
+            setLoadedReportId(editId);
           }
         } catch (err) {
           console.error("Error cargando informe para editar:", err);
@@ -605,16 +613,13 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     // Si ya tenemos previewUrl no hacemos nada
     if (previewUrl) return;
 
-    if ((printFlag === 'true' || previewFlag === 'true') && isEditing) {
+    if ((printFlag === 'true' || previewFlag === 'true') && isEditing
+        && editId && loadedReportId === editId) {
       // Damos un pequeño respiro para asegurar que los estados se hayan seteado
       const timer = setTimeout(async () => {
         try {
           // Generamos aunque falten cosas, la función generatePDF ya tiene fallbacks
-          const blob = await generatePDF('blob');
-          if (blob) {
-            const url = URL.createObjectURL(blob);
-            setPreviewUrl(url);
-          } else {
+          if (!(await openPreview())) {
             console.warn("generatePDF devolvió un blob vacío para la vista previa.");
           }
         } catch (err) {
@@ -624,11 +629,16 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       }, 1000);
       return () => clearTimeout(timer);
     }
-  }, [printFlag, previewFlag, isEditing, professional, selectedPractice, content, previewUrl]);
+  }, [printFlag, previewFlag, isEditing, editId, loadedReportId, professional, selectedPractice, content, previewUrl]);
+
+  useEffect(() => {
+    if (previewUrl) return () => URL.revokeObjectURL(previewUrl);
+  }, [previewUrl]);
 
   const handlePracticeChange = (practiceName) => {
     setSelectedPractice(practiceName);
     const p = dbPractices.find(item => item.n === practiceName);
+    setPageOptions(p?.opcionesPaginas || {});
     if (p) {
       // Configuramos el título basado en la práctica
       setReportData(prev => ({
@@ -646,7 +656,8 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         bodyText = p.b || '';
       }
 
-      if (bodyText && !bodyText.includes('<p>')) {
+      if (bodyText && !bodyText.includes('<p>') && !bodyText.includes(REPORT_PAGE_BREAK)
+          && !/<img\b/i.test(bodyText)) {
         bodyText = bodyText.split('\n').map(line => line.trim() ? `<p>${line}</p>` : '<p><br></p>').join('');
       }
       
@@ -657,11 +668,11 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
   const particularInsurance = isParticularInsurance(reportData.socialWork);
   const affiliateRequired = !particularInsurance && reportRequiredFields.reportRequiredAffiliate;
 
-  const generatePDF = async (mode = 'print') => {
+  const generatePDF = async (mode = 'print', optionsByPage = pageOptions) => {
     try {
       const r = reportRequiredFields;
       // Do not enforce strict field validation for pure preview/print visual modes of saved documents
-      const isVisualMode = previewFlag === 'true' || printFlag === 'true' || mode === 'blob';
+      const isVisualMode = previewFlag === 'true' || printFlag === 'true' || mode === 'preview';
       if (!isVisualMode) {
         if (r.reportRequiredPatient    && !reportData.patient.trim())    { showToast('El campo Paciente es obligatorio.', 'error');    return null; }
         if (r.reportRequiredDate       && !reportData.date)              { showToast('El campo Fecha es obligatorio.', 'error');       return null; }
@@ -673,7 +684,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         if (r.reportRequiredEmail      && !reportData.patientEmail.trim()){ showToast('El campo Email es obligatorio.', 'error');     return null; }
       }
 
-    await savePatientToHistory();
+    if (mode !== 'preview') await savePatientToHistory();
     setIsGenerating(true);
     setLoadingStatus(mode === 'save' ? 'Guardando informe...' : (mode === 'print' ? 'Generando PDF...' : 'Procesando...'));
     // 0. Preparation
@@ -748,22 +759,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     }
 
     // 3. Bloque de Datos del Paciente (Compactado)
-    let currentY = (hasCustomHeader && reportData.enableHeader && activeHeader.some(l => l && l.trim() !== ''))
+    const patientStart = (hasCustomHeader && reportData.enableHeader && activeHeader.some(l => l && l.trim() !== ''))
       ? Math.max(headerY + 4, 42)
       : 30;
-
-    doc.setDrawColor(200, 200, 200);
-    doc.line(15, currentY - 5, 195, currentY - 5); // Línea superior
-    
-    // Nombre del Paciente (CENTRADOS Y COMPACTOS)
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    currentY = drawWrappedCenteredText(doc, `PACIENTE: ${reportData.patient}`, currentY, 4.5);
-    
-    // Datos secundarios (Obra Social, DNI, Fecha)
-    currentY += 5.5;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
     const infoParts = [];
     if (reportData.socialWork) infoParts.push(`OBRA SOCIAL: ${reportData.socialWork}`);
     if (!isParticularInsurance(reportData.socialWork) && reportData.affiliateNumber) {
@@ -791,11 +789,28 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     if (reportData.requester) infoParts.push(`SOLICITANTE: ${reportData.requester}`);
     if (reportData.reason) infoParts.push(`MOTIVO: ${reportData.reason}`);
 
-    currentY = drawWrappedCenteredText(doc, infoParts.join('  |  '), currentY, 4, 180, '|');
-    
-    currentY += 4.5;
-    doc.line(15, currentY, 195, currentY); // Línea inferior (Bien cerca de los datos)
-    currentY += 6;
+    const showsPatient = page => optionsByPage[page]?.patient ?? (page === 1);
+    const showsSignature = (page, lastPage) => optionsByPage[page]?.signature ?? (page === lastPage);
+    const patientTextColor = doc.getTextColor();
+    const patientRuleWidth = doc.getLineWidth();
+    const drawPatient = (pdf, y) => {
+      pdf.setTextColor(patientTextColor);
+      pdf.setDrawColor(200, 200, 200);
+      pdf.setLineWidth(patientRuleWidth);
+      pdf.line(15, y - 5, 195, y - 5);
+      pdf.setFont('helvetica', 'bold');
+      pdf.setFontSize(10);
+      y = drawWrappedCenteredText(pdf, `PACIENTE: ${reportData.patient}`, y, 4.5);
+      pdf.setFont('helvetica', 'normal');
+      pdf.setFontSize(8.5);
+      y = drawWrappedCenteredText(pdf, infoParts.join('  |  '), y + 5.5, 4, 180, '|') + 4.5;
+      pdf.line(15, y, 195, y);
+      return y + 6;
+    };
+    const hasContinuationPatient = Object.entries(optionsByPage).some(([page, options]) => Number(page) > 1 && options.patient);
+    const patientBottom = hasContinuationPatient ? drawPatient(new jsPDF(), 20) : 25;
+    const continuationTop = page => showsPatient(page) ? patientBottom : 25;
+    let currentY = showsPatient(1) ? drawPatient(doc, patientStart) : patientStart;
 
     // Report Title
     let titleToPrint = "";
@@ -827,6 +842,47 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = rawHtml.split('\n').map(l => `<p>${l}</p>`).join('');
       nodes = Array.from(tempDiv.children);
+    }
+    const isPageBreak = node => node.hasAttribute(REPORT_PAGE_BREAK);
+    const bodyImages = new Map();
+    for (const node of nodes) {
+      if (node.tagName !== 'IMG' || !isReportImageSource(node.getAttribute('src'))) continue;
+      try {
+        const data = node.getAttribute('src');
+        const { width, height } = doc.getImageProperties(data);
+        if (width > 0 && height > 0) bodyImages.set(node, { data, width, height });
+      } catch (error) {
+        console.warn('Imagen no válida en el informe:', error);
+      }
+    }
+    const hasManualBreaks = nodes.some(isPageBreak);
+    const hasBodyContent = node => (!hasManualBreaks && node.tagName === 'TABLE') || bodyImages.has(node)
+      || Boolean(cleanHtmlForPDF(node.outerHTML));
+    if (hasManualBreaks) {
+      // Only keep separators between sections that actually print content.
+      const sections = [];
+      let section = [];
+      for (const node of nodes) {
+        if (isPageBreak(node)) {
+          sections.push(section);
+          section = [];
+        } else {
+          section.push(node);
+        }
+      }
+      sections.push(section);
+      nodes = sections.reduce((result, blocks) => {
+        const first = blocks.findIndex(hasBodyContent);
+        if (first === -1) return result;
+        while (!hasBodyContent(blocks[blocks.length - 1])) blocks.pop();
+        if (result.length) {
+          const separator = parsedDoc.createElement('div');
+          separator.setAttribute(REPORT_PAGE_BREAK, '');
+          result.push(separator);
+        }
+        result.push(...blocks.slice(first));
+        return result;
+      }, []);
     }
 
     // Measure using the same renderer and metrics, before drawing the real body.
@@ -919,10 +975,9 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     const signatureBottom = pageHeight - 23; // 3 mm clear of the institutional rule.
     const bodyStartY = currentY;
     // Trailing empty editor paragraphs are spacing, not a closing clinical block.
-    while (nodes.length && !cleanHtmlForPDF(nodes[nodes.length - 1].outerHTML)
-      && nodes[nodes.length - 1].tagName.toLowerCase() !== 'table') nodes.pop();
+    while (nodes.length && !hasBodyContent(nodes[nodes.length - 1])) nodes.pop();
     let closingStart = Math.max(0, nodes.length - 1);
-    while (closingStart > 0 && (!cleanHtmlForPDF(nodes[closingStart - 1].outerHTML)
+    while (closingStart > 0 && !isPageBreak(nodes[closingStart - 1]) && (!hasBodyContent(nodes[closingStart - 1])
       || /^H[1-3]$/.test(nodes[closingStart - 1].tagName))) closingStart--;
 
     const closingAdvance = Math.max(8, ...nodes.slice(closingStart).map(node => {
@@ -933,71 +988,96 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     }));
     const renderContent = (doc, keepClosingBlock = false) => {
       let currentY = bodyStartY;
+      const pageEnds = new Map();
+      const pageNumber = () => doc.getNumberOfPages();
+      const signatureReserve = page => optionsByPage[page]?.signature === true ? signatureHeight + 12 : 0;
+      let closingReserve = 0;
+      const bottomFor = page => pageHeight - 25 - Math.max(closingReserve, signatureReserve(page));
+      const addContentPage = () => {
+        pageEnds.set(pageNumber(), currentY);
+        doc.addPage();
+        currentY = continuationTop(pageNumber());
+      };
+      const imageSize = (node, bottom) => {
+        const image = bodyImages.get(node);
+        const scale = Math.min(0.265, (pageWidth - 20) / image.width, (bottom - 45) / image.height);
+        return { width: image.width * scale, height: image.height * scale };
+      };
+      const tableOptions = (node, reserve) => {
+        const startingPage = pageNumber();
+        const headers = Array.from(node.querySelectorAll('thead th, tr:first-child th'))
+          .map(cell => cell.textContent.trim());
+        const rows = Array.from(node.querySelectorAll('tr')).flatMap((row, index) => {
+          if (index === 0 && headers.length && !row.querySelector('td')) return [];
+          const cells = Array.from(row.querySelectorAll('td, th')).map(cell => cell.textContent.trim());
+          return cells.some(Boolean) ? [cells] : [];
+        });
+        return {
+          head: headers.length ? [headers] : undefined,
+          body: rows,
+          startY: currentY,
+          margin: { left: 10, right: 10, top: continuationTop(startingPage + 1), bottom: 25 + reserve },
+          willDrawPage: ({ cursor, table }) => {
+            if (pageNumber() !== startingPage) cursor.y = continuationTop(pageNumber());
+            table.settings.margin.top = continuationTop(pageNumber() + 1);
+            table.settings.margin.bottom = pageHeight - bottomFor(pageNumber());
+          },
+          didDrawPage: ({ cursor }) => {
+            pageEnds.set(pageNumber(), cursor.y + 8);
+          },
+          pageBreak: 'auto',
+          rowPageBreak: 'avoid',
+          theme: 'plain',
+          styles: {
+            font: 'helvetica', fontSize: 9, textColor: [15, 23, 42], lineColor: [0, 0, 0],
+            lineWidth: 0.25, cellPadding: 3, valign: 'middle', overflow: 'linebreak'
+          },
+          headStyles: {
+            fontStyle: 'bold', fillColor: [240, 243, 246], textColor: [0, 0, 0],
+            lineColor: [0, 0, 0], lineWidth: 0.3
+          },
+          alternateRowStyles: { fillColor: [255, 255, 255] }
+        };
+      };
+      const tableHeight = table => table.getHeadHeight(table.columns)
+        + table.body.reduce((height, row) => height + row.height, 0);
       for (let nodeIndex = 0; nodeIndex < nodes.length; nodeIndex++) {
         const node = nodes[nodeIndex];
-        const reserve = keepClosingBlock && nodeIndex >= closingStart ? signatureHeight + 4 + closingAdvance : 0;
-        const contentBottom = pageHeight - 25 - reserve;
-        if (node.tagName.toLowerCase() === 'table') {
-          // Extraer datos de la tabla (headers y rows)
-          const headers = [];
-          const rows = [];
-
-          const thElements = node.querySelectorAll('thead th, tr:first-child th');
-          if (thElements.length > 0) {
-            headers.push(Array.from(thElements).map(th => th.textContent.trim()));
+        if (isPageBreak(node)) {
+          addContentPage();
+          continue;
+        }
+        closingReserve = keepClosingBlock && nodeIndex >= closingStart ? signatureHeight + 4 + closingAdvance : 0;
+        const reserve = Math.max(closingReserve, signatureReserve(pageNumber()));
+        const contentBottom = bottomFor(pageNumber());
+        if (bodyImages.has(node)) {
+          let { width, height } = imageSize(node, contentBottom - Math.max(0,
+            (nodeIndex === 0 ? bodyStartY : continuationTop(pageNumber())) - 45));
+          if (currentY + height > contentBottom) {
+            addContentPage();
+            ({ width, height } = imageSize(node, bottomFor(pageNumber()) - Math.max(0, currentY - 45)));
           }
-
-          const trElements = node.querySelectorAll('tr');
-          trElements.forEach((tr, index) => {
-            const ths = tr.querySelectorAll('th');
-            const tds = tr.querySelectorAll('td');
-            if (ths.length > 0 && tds.length === 0 && index === 0 && headers.length > 0) {
-              return;
-            }
-            const rowCells = Array.from(tr.querySelectorAll('td, th')).map(cell => cell.textContent.trim());
-            if (rowCells.some(c => c !== '')) {
-              rows.push(rowCells);
-            }
-          });
-
-          // Control de espacio antes de la tabla
+          doc.addImage(bodyImages.get(node).data, (pageWidth - width) / 2, currentY, width, height);
+          currentY += height + 4;
+        } else if (node.tagName.toLowerCase() === 'table') {
           if (currentY > contentBottom - 20) {
-            doc.addPage();
-            currentY = 25;
+            addContentPage();
           }
-
-          let headConfig = headers.length > 0 ? headers : undefined;
-          let bodyConfig = rows;
-
-          autoTable(doc, {
-            head: headConfig,
-            body: bodyConfig,
-            startY: currentY,
-            margin: { left: 10, right: 10, top: 25, bottom: 25 + reserve },
-            pageBreak: 'auto',
-            rowPageBreak: 'avoid',
-            theme: 'plain',
-            styles: {
-              font: 'helvetica',
-              fontSize: 9,
-              textColor: [15, 23, 42],
-              lineColor: [0, 0, 0],
-              lineWidth: 0.25,
-              cellPadding: 3,
-              valign: 'middle',
-              overflow: 'linebreak'
-            },
-            headStyles: {
-              fontStyle: 'bold',
-              fillColor: [240, 243, 246],
-              textColor: [0, 0, 0],
-              lineColor: [0, 0, 0],
-              lineWidth: 0.3
-            },
-            alternateRowStyles: {
-              fillColor: [255, 255, 255]
+          pageEnds.set(pageNumber(), currentY);
+          const options = tableOptions(node, pageHeight - 25 - bottomFor(pageNumber()));
+          if (hasManualBreaks) {
+            const table = __createTable(doc, options);
+            const height = tableHeight(table);
+            if (height <= bottomFor(pageNumber() + 1) - continuationTop(pageNumber() + 1)
+                && currentY + height > bottomFor(pageNumber())) {
+              addContentPage();
+              table.settings.startY = currentY;
+              table.settings.margin.bottom = pageHeight - bottomFor(pageNumber());
             }
-          });
+            __drawTable(doc, table);
+          } else {
+            autoTable(doc, options);
+          }
 
           if (doc.lastAutoTable && doc.lastAutoTable.finalY) {
             currentY = doc.lastAutoTable.finalY + 8;
@@ -1050,7 +1130,7 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           const lines = doc.splitTextToSize(nodeText, 185);
           // Keep ordinary paragraphs intact; headings travel with the next block.
           let requiredHeight = Math.max(0, lines.length - 1) * lineHeight;
-          if (isHeading && nodes[nodeIndex + 1]) {
+          if (isHeading && nodes[nodeIndex + 1] && !isPageBreak(nodes[nodeIndex + 1])) {
             const next = nodes[nodeIndex + 1];
             const nextText = cleanHtmlForPDF(next.outerHTML);
             const nextSize = next.outerHTML.match(/font-size:\s*(\d+(\.\d+)?)pt/i);
@@ -1058,7 +1138,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             doc.setFont('helvetica', next.querySelector('strong, b') ? 'bold' : 'normal');
             const nextHeight = nextSize ? Math.max(3.8, parseFloat(nextSize[1]) * 0.45 + 0.5) : 5;
             let followingHeight = Math.max(1, doc.splitTextToSize(nextText, 185).length) * nextHeight;
-            if (next.tagName.toLowerCase() === 'table') {
+            if (bodyImages.has(next)) {
+              followingHeight = imageSize(next, contentBottom).height;
+            } else if (hasManualBreaks && next.tagName === 'TABLE') {
+              const table = __createTable(doc, tableOptions(next, reserve));
+              const height = tableHeight(table);
+              followingHeight = height <= contentBottom - 25 - requiredHeight - lineHeight - 2.5
+                ? height : table.getHeadHeight(table.columns) + (table.body[0]?.height || 0);
+            } else if (next.tagName.toLowerCase() === 'table') {
               // Use the real header + first row height, including wrapped cells.
               const tableProbe = new jsPDF();
               const tableHead = Array.from(next.querySelectorAll('thead th, tr:first-child th')).map(cell => cell.textContent.trim());
@@ -1079,18 +1166,19 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             doc.setFontSize(fontSize);
             doc.setFont('helvetica', isBold ? 'bold' : 'normal');
           }
-          if (currentY + requiredHeight > contentBottom && requiredHeight <= contentBottom - 25 && currentY > 25) {
-            doc.addPage();
-            currentY = 25;
+          if (currentY + requiredHeight > contentBottom
+              && requiredHeight <= bottomFor(pageNumber() + 1) - continuationTop(pageNumber() + 1)
+              && currentY > continuationTop(pageNumber())) {
+            addContentPage();
           }
           lines.forEach((line, lineIndex) => {
             // For paragraphs taller than a page, leave at least two lines together at each cut.
             const linesLeft = lines.length - lineIndex;
-            if (currentY > contentBottom ||
-                (lines.length > 1 && linesLeft > 1 && currentY + lineHeight > contentBottom) ||
-                (linesLeft === 3 && currentY + 2 * lineHeight > contentBottom)) {
-              doc.addPage();
-              currentY = 25;
+            const lineBottom = bottomFor(pageNumber());
+            if (currentY > lineBottom ||
+                (lines.length > 1 && linesLeft > 1 && currentY + lineHeight > lineBottom) ||
+                (linesLeft === 3 && currentY + 2 * lineHeight > lineBottom)) {
+              addContentPage();
             }
             if (textAlign === 'center') {
               doc.text(line, pageWidth / 2, currentY, { align: 'center' });
@@ -1109,48 +1197,53 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
         }
       }
 
-      return currentY;
+      pageEnds.set(pageNumber(), currentY);
+      return pageEnds;
     };
     const measurement = new jsPDF({ compress: true });
-    const measuredY = renderContent(measurement);
+    const measuredEnds = renderContent(measurement);
+    const measuredLastPage = measurement.getNumberOfPages();
+    const measuredY = measuredEnds.get(measuredLastPage);
     const signatureTop = (y, gap, pages) => pages === 1 && y < pageHeight / 2 - 20 ? pageHeight / 2 : y + gap;
     // Recover at most 6 mm from the signature gap; never shrink type, images or line leading.
-    const needsClosingBlock = signatureTop(measuredY, 4, measurement.getNumberOfPages()) + signatureHeight > signatureBottom;
-    currentY = renderContent(doc, needsClosingBlock);
-    const signatureGap = signatureTop(currentY, 10, doc.getNumberOfPages()) + signatureHeight <= signatureBottom ? 10 : 4;
-    currentY = signatureTop(currentY, signatureGap, doc.getNumberOfPages());
+    const needsClosingBlock = showsSignature(measuredLastPage, measuredLastPage)
+      && signatureTop(measuredY, 4, measuredLastPage) + signatureHeight > signatureBottom;
+    const pageEnds = renderContent(doc, needsClosingBlock);
 
     // 5. Signature Area: image and professional data stay on the same page.
-    const signatureX = 160;
-
-    if (signatureImage) {
-      doc.addImage(signatureImage.data, 'PNG', signatureX - signatureImage.width / 2, currentY,
-        signatureImage.width, signatureImage.height, undefined, 'FAST');
-      currentY += signatureImage.height + 2;
-    } else {
-      currentY += 4;
-    }
-
-    // Línea separadora estilo sello
-    doc.setDrawColor(0, 0, 0);
-    doc.setLineWidth(0.3);
-    doc.line(signatureX - 25.7, currentY, signatureX + 25.7, currentY);
-    currentY += 3.11;
-
-    doc.setTextColor(0, 0, 0);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(6.31);
-
-    footerLines.forEach((text) => {
-      doc.text(text, signatureX, currentY, { align: 'center' });
-      currentY += 2.71;
-    });
+    const drawSignature = y => {
+      const signatureX = 160;
+      if (signatureImage) {
+        doc.addImage(signatureImage.data, 'PNG', signatureX - signatureImage.width / 2, y,
+          signatureImage.width, signatureImage.height, undefined, 'FAST');
+        y += signatureImage.height + 2;
+      } else {
+        y += 4;
+      }
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.3);
+      doc.line(signatureX - 25.7, y, signatureX + 25.7, y);
+      y += 3.11;
+      doc.setTextColor(0, 0, 0);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(6.31);
+      footerLines.forEach(text => {
+        doc.text(text, signatureX, y, { align: 'center' });
+        y += 2.71;
+      });
+    };
 
     // 10. Footer Institucional (Bottom of page) — ALWAYS shown
     const footerY = pageHeight - 15;
     const lastPage = doc.getNumberOfPages();
     for (let page = 1; page <= lastPage; page++) {
       doc.setPage(page);
+      if (page > 1 && showsPatient(page)) drawPatient(doc, 20);
+      if (showsSignature(page, lastPage)) {
+        const endY = pageEnds.get(page) ?? continuationTop(page);
+        const gap = signatureTop(endY, 10, lastPage) + signatureHeight <= signatureBottom ? 10 : 4;
+        drawSignature(signatureTop(endY, gap, lastPage));
+      }
       doc.setDrawColor(30, 58, 138);
       doc.setLineWidth(0.5);
       doc.line(10, footerY - 5, 200, footerY - 5);
@@ -1168,14 +1261,14 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       setLoadingStatus('Guardando copia en el historial...');
       await saveToHistory(null, false);
       setIsGenerating(false);
-      handleNewReport();
+      if (!isPreview) handleNewReport();
     } else if (mode === 'save') {
       const pdfName = `Informe - ${reportData.patient} - ${new Date().toLocaleDateString('en-CA')}.pdf`;
       doc.save(pdfName);
       setLoadingStatus('Guardando copia en el historial...');
       await saveToHistory(null, false);
       setIsGenerating(false);
-      handleNewReport();
+      if (!isPreview) handleNewReport();
 
       // Si el botón de envío está desactivado globalmente, enviamos la copia a administración automáticamente al guardar
       if (config.showSendButton === false && config.appsScriptUrl) {
@@ -1200,9 +1293,6 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
           console.error("Failed to prepare auto-send:", err);
         }
       }
-    } else if (mode === 'blob') {
-      setIsGenerating(false);
-      return doc.output('blob');
     }
     
       setIsGenerating(false);
@@ -1214,6 +1304,81 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
       return null;
     }
   };
+
+  const openPreview = async (options = pageOptions, selectedPage = 1) => {
+    const pdf = await generatePDF('preview', options);
+    if (!pdf) return false;
+    setJpgPage(Math.min(selectedPage, pdf.getNumberOfPages()));
+    setJpgError('');
+    setPreviewPageCount(pdf.getNumberOfPages());
+    setPreviewUrl(URL.createObjectURL(pdf.output('blob')));
+    return true;
+  };
+
+  const updatePageOption = async (field, checked) => {
+    const options = {
+      ...pageOptions,
+      [jpgPage]: { ...pageOptions[jpgPage], [field]: checked }
+    };
+    setPageOptions(options);
+    if (!(await openPreview(options, jpgPage))) setPageOptions(pageOptions);
+  };
+
+  const exportJpg = async () => {
+    setIsExportingJpg(true);
+    setJpgError('');
+    try {
+      const patient = reportData.patient.trim().replace(/[\\/:*?"<>|]/g, '_');
+      const title = patient ? `Informe - ${patient}` : 'Informe';
+      const name = previewPageCount === 1 ? title : `${title} - página ${jpgPage}`;
+      await downloadReportPage(previewUrl, jpgPage, `${name}.jpg`);
+    } catch (err) {
+      console.error('Error al exportar JPG:', err);
+      setJpgError('No se pudo descargar el JPG. Volvé a intentarlo.');
+    } finally {
+      setIsExportingJpg(false);
+    }
+  };
+
+  const jpgControls = (
+    <div className="flex items-center gap-2">
+      {previewPageCount > 1 && (
+        <select
+          aria-label="Página del informe"
+          className="input-field"
+          value={jpgPage}
+          onChange={event => setJpgPage(Number(event.target.value))}
+          disabled={isExportingJpg || isGenerating}
+        >
+          {Array.from({ length: previewPageCount }, (_, index) => (
+            <option key={index + 1} value={index + 1}>Página {index + 1}</option>
+          ))}
+        </select>
+      )}
+      <button type="button" className="px-3 py-2 rounded-xl border border-main text-xs font-bold"
+        onClick={exportJpg} disabled={isExportingJpg || isGenerating}>
+        {isExportingJpg ? 'Exportando…' : 'Descargar JPG'}
+      </button>
+      {jpgError && <span role="alert" className="text-xs text-red-600">{jpgError}</span>}
+    </div>
+  );
+
+  const pageLayoutControls = (
+    <fieldset disabled={isGenerating} className="flex flex-wrap items-center gap-x-5 gap-y-2 px-6 py-2 border-b border-main text-sm">
+      <legend className="sr-only">Contenido de la hoja</legend>
+      <span className="font-semibold">Página {jpgPage}</span>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={pageOptions[jpgPage]?.patient ?? (jpgPage === 1)}
+          onChange={event => updatePageOption('patient', event.target.checked)} />
+        Datos del paciente
+      </label>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={pageOptions[jpgPage]?.signature ?? (jpgPage === previewPageCount)}
+          onChange={event => updatePageOption('signature', event.target.checked)} />
+        Firma
+      </label>
+    </fieldset>
+  );
 
   const handleSendReport = async () => {
     if (!config.appsScriptUrl) {
@@ -1552,14 +1717,15 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
     return (
       <div className="fixed inset-0 z-[9999] bg-[var(--bg-page)] flex flex-col">
         {/* Header de la Vista Previa exclusiva */}
-        <div className="h-16 bg-[var(--bg-secondary)] border-b border-main flex items-center justify-between px-6 shadow-sm shrink-0">
+        <div className="min-h-16 bg-[var(--bg-secondary)] border-b border-main flex flex-wrap gap-2 items-center justify-between px-6 py-2 shadow-sm shrink-0">
           <div className="flex items-center gap-4">
             <h2 className="text-lg font-black tracking-tight text-[var(--text-main)]">Vista Previa</h2>
             <div className="h-6 w-[1px] bg-[var(--border-main)]"></div>
             <p className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest">{reportData.patient}</p>
           </div>
           
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
+            {jpgControls}
             <button 
               onClick={() => generatePDF('save')}
               className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
@@ -1587,7 +1753,6 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
             <button 
               onClick={() => {
-                URL.revokeObjectURL(previewUrl);
                 setPreviewUrl(null);
                 navigate('/history');
               }}
@@ -2025,6 +2190,12 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             />
           </div>
 
+          <div className="flex justify-end">
+            <button type="button" className="px-3 py-2 rounded-xl border border-main text-sm font-bold"
+              onClick={() => openPreview()} disabled={isGenerating}>
+              Vista previa y JPG
+            </button>
+          </div>
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 border-t border-main">
               <button 
                 className="group flex-1 flex flex-col items-center gap-3 p-6 rounded-3xl bg-[var(--bg-secondary)] border border-main hover:border-blue-500/50 hover:bg-blue-50 transition-all active:scale-95"
@@ -2081,14 +2252,15 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
             className="fixed inset-0 z-[100] bg-[var(--bg-page)] flex flex-col"
           >
             {/* Overlay Header */}
-            <div className="h-16 bg-[var(--bg-secondary)] border-b border-main flex items-center justify-between px-6 shadow-sm shrink-0">
+            <div className="min-h-16 bg-[var(--bg-secondary)] border-b border-main flex flex-wrap gap-2 items-center justify-between px-6 py-2 shadow-sm shrink-0">
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-black tracking-tight text-[var(--text-main)]">Vista Previa</h2>
                 <div className="h-6 w-[1px] bg-[var(--border-main)]"></div>
                 <p className="text-xs font-bold text-[var(--text-sub)] uppercase tracking-widest">{reportData.patient}</p>
               </div>
               
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
+                {jpgControls}
                 <button 
                   onClick={async () => await generatePDF('save')}
                   className="flex items-center gap-2 px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-black uppercase tracking-tight transition-all active:scale-95 shadow-lg shadow-emerald-500/20"
@@ -2116,7 +2288,6 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
                 <div className="w-[1px] h-6 bg-slate-200 mx-2"></div>
                 <button 
                   onClick={() => {
-                    URL.revokeObjectURL(previewUrl);
                     setPreviewUrl(null);
                     if (previewFlag || printFlag) navigate('/history');
                   }}
@@ -2128,11 +2299,12 @@ const ReportsPage = ({ isAdmin, isSecretaria, isSuperSecretaria, userProfile: in
               </div>
             </div>
 
+            {pageLayoutControls}
             {/* Preview Content */}
             <div className="flex-1 overflow-auto p-4 md:p-8 flex justify-center bg-[var(--bg-secondary)]">
               <div className="w-full max-w-5xl h-full bg-white rounded-2xl shadow-2xl overflow-hidden">
                 <iframe 
-                  src={previewUrl}
+                  src={`${previewUrl}#page=${jpgPage}`}
                   className="w-full h-full border-none"
                   title="PDF Preview"
                 />

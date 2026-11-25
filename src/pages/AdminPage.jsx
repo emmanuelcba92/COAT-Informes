@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import ClinicalEditor from '../components/ClinicalEditor';
+import ReportModelPageOptions from '../components/ReportModelPageOptions';
 import {
   Activity,
   Users,
@@ -959,6 +960,7 @@ const AdminPage = () => {
     try {
       const dataToSave = {
         ...practiceForm,
+        opcionesPaginas: practiceForm.opcionesPaginas || {},
         allowedRoles: practiceForm.allowedRoles || []
       };
       
@@ -998,6 +1000,7 @@ const AdminPage = () => {
       c: p.c || "",
       n: p.n || "",
       b: p.b || "",
+      opcionesPaginas: p.opcionesPaginas || {},
       st: p.st !== undefined ? p.st : true,
       allowedRoles: p.allowedRoles || [],
     };
@@ -2115,6 +2118,13 @@ const AdminPage = () => {
                     />
                   </div>
                 </div>
+
+                <ReportModelPageOptions
+                  key={selectedPractice?.id || 'new'}
+                  html={practiceForm.b}
+                  options={practiceForm.opcionesPaginas || {}}
+                  onChange={opcionesPaginas => setPracticeForm(prev => ({ ...prev, opcionesPaginas }))}
+                />
 
                 <label className="flex items-center gap-4 p-6 bg-blue-50/50 rounded-3xl border border-blue-100 cursor-pointer group hover:bg-blue-50 transition-colors">
                   <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${

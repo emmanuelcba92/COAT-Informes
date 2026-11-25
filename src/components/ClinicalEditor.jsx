@@ -7,6 +7,7 @@ import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
 import { TableCell } from '@tiptap/extension-table-cell';
 import { TableHeader } from '@tiptap/extension-table-header';
+import { ReportImage, ReportPageBreak } from './clinicalEditorNodes';
 import {
   Bold,
   Italic,
@@ -74,6 +75,7 @@ const ClinicalEditor = ({
   minHeight = '320px'
 }) => {
   const editor = useEditor({
+    shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit.configure({
         heading: {
@@ -92,7 +94,9 @@ const ClinicalEditor = ({
       }),
       TableRow,
       TableHeader,
-      TableCell
+      TableCell,
+      ReportPageBreak,
+      ReportImage
     ],
     content: value || '',
     onUpdate: ({ editor }) => {
@@ -114,7 +118,7 @@ const ClinicalEditor = ({
       try {
         const currentHTML = editor.getHTML();
         if (value !== currentHTML) {
-          editor.commands.setContent(value || '', false);
+          editor.commands.setContent(value || '', { emitUpdate: false });
         }
       } catch (err) {
         console.warn('ClinicalEditor sync warning:', err);
@@ -305,6 +309,16 @@ const ClinicalEditor = ({
           >
             <TableIcon size={16} />
             <span className="text-xs">Insertar Tabla</span>
+          </button>
+          <button
+            type="button"
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => editor.chain().focus().insertReportPageBreak().run()}
+            className={`${btnClass(false)} px-2 font-bold disabled:opacity-30`}
+            disabled={isTableActive}
+            title={isTableActive ? 'Coloque el cursor fuera de la tabla' : 'Insertar salto de página'}
+          >
+            Salto de página
           </button>
         </div>
 
